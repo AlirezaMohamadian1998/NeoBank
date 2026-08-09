@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:neobank}
+    username: ${DB_USERNAME:neobank}
+    password: ${DB_PASSWORD:neobank-local}
+
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false

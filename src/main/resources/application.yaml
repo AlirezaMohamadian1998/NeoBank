@@ -1,3 +1,22 @@
 spring:
   application:
-    name: Neo Bank
+    name: neo-bank
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc.time_zone: UTC
+
+server:
+  servlet:
+    session:
+      cookie:
+        same-site: lax
+        secure: true
+        http-only: true
