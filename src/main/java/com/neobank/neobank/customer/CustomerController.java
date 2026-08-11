@@ -5,10 +5,9 @@ import com.neobank.neobank.customer.dto.RegisterCustomerRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/customers")
@@ -19,5 +18,10 @@ public class CustomerController {
     @PostMapping
     public ResponseEntity<CustomerResponse> register(@RequestBody @Valid RegisterCustomerRequest request) {
         return ResponseEntity.status(201).body(customerService.register(request));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<CustomerResponse> getCurrentCustomer(@AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(customerService.getCurrentCustomer(jwt.getSubject()));
     }
 }

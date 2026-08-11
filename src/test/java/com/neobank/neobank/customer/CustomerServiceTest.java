@@ -10,12 +10,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CustomerServiceTest {
@@ -81,5 +82,36 @@ class CustomerServiceTest {
 
         verify(passwordEncoder, never()).encode(any());
         verify(customerRepository, never()).save(any(Customer.class));
+    }
+
+    @Test
+    void getCurrentCustomerReturnsMappedCustomerWhenEmailExists() {
+        String email = "customer@example.com";
+        Customer customer = Customer.createNew(email, "{bcrypt}encoded-password", "Ada Lovelace");
+
+        given(customerRepository.findByEmailIgnoreCase(email))
+                .willReturn(Optional.of(customer));
+
+        CustomerResponse response = customerService.getCurrentCustomer(email);
+
+        assertThat(response.email()).isEqualTo(email);
+        assertThat(response.fullName()).isEqualTo("Ada Lovelace");
+
+        verify(customerRepository).findByEmailIgnoreCase(email);
+        verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
+    void getCurrentCustomerThrowsCustomerNotFoundExceptionWhenEmailDoesNotExist() {
+        String email = "customer@example.com";
+        given(customerRepository.findByEmailIgnoreCase(email))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> customerService.getCurrentCustomer(email))
+                .isExactlyInstanceOf(CustomerNotFoundException.class)
+                .hasMessage("Customer not found");
+
+        verify(customerRepository).findByEmailIgnoreCase(email);
+        verifyNoInteractions(passwordEncoder);
     }
 }
