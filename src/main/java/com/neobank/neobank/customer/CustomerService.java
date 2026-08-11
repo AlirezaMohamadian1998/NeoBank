@@ -25,4 +25,12 @@ public class CustomerService {
 
         return CustomerMapper.toResponse(customerRepository.save(customer));
     }
+
+    @Transactional(readOnly = true)
+    public CustomerResponse getCurrentCustomer(String email) {
+        Customer customer = customerRepository.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found"));
+
+        return CustomerMapper.toResponse(customer);
+    }
 }
