@@ -3,6 +3,7 @@ package com.neobank.neobank.shared.exception;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.*;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -44,11 +45,24 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(EmailAlreadyRegisteredException.class)
     public ResponseEntity<ProblemDetail> handleEmailAlreadyRegisteredException(
             EmailAlreadyRegisteredException ex,
-            WebRequest webRequest) {
+            WebRequest webRequest
+    ) {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problemDetail.setInstance(URI.create(webRequest.getDescription(false).replace("uri=", "")));
         problemDetail.setTitle("Email already registered");
 
         return new ResponseEntity<>(problemDetail, HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ProblemDetail> handleAuthenticationException(
+            AuthenticationException ex,
+            WebRequest req
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Invalid email or password.");
+        problemDetail.setInstance(URI.create(req.getDescription(false).replace("uri=", "")));
+        problemDetail.setTitle("Authentication failed");
+
+        return new ResponseEntity<>(problemDetail, HttpStatus.UNAUTHORIZED);
     }
 }

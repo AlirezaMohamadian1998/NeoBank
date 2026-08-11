@@ -20,3 +20,9 @@ server:
         same-site: lax
         secure: true
         http-only: true
+
+security:
+  jwt:
+    issuer: neo-bank
+    secret: ${JWT_SECRET}
+    access-token-ttl: 15m
