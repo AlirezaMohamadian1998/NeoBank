@@ -20,18 +20,17 @@ import static org.hamcrest.Matchers.not;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(CustomerController.class)
 @Import(SecurityConfig.class)
 class CustomerControllerTest {
 
     private static final String REGISTRATION_ENDPOINT = "/api/customers";
+    private static final String CURRENT_CUSTOMER_ENDPOINT = "/api/customers/me";
 
     @Autowired
     private MockMvc mockMvc;
@@ -126,10 +125,57 @@ class CustomerControllerTest {
     }
 
     @Test
-    void getCustomersIsProtectedForAnonymousRequests() throws Exception {
-        mockMvc.perform(get(REGISTRATION_ENDPOINT))
-                .andExpect(status().isUnauthorized());
+    void getCurrentCustomerReturnsUnauthorizedWithoutAuthentication() throws Exception {
+        mockMvc.perform(get(CURRENT_CUSTOMER_ENDPOINT))
+                .andExpect(status().is(401));
 
         verifyNoInteractions(customerService);
+    }
+
+    @Test
+    void getCurrentCustomerReturnsProfileForAuthenticatedJwt() throws Exception {
+        String email = "customer@example.com";
+
+        CustomerResponse response = new CustomerResponse(
+                "customer@example.com",
+                "Ada Lovelace",
+                Instant.parse("2026-08-09T12:00:00Z")
+        );
+
+        given(customerService.getCurrentCustomer(email))
+                .willReturn(response);
+
+        mockMvc.perform(get(CURRENT_CUSTOMER_ENDPOINT)
+                        .with(jwt().jwt(jwt -> jwt.subject(email)))
+        )
+                .andExpect(status().is(200))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.fullName").value("Ada Lovelace"))
+                .andExpect(jsonPath("$.createdAt").value(response.createdAt().toString()))
+                .andExpect(jsonPath("$.password").doesNotExist())
+                .andExpect(jsonPath("$.passwordHash").doesNotExist())
+                .andExpect(cookie().doesNotExist("JSESSIONID"));
+
+        verify(customerService).getCurrentCustomer(email);
+    }
+
+    @Test
+    void getCurrentCustomerReturnsNotFoundWhenAuthenticatedCustomerDoesNotExist() throws Exception {
+        String email = "customer@example.com";
+        given(customerService.getCurrentCustomer(email))
+                .willThrow(new CustomerNotFoundException("Customer not found"));
+
+        mockMvc.perform(get(CURRENT_CUSTOMER_ENDPOINT)
+                        .with(jwt().jwt(jwt -> jwt.subject(email)))
+        )
+                .andExpect(status().is(404))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Customer not found"))
+                .andExpect(jsonPath("$.detail").value("Customer not found"))
+                .andExpect(jsonPath("$.instance").value(CURRENT_CUSTOMER_ENDPOINT))
+                .andExpect(jsonPath("$.status").value(404));
+
+        verify(customerService).getCurrentCustomer(email);
     }
 }
