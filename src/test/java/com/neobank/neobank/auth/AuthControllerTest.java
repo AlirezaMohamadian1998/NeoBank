@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(AuthController.class)
 @Import(SecurityConfig.class)
-public class AuthControllerTest {
+class AuthControllerTest {
 
     @Autowired
     MockMvc mockMvc;
@@ -37,7 +37,7 @@ public class AuthControllerTest {
     @MockitoBean
     JwtDecoder jwtDecoder;
 
-    String LOGIN_ENDPOINT = "/api/auth/login";
+    private static final String LOGIN_ENDPOINT = "/api/auth/login";
 
     @Test
     void loginReturnsBearerTokenForValidRequestWithoutAuthenticationOrCsrf() throws Exception {

@@ -16,14 +16,13 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 
 
-public class TokenServiceTest {
+class TokenServiceTest {
 
-    private final String ISSUER = "neo-bank";
-    private final Duration ACCESS_TOKEN_TTL = Duration.ofMinutes(15);
+    private static final String ISSUER = "neo-bank";
+    private static final Duration ACCESS_TOKEN_TTL = Duration.ofMinutes(15);
 
     TokenService tokenService;
     JwtDecoder jwtDecoder;
@@ -63,7 +62,10 @@ public class TokenServiceTest {
                 .containsEntry(JwtClaimNames.ISS, ISSUER)
                 .containsEntry(JwtClaimNames.SUB, "customer@example.com")
                 .containsEntry(JwtClaimNames.IAT, fixedInstant)
-                .containsEntry(JwtClaimNames.EXP, (fixedInstant.plus(ACCESS_TOKEN_TTL)));
+                .containsEntry(JwtClaimNames.EXP, (fixedInstant.plus(ACCESS_TOKEN_TTL)))
+                .containsKey(JwtClaimNames.JTI); // 1. Asserts the key exists in the claims map
+
+        assertThat(jwt.getClaimAsString(JwtClaimNames.JTI)).isNotBlank();
     }
 
     @Test
