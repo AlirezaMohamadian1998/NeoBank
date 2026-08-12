@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class AccountService {
@@ -40,5 +42,21 @@ public class AccountService {
             }
         }
         throw new IllegalStateException("Failed to generate unique account number");
+    }
+
+    @Transactional(readOnly = true)
+    public List<AccountResponse> getCurrentCustomerAccounts(String email) {
+        return accountRepository
+                .findAllByCustomer_EmailIgnoreCaseOrderByCreatedAtDesc(email)
+                .stream()
+                .map(AccountMapper::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public AccountResponse getCurrentCustomerAccount(String accountNumber, String email) {
+        return AccountMapper
+                .toResponse(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email)
+                        .orElseThrow(() -> new AccountNotFoundException()));
     }
 }

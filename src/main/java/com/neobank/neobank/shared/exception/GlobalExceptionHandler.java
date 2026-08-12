@@ -1,5 +1,6 @@
 package com.neobank.neobank.shared.exception;
 
+import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
 import org.jspecify.annotations.Nullable;
@@ -77,5 +78,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
 
         return new ResponseEntity<>(problemDetail, HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(AccountNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleAccountNotFoundException(
+            AccountNotFoundException ex,
+            WebRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
+        problemDetail.setTitle("Account not found");
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
     }
 }
