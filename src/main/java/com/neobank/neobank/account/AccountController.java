@@ -31,4 +31,12 @@ public class AccountController {
     public ResponseEntity<List<AccountResponse>> getCurrentCustomerAccounts(@AuthenticationPrincipal Jwt jwt) {
         return ResponseEntity.ok(accountService.getCurrentCustomerAccounts(jwt.getSubject()));
     }
+
+    @GetMapping("/{accountNumber}")
+    public ResponseEntity<AccountResponse> getCurrentCustomerAccount(
+            @PathVariable String accountNumber,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ResponseEntity.ok(accountService.getCurrentCustomerAccount(accountNumber, jwt.getSubject()));
+    }
 }

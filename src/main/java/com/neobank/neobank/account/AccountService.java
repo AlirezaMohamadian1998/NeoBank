@@ -52,4 +52,11 @@ public class AccountService {
                 .map(AccountMapper::toResponse)
                 .toList();
     }
+
+    @Transactional(readOnly = true)
+    public AccountResponse getCurrentCustomerAccount(String accountNumber, String email) {
+        return AccountMapper
+                .toResponse(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email)
+                        .orElseThrow(() -> new AccountNotFoundException()));
+    }
 }
