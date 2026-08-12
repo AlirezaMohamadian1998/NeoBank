@@ -16,11 +16,13 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -149,5 +151,71 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.instance").value(ACCOUNT_ENDPOINT));
 
         verify(accountService).createAccount(request, email);
+    }
+
+    @Test
+    void getCurrentCustomerAccountsReturnsAccountsForAuthenticatedJwt() throws Exception {
+        String email = "customer@example.com";
+
+        AccountResponse response1 = new AccountResponse(
+                "12345678900987",
+                "Private Account",
+                AccountType.CURRENT,
+                CurrencyCode.TRY,
+                BigDecimal.ZERO.setScale(2),
+                Instant.parse("2026-08-12T12:00:00Z")
+        );
+
+        AccountResponse response2 = new AccountResponse(
+                "98765432101234",
+                "Saving Account",
+                AccountType.SAVINGS,
+                CurrencyCode.USD,
+                BigDecimal.ZERO.setScale(2),
+                Instant.parse("2026-08-12T12:00:00Z")
+        );
+
+        given(accountService.getCurrentCustomerAccounts(email))
+                .willReturn(List.of(response1, response2));
+
+        mockMvc.perform(get(ACCOUNT_ENDPOINT)
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.size()").value(2))
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(content().json(objectMapper.writeValueAsString(List.of(response1, response2))))
+                .andExpect(jsonPath("$[*].version").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$[*].customer").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$[*].id").doesNotHaveJsonPath())
+                .andExpect(cookie().doesNotExist("JSESSIONID"));
+
+        verify(accountService).getCurrentCustomerAccounts(email);
+    }
+
+    @Test
+    void getCurrentCustomerAccountsReturnsEmptyArrayWhenCustomerHasNoAccounts() throws Exception {
+        String email = "customer@example.com";
+
+        given(accountService.getCurrentCustomerAccounts(email))
+                .willReturn(List.of());
+
+        mockMvc.perform(get(ACCOUNT_ENDPOINT)
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$").isEmpty())
+                .andExpect(cookie().doesNotExist("JSESSIONID"));
+
+        verify(accountService).getCurrentCustomerAccounts(email);
+    }
+
+    @Test
+    void getCurrentCustomerAccountsReturnsUnauthorizedWithoutAuthentication() throws Exception {
+        mockMvc.perform(get(ACCOUNT_ENDPOINT))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(accountService);
     }
 }

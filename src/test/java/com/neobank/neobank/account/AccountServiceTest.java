@@ -14,9 +14,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -204,5 +205,94 @@ class AccountServiceTest {
                 .existsByAccountNumber(any(String.class));
         verify(accountRepository, never())
                 .save(any(Account.class));
+    }
+
+    @Test
+    void getCurrentCustomerAccountsReturnsMappedAccountsInRepositoryOrder() {
+        String email = "customer@example.com";
+
+        Customer customer = Customer.createNew(
+                email,
+                "{bcrypt}encoded-password",
+                "Ada Lovelace"
+        );
+
+        Account account1 = Account.createNew(
+                "12345678900987",
+                "Private Account",
+                AccountType.CURRENT,
+                CurrencyCode.TRY,
+                customer
+        );
+
+        Account account2 = Account.createNew(
+                "98765432101234",
+                "Saving Account",
+                AccountType.SAVINGS,
+                CurrencyCode.USD,
+                customer
+        );
+
+        given(accountRepository.findAllByCustomer_EmailIgnoreCaseOrderByCreatedAtDesc(email))
+                .willReturn(List.of(account1, account2));
+
+        List<AccountResponse> response = accountService.getCurrentCustomerAccounts(email);
+
+        assertThat(response.size())
+                .isEqualTo(2);
+        assertThat(response.getFirst())
+                .isEqualTo(AccountMapper.toResponse(account1));
+        assertThat(response.getLast())
+                .isEqualTo(AccountMapper.toResponse(account2));
+
+        assertThat(response.getFirst().accountNumber())
+                .isEqualTo("12345678900987");
+        assertThat(response.getFirst().name())
+                .isEqualTo("Private Account");
+        assertThat(response.getFirst().accountType())
+                .isSameAs(AccountType.CURRENT);
+        assertThat(response.getFirst().currency())
+                .isSameAs(CurrencyCode.TRY);
+        assertThat(response.getFirst().balance())
+                .isEqualByComparingTo(new BigDecimal("0.00"));
+
+        assertThat(response.getLast().accountNumber())
+                .isEqualTo("98765432101234");
+        assertThat(response.getLast().name())
+                .isEqualTo("Saving Account");
+        assertThat(response.getLast().accountType())
+                .isSameAs(AccountType.SAVINGS);
+        assertThat(response.getLast().currency())
+                .isSameAs(CurrencyCode.USD);
+        assertThat(response.getLast().balance())
+                .isEqualByComparingTo(new BigDecimal("0.00"));
+
+        verify(accountRepository)
+                .findAllByCustomer_EmailIgnoreCaseOrderByCreatedAtDesc(email);
+        verify(accountRepository, never())
+                .save(any(Account.class));
+
+        verifyNoInteractions(accountNumberGenerator);
+        verifyNoInteractions(customerRepository);
+    }
+
+    @Test
+    void getCurrentCustomerAccountsReturnsEmptyListWhenCustomerHasNoAccounts() {
+        String email = "customer@example.com";
+
+        given(accountRepository.findAllByCustomer_EmailIgnoreCaseOrderByCreatedAtDesc(email))
+                .willReturn(List.of());
+
+        List<AccountResponse> response = accountService.getCurrentCustomerAccounts(email);
+
+        assertThat(response).isEmpty();
+
+        verify(accountRepository)
+                .findAllByCustomer_EmailIgnoreCaseOrderByCreatedAtDesc(email);
+        verify(accountRepository, never())
+                .save(any(Account.class));
+
+        verifyNoInteractions(accountNumberGenerator);
+        verifyNoInteractions(customerRepository);
     }
 }
