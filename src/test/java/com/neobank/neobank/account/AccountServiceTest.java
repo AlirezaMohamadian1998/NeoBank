@@ -295,4 +295,59 @@ class AccountServiceTest {
         verifyNoInteractions(accountNumberGenerator);
         verifyNoInteractions(customerRepository);
     }
+
+    @Test
+    void getCurrentCustomerAccountReturnsMappedOwnedAccount() {
+        Customer customer = Customer.createNew(
+                "customer@example.com",
+                "{bcrypt}encoded-password",
+                "Ada Lovelace"
+        );
+
+        Account account = Account.createNew(
+                "12345678900123",
+                "Private Account",
+                AccountType.CURRENT,
+                CurrencyCode.TRY,
+                customer
+        );
+
+        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(account.getAccountNumber(), customer.getEmail()))
+                .willReturn(Optional.of(account));
+
+        AccountResponse response = accountService.getCurrentCustomerAccount(account.getAccountNumber(), customer.getEmail());
+
+        assertThat(response.accountNumber())
+                .isEqualTo(account.getAccountNumber());
+        assertThat(response.name())
+                .isEqualTo(account.getName());
+        assertThat(response.accountType())
+                .isSameAs(account.getAccountType());
+        assertThat(response.currency())
+                .isSameAs(account.getCurrency());
+        assertThat(response.balance())
+                .isEqualByComparingTo(account.getBalance());
+
+        verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(account.getAccountNumber(), customer.getEmail());
+        verify(accountRepository, never()).save(any(Account.class));
+
+        verifyNoInteractions(accountNumberGenerator, customerRepository);
+    }
+
+    @Test
+    void getCurrentCustomerAccountThrowsAccountNotFoundExceptionWhenOwnedAccountDoesNotExist() {
+        String email = "customer@example.com";
+        String accountNumber = "12345678900123";
+        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> accountService.getCurrentCustomerAccount(accountNumber, email))
+                .isExactlyInstanceOf(AccountNotFoundException.class)
+                .hasMessage("Account not found");
+
+        verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
+        verify(accountRepository, never()).save(any(Account.class));
+
+        verifyNoInteractions(accountNumberGenerator, customerRepository);
+    }
 }

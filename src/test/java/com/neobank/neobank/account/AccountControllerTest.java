@@ -218,4 +218,61 @@ class AccountControllerTest {
 
         verifyNoInteractions(accountService);
     }
+
+    @Test
+    void getCurrentCustomerAccountReturnsOwnedAccountForAuthenticatedJwt() throws Exception {
+        String email = "customer@example.com";
+
+        AccountResponse response = new AccountResponse(
+                "12345678900987",
+                "Private Account",
+                AccountType.CURRENT,
+                CurrencyCode.TRY,
+                BigDecimal.ZERO.setScale(2),
+                Instant.parse("2026-08-12T12:00:00Z")
+        );
+
+        given(accountService.getCurrentCustomerAccount(response.accountNumber(), email))
+                .willReturn(response);
+
+        mockMvc.perform(get(ACCOUNT_ENDPOINT + "/{accountNumber}", response.accountNumber())
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().json(objectMapper.writeValueAsString(response)))
+                .andExpect(jsonPath("$.version").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.customer").doesNotHaveJsonPath())
+                .andExpect(cookie().doesNotExist("JSESSIONID"));
+
+        verify(accountService).getCurrentCustomerAccount(response.accountNumber(), email);
+    }
+
+    @Test
+    void getCurrentCustomerAccountReturnsNotFoundWhenAccountIsNotOwned() throws Exception {
+        String email = "customer@example.com";
+        String accountNumber = "12345678900987";
+
+        given(accountService.getCurrentCustomerAccount(accountNumber, email))
+                .willThrow(new AccountNotFoundException());
+
+        mockMvc.perform(get(ACCOUNT_ENDPOINT + "/{accountNumber}", accountNumber)
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value("Account not found"))
+                .andExpect(jsonPath("$.instance").value(ACCOUNT_ENDPOINT + "/12345678900987"))
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.title").value("Account not found"));
+
+        verify(accountService).getCurrentCustomerAccount(accountNumber, email);
+    }
+
+    @Test
+    void getCurrentCustomerAccountReturnsUnauthorizedWithoutAuthentication() throws Exception {
+        mockMvc.perform(get(ACCOUNT_ENDPOINT + "/{accountNumber}", "12345678900987"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(accountService);
+    }
 }
