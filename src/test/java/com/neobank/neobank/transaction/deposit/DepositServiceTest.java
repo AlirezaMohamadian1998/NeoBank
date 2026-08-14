@@ -1,9 +1,10 @@
-package com.neobank.neobank.transaction;
+package com.neobank.neobank.transaction.deposit;
 
 import com.neobank.neobank.account.*;
 import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.transaction.dto.DepositRequest;
-import com.neobank.neobank.transaction.dto.DepositResponse;
+import com.neobank.neobank.transaction.*;
+import com.neobank.neobank.transaction.deposit.dto.DepositRequest;
+import com.neobank.neobank.transaction.deposit.dto.DepositResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

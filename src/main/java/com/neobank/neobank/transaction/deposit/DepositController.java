@@ -1,7 +1,7 @@
-package com.neobank.neobank.transaction;
+package com.neobank.neobank.transaction.deposit;
 
-import com.neobank.neobank.transaction.dto.DepositRequest;
-import com.neobank.neobank.transaction.dto.DepositResponse;
+import com.neobank.neobank.transaction.deposit.dto.DepositRequest;
+import com.neobank.neobank.transaction.deposit.dto.DepositResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

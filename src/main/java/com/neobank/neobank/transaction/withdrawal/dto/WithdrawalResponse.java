@@ -1,4 +1,4 @@
-package com.neobank.neobank.transaction.dto;
+package com.neobank.neobank.transaction.withdrawal.dto;
 
 import com.neobank.neobank.account.CurrencyCode;
 import com.neobank.neobank.transaction.TransactionType;
@@ -6,7 +6,7 @@ import com.neobank.neobank.transaction.TransactionType;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-public record DepositResponse(
+public record WithdrawalResponse(
         String transactionReference,
 
         TransactionType transactionType,

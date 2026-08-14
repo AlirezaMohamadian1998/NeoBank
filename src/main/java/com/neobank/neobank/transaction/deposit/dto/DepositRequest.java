@@ -1,4 +1,4 @@
-package com.neobank.neobank.transaction.dto;
+package com.neobank.neobank.transaction.deposit.dto;
 
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;

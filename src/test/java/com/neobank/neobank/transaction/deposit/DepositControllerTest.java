@@ -1,10 +1,11 @@
-package com.neobank.neobank.transaction;
+package com.neobank.neobank.transaction.deposit;
 
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.CurrencyCode;
 import com.neobank.neobank.auth.SecurityConfig;
-import com.neobank.neobank.transaction.dto.DepositRequest;
-import com.neobank.neobank.transaction.dto.DepositResponse;
+import com.neobank.neobank.transaction.TransactionType;
+import com.neobank.neobank.transaction.deposit.dto.DepositRequest;
+import com.neobank.neobank.transaction.deposit.dto.DepositResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
