@@ -6,6 +6,7 @@ import com.neobank.neobank.auth.dto.LoginRequest;
 import com.neobank.neobank.auth.dto.LoginResponse;
 import com.neobank.neobank.customer.CustomerRepository;
 import com.neobank.neobank.customer.dto.RegisterCustomerRequest;
+import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +20,6 @@ import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
@@ -126,6 +126,7 @@ class AccountIntegrationTest {
                 .andExpect(jsonPath("$.version").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.customer").doesNotHaveJsonPath());
     }
+
     @Test
     void customerCannotRetrieveAnotherCustomersAccount() throws Exception {
         String customer1Email = "customer1@example.com";
