@@ -92,6 +92,24 @@ public class Account extends BaseEntity {
     }
 
     public BigDecimal credit(BigDecimal amount) {
+        amount = validateAndNormalizeAmount(amount);
+
+        balance = balance.add(amount);
+        return balance;
+    }
+
+    public BigDecimal debit(BigDecimal amount) {
+        amount = validateAndNormalizeAmount(amount);
+
+        if (balance.compareTo(amount) < 0) {
+            throw new InsufficientFundsException();
+        }
+
+        balance = balance.subtract(amount);
+        return balance;
+    }
+
+    private BigDecimal validateAndNormalizeAmount(BigDecimal amount) {
         if (amount == null) {
             throw new IllegalArgumentException("Amount must not be null");
         }
@@ -99,12 +117,11 @@ public class Account extends BaseEntity {
             throw new IllegalArgumentException("Amount must be greater than zero");
         }
         if (amount.stripTrailingZeros().scale() > 2) {
-            throw new IllegalArgumentException("Amount must not have more than 2 decimal places");
+            throw new IllegalArgumentException(
+                    "Amount must not have more than 2 decimal places"
+            );
         }
 
-        amount = amount.setScale(2, RoundingMode.UNNECESSARY);
-
-        balance = balance.add(amount);
-        return balance;
+        return amount.setScale(2, RoundingMode.UNNECESSARY);
     }
 }
