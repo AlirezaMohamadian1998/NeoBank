@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Entity
 @Getter
@@ -88,5 +89,22 @@ public class Account extends BaseEntity {
                 BigDecimal.ZERO.setScale(2),
                 customer
         );
+    }
+
+    public BigDecimal credit(BigDecimal amount) {
+        if (amount == null) {
+            throw new IllegalArgumentException("Amount must not be null");
+        }
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Amount must be greater than zero");
+        }
+        if (amount.stripTrailingZeros().scale() > 2) {
+            throw new IllegalArgumentException("Amount must not have more than 2 decimal places");
+        }
+
+        amount = amount.setScale(2, RoundingMode.UNNECESSARY);
+
+        balance = balance.add(amount);
+        return balance;
     }
 }
