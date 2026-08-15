@@ -11,4 +11,6 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     List<Account> findAllByCustomer_EmailIgnoreCaseOrderByCreatedAtDesc(String email);
 
     Optional<Account> findByAccountNumberAndCustomer_EmailIgnoreCase(String accountNumber, String email);
+
+    Optional<Account> findByAccountNumber(String accountNumber);
 }
