@@ -4,6 +4,7 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.InsufficientFundsException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
+import com.neobank.neobank.transaction.transfer.InvalidTransferException;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.*;
 import org.springframework.security.core.AuthenticationException;
@@ -103,5 +104,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problemDetail.setTitle("Insufficient funds");
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidTransferException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidTransferException(
+            InvalidTransferException ex,
+            WebRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
+        problemDetail.setTitle("Invalid transfer");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
     }
 }
