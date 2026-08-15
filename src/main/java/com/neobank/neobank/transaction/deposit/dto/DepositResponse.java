@@ -1,4 +1,4 @@
-package com.neobank.neobank.transaction.dto;
+package com.neobank.neobank.transaction.deposit.dto;
 
 import com.neobank.neobank.account.CurrencyCode;
 import com.neobank.neobank.transaction.TransactionType;

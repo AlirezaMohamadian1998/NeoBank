@@ -1,10 +1,11 @@
-package com.neobank.neobank.transaction;
+package com.neobank.neobank.transaction.deposit;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.transaction.dto.DepositRequest;
-import com.neobank.neobank.transaction.dto.DepositResponse;
+import com.neobank.neobank.transaction.*;
+import com.neobank.neobank.transaction.deposit.dto.DepositRequest;
+import com.neobank.neobank.transaction.deposit.dto.DepositResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

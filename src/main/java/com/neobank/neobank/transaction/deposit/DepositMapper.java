@@ -1,6 +1,8 @@
-package com.neobank.neobank.transaction;
+package com.neobank.neobank.transaction.deposit;
 
-import com.neobank.neobank.transaction.dto.DepositResponse;
+import com.neobank.neobank.transaction.AccountEntry;
+import com.neobank.neobank.transaction.BankTransaction;
+import com.neobank.neobank.transaction.deposit.dto.DepositResponse;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass

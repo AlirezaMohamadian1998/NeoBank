@@ -93,4 +93,86 @@ class AccountTest {
         assertThat(account.getBalance())
                 .isEqualByComparingTo(new BigDecimal("0.00"));
     }
+
+    @Test
+    void debitUpdatesAndReturnsBalance() {
+        account.credit(new BigDecimal("100.00"));
+        BigDecimal result = account.debit(new BigDecimal("50.00"));
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("50.00"));
+        assertThat(result)
+                .isEqualByComparingTo(new BigDecimal("50.00"));
+    }
+
+    @Test
+    void debitCanReduceBalanceToZero() {
+        account.credit(new BigDecimal("100.00"));
+        BigDecimal result = account.debit(new BigDecimal("100.00"));
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("0.00"));
+        assertThat(result)
+                .isEqualByComparingTo(new BigDecimal("0.00"));
+    }
+
+    @Test
+    void debitRejectsNullAmount() {
+        account.credit(new BigDecimal("100.00"));
+
+        assertThatThrownBy(() -> account.debit(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Amount must not be null");
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+    }
+
+    @Test
+    void debitRejectsZeroAmount() {
+        account.credit(new BigDecimal("100.00"));
+
+        assertThatThrownBy(() -> account.debit(BigDecimal.ZERO))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Amount must be greater than zero");
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+    }
+
+    @Test
+    void debitRejectsNegativeAmount() {
+        account.credit(new BigDecimal("100.00"));
+        assertThatThrownBy(() -> account.debit(new BigDecimal("-10.00")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Amount must be greater than zero");
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+    }
+
+    @Test
+    void debitRejectsAmountWithMoreThanTwoMeaningfulDecimalPlaces() {
+        account.credit(new BigDecimal("100.00"));
+
+        assertThatThrownBy(() -> account.debit(new BigDecimal("10.001")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Amount must not have more than 2 decimal places");
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+    }
+
+    @Test
+    void debitThrowsInsufficientFundsExceptionWhenBalanceIsTooLow() {
+        account.credit(new BigDecimal("100.00"));
+
+        assertThatThrownBy(() -> account.debit(new BigDecimal("100.01")))
+                .isInstanceOf(InsufficientFundsException.class)
+                .hasMessage("Insufficient funds");
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("100.00"));
+
+    }
 }
