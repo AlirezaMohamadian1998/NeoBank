@@ -1,7 +1,7 @@
 package com.neobank.neobank.transaction.transfer;
 
-import com.neobank.neobank.transaction.AccountEntry;
 import com.neobank.neobank.transaction.BankTransaction;
+import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.transfer.dto.TransferResponse;
 import lombok.experimental.UtilityClass;
 
@@ -9,17 +9,19 @@ import lombok.experimental.UtilityClass;
 public class TransferMapper {
     public TransferResponse toResponse(
             BankTransaction transaction,
-            AccountEntry sourceAccountEntry,
-            AccountEntry destinationAccountEntry
+            LedgerEntry sourceAccountEntry,
+            String sourceAccountNumber,
+            String destinationAccountNumber
     ) {
         return new TransferResponse(
                 transaction.getReference(),
+                sourceAccountEntry.getReference(),
                 transaction.getTransactionType(),
-                sourceAccountEntry.getAccount().getAccountNumber(),
-                destinationAccountEntry.getAccount().getAccountNumber(),
-                sourceAccountEntry.getAmount(),
+                sourceAccountNumber,
+                destinationAccountNumber,
+                transaction.getRequestedAmount(),
                 sourceAccountEntry.getBalanceAfter(),
-                sourceAccountEntry.getCurrency(),
+                transaction.getRequestedCurrency(),
                 transaction.getNote(),
                 transaction.getCreatedAt()
         );

@@ -1,7 +1,7 @@
 package com.neobank.neobank.transaction.deposit;
 
 import com.neobank.neobank.account.AccountNotFoundException;
-import com.neobank.neobank.account.CurrencyCode;
+import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.auth.SecurityConfig;
 import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.deposit.dto.DepositRequest;
@@ -52,6 +52,7 @@ class DepositControllerTest {
 
         DepositResponse response = new DepositResponse(
                 "7f3c8a21d9e64b5fa2c17e9084bd6a31",
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 TransactionType.DEPOSIT,
                 "12345678900321",
                 new BigDecimal("1000.00"),
@@ -74,6 +75,9 @@ class DepositControllerTest {
                 .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.version").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.customer").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccount").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccountId").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccountReference").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.account").doesNotHaveJsonPath());
 
         verify(depositService).deposit(request, response.accountNumber(), email);

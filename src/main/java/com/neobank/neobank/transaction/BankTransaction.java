@@ -1,5 +1,7 @@
 package com.neobank.neobank.transaction;
 
+import com.neobank.neobank.ledger.LedgerAccount;
+import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.persistence.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -7,12 +9,29 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 @Entity
 @Getter
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "bank_transactions")
 public class BankTransaction extends BaseEntity {
+
+    @Column(nullable = false, updatable = false, precision = 19, scale = 2)
+    private BigDecimal requestedAmount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, updatable = false)
+    private CurrencyCode requestedCurrency;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TransactionStatus status;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, updatable = false)
@@ -24,17 +43,44 @@ public class BankTransaction extends BaseEntity {
     @Column(updatable = false, length = 255)
     private String note;
 
-    public static BankTransaction createNew(TransactionType transactionType, String reference, String note) {
+    @OneToMany(mappedBy = "bankTransaction", fetch = FetchType.LAZY, cascade = CascadeType.PERSIST)
+    private List<LedgerEntry> entries;
+
+    public List<LedgerEntry> getEntries() {
+        return Collections.unmodifiableList(entries);
+    }
+
+    public static BankTransaction createNew(
+            BigDecimal requestedAmount,
+            CurrencyCode requestedCurrency,
+            TransactionType transactionType,
+            String reference,
+            String note
+    ) {
+        if(requestedAmount == null) {
+            throw new IllegalArgumentException("Amount must not be null");
+        }
+
+        if(requestedAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Amount must be greater than zero");
+        }
+
+        if(requestedAmount.stripTrailingZeros().scale() > 2) {
+            throw new IllegalArgumentException("Amount must not have more than 2 decimal places");
+        }
+
+        if(requestedCurrency == null) {
+            throw new IllegalArgumentException("Currency cannot be null");
+        }
+
         if(reference == null) {
             throw new IllegalArgumentException("Reference cannot be null");
         }
-        reference = reference.trim();
-        if(reference.isBlank()) {
-            throw new IllegalArgumentException("Reference cannot be empty");
+
+        if (!reference.matches("[0-9a-f]{32}")) {
+            throw new IllegalArgumentException("Reference must be exactly 32 hexadecimal characters");
         }
-        if(reference.length() > 32) {
-            throw new IllegalArgumentException("Reference cannot exceed 32 characters");
-        }
+
         if(transactionType == null) {
             throw new IllegalArgumentException("Transaction type cannot be null");
         }
@@ -52,7 +98,54 @@ public class BankTransaction extends BaseEntity {
                 );
             }
         }
+        requestedAmount = requestedAmount.setScale(2, RoundingMode.UNNECESSARY);
 
-        return new BankTransaction(transactionType, reference, normalizedNote);
+        return new BankTransaction(
+                requestedAmount,
+                requestedCurrency,
+                TransactionStatus.PENDING,
+                transactionType,
+                reference,
+                normalizedNote,
+                new ArrayList<>()
+        );
+    }
+
+    public LedgerEntry addEntry(
+            String ledgerEntryReference,
+            BigDecimal amount,
+            BigDecimal balanceAfter,
+            EntryDirection direction,
+            LedgerAccount ledgerAccount
+    ) {
+        if(status != TransactionStatus.PENDING) {
+            throw new IllegalStateException("Transaction is not pending");
+        }
+
+            LedgerEntry entry = LedgerEntry.createNew(
+                    ledgerEntryReference,
+                    amount,
+                    balanceAfter,
+                    direction,
+                    ledgerAccount,
+                    this
+            );
+            entries.add(entry);
+            return entry;
+
+    }
+
+    public void complete() {
+        if (status != TransactionStatus.PENDING) {
+            throw new IllegalStateException("Transaction is not pending");
+        }
+
+        if (entries == null || entries.isEmpty()) {
+            throw new IllegalStateException(
+                    "Transaction cannot be completed without entries"
+            );
+        }
+
+        status = TransactionStatus.COMPLETED;
     }
 }

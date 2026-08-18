@@ -5,6 +5,11 @@ import com.neobank.neobank.account.dto.CreateAccountRequest;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.CustomerRepository;
+import com.neobank.neobank.ledger.LedgerAccount;
+import com.neobank.neobank.ledger.LedgerAccountStatus;
+import com.neobank.neobank.ledger.LedgerAccountType;
+import com.neobank.neobank.shared.money.CurrencyCode;
+import com.neobank.neobank.shared.reference.ReferenceGenerator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -35,6 +40,9 @@ class AccountServiceTest {
     @Mock
     private CustomerRepository customerRepository;
 
+    @Mock
+    private ReferenceGenerator referenceGenerator;
+
     @InjectMocks
     private AccountService accountService;
 
@@ -56,6 +64,7 @@ class AccountServiceTest {
         );
 
         String accountNumber = "12345678900987";
+        String ledgerAccountReference = "0123456789abcdef0123456789abcdef";
 
         given(customerRepository.findByEmailIgnoreCase("customer@example.com"))
                 .willReturn(Optional.of(customer));
@@ -65,10 +74,14 @@ class AccountServiceTest {
                 .willReturn(false);
         given(accountRepository.save(any(Account.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
+        given(referenceGenerator.generate())
+                .willReturn(ledgerAccountReference);
 
         AccountResponse response = accountService.createAccount(request, customer.getEmail());
         verify(accountRepository).save(accountCaptor.capture());
         Account savedAccount = accountCaptor.getValue();
+
+        LedgerAccount ledgerAccount = savedAccount.getLedgerAccount();
 
         assertThat(savedAccount.getAccountNumber())
                 .isEqualTo(accountNumber);
@@ -79,9 +92,20 @@ class AccountServiceTest {
         assertThat(savedAccount.getAccountType())
                 .isEqualTo(AccountType.CURRENT);
         assertThat(savedAccount.getCurrency())
-                .isEqualTo(CurrencyCode.TRY);
+                .isSameAs(request.currency());
         assertThat(savedAccount.getCustomer())
                 .isSameAs(customer);
+
+        assertThat(ledgerAccount.getLedgerReference())
+                .isEqualTo(ledgerAccountReference);
+        assertThat(ledgerAccount.getType())
+                .isSameAs(LedgerAccountType.LIABILITY);
+        assertThat(ledgerAccount.getCurrency())
+                .isSameAs(response.currency());
+        assertThat(ledgerAccount.getBalance())
+                .isEqualByComparingTo(new BigDecimal("0.00"));
+        assertThat(ledgerAccount.getStatus())
+                .isSameAs(LedgerAccountStatus.ACTIVE);
 
         assertThat(response.accountNumber())
                 .isEqualTo(accountNumber);
@@ -92,7 +116,7 @@ class AccountServiceTest {
         assertThat(response.accountType())
                 .isEqualTo(AccountType.CURRENT);
         assertThat(response.currency())
-                .isEqualTo(CurrencyCode.TRY);
+                .isEqualTo(savedAccount.getCurrency());
 
         verify(accountNumberGenerator, times(1))
                 .generate();
@@ -102,6 +126,8 @@ class AccountServiceTest {
                 .existsByAccountNumber(accountNumber);
         verify(accountRepository, times(1))
                 .save(any(Account.class));
+        verify(referenceGenerator, times(1))
+                .generate();
     }
 
     @Test
@@ -120,6 +146,7 @@ class AccountServiceTest {
 
         String accountNumber1 = "12345678900987";
         String accountNumber2 = "09876543211234";
+        String ledgerAccountReference = "0123456789abcdef0123456789abcdef";
 
         given(accountNumberGenerator.generate())
                 .willReturn(accountNumber1, accountNumber2);
@@ -131,6 +158,8 @@ class AccountServiceTest {
                 .willReturn(Optional.of(customer));
         given(accountRepository.save(any(Account.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
+        given(referenceGenerator.generate())
+                .willReturn(ledgerAccountReference);
 
         AccountResponse response = accountService.createAccount(request, customer.getEmail());
         verify(accountRepository).save(accountCaptor.capture());
@@ -149,6 +178,8 @@ class AccountServiceTest {
                 .existsByAccountNumber(accountNumber2);
         verify(accountRepository, times(1))
                 .save(any(Account.class));
+        verify(referenceGenerator, times(1))
+                .generate();
     }
 
     @Test
@@ -169,7 +200,7 @@ class AccountServiceTest {
         verify(customerRepository)
                 .findByEmailIgnoreCase("missing@example.com");
 
-        verifyNoInteractions(accountNumberGenerator, accountRepository);
+        verifyNoInteractions(accountNumberGenerator, accountRepository, referenceGenerator);
     }
 
     @Test
@@ -205,6 +236,8 @@ class AccountServiceTest {
                 .existsByAccountNumber(any(String.class));
         verify(accountRepository, never())
                 .save(any(Account.class));
+
+        verifyNoInteractions(referenceGenerator);
     }
 
     @Test
@@ -217,20 +250,32 @@ class AccountServiceTest {
                 "Ada Lovelace"
         );
 
+        LedgerAccount ledgerAccount1 = LedgerAccount.createNew(
+                "0123456789abcdef0123456789abcdef",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
         Account account1 = Account.createNew(
                 "12345678900987",
                 "Private Account",
                 AccountType.CURRENT,
-                CurrencyCode.TRY,
-                customer
+                customer,
+                ledgerAccount1
+        );
+
+        LedgerAccount ledgerAccount2 = LedgerAccount.createNew(
+                "0123456789abcdef0123456789fedcba",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.USD
         );
 
         Account account2 = Account.createNew(
                 "98765432101234",
                 "Saving Account",
                 AccountType.SAVINGS,
-                CurrencyCode.USD,
-                customer
+                customer,
+                ledgerAccount2
         );
 
         given(accountRepository.findAllByCustomer_EmailIgnoreCaseOrderByCreatedAtDesc(email))
@@ -272,8 +317,7 @@ class AccountServiceTest {
         verify(accountRepository, never())
                 .save(any(Account.class));
 
-        verifyNoInteractions(accountNumberGenerator);
-        verifyNoInteractions(customerRepository);
+        verifyNoInteractions(accountNumberGenerator, customerRepository, referenceGenerator);
     }
 
     @Test
@@ -292,8 +336,7 @@ class AccountServiceTest {
         verify(accountRepository, never())
                 .save(any(Account.class));
 
-        verifyNoInteractions(accountNumberGenerator);
-        verifyNoInteractions(customerRepository);
+        verifyNoInteractions(accountNumberGenerator, customerRepository, referenceGenerator);
     }
 
     @Test
@@ -304,12 +347,18 @@ class AccountServiceTest {
                 "Ada Lovelace"
         );
 
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "0123456789abcdef0123456789abcdef",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
         Account account = Account.createNew(
                 "12345678900123",
                 "Private Account",
                 AccountType.CURRENT,
-                CurrencyCode.TRY,
-                customer
+                customer,
+                ledgerAccount
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(account.getAccountNumber(), customer.getEmail()))
@@ -331,7 +380,7 @@ class AccountServiceTest {
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(account.getAccountNumber(), customer.getEmail());
         verify(accountRepository, never()).save(any(Account.class));
 
-        verifyNoInteractions(accountNumberGenerator, customerRepository);
+        verifyNoInteractions(accountNumberGenerator, customerRepository, referenceGenerator);
     }
 
     @Test
@@ -348,6 +397,6 @@ class AccountServiceTest {
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
         verify(accountRepository, never()).save(any(Account.class));
 
-        verifyNoInteractions(accountNumberGenerator, customerRepository);
+        verifyNoInteractions(accountNumberGenerator, customerRepository, referenceGenerator);
     }
 }

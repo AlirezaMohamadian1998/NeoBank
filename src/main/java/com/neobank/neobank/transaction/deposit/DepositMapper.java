@@ -1,14 +1,14 @@
 package com.neobank.neobank.transaction.deposit;
 
-import com.neobank.neobank.transaction.AccountEntry;
 import com.neobank.neobank.transaction.BankTransaction;
+import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.deposit.dto.DepositResponse;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
 public class DepositMapper {
 
-    public static DepositResponse toResponse(BankTransaction transaction, AccountEntry entry) {
+    public static DepositResponse toResponse(BankTransaction transaction, LedgerEntry entry, String accountNumber) {
         if (transaction == null) {
             throw new IllegalArgumentException("Transaction cannot be null");
         }
@@ -18,8 +18,9 @@ public class DepositMapper {
 
         return new DepositResponse(
                 transaction.getReference(),
+                entry.getReference(),
                 transaction.getTransactionType(),
-                entry.getAccount().getAccountNumber(),
+                accountNumber,
                 entry.getAmount(),
                 entry.getCurrency(),
                 entry.getBalanceAfter(),

@@ -1,7 +1,7 @@
 package com.neobank.neobank.transaction;
 
-import com.neobank.neobank.account.Account;
-import com.neobank.neobank.account.CurrencyCode;
+import com.neobank.neobank.ledger.LedgerAccount;
+import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.persistence.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -16,8 +16,10 @@ import java.math.RoundingMode;
 @Getter
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "account_entries")
-public class AccountEntry extends BaseEntity {
+@Table(name = "ledger_entries")
+public class LedgerEntry extends BaseEntity {
+    @Column(nullable = false, updatable = false, unique = true, length = 32)
+    private String reference;
 
     @Column(nullable = false, updatable = false, precision = 19, scale = 2)
     private BigDecimal amount;
@@ -27,45 +29,68 @@ public class AccountEntry extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, updatable = false)
-    private EntryDirection entryDirection;
+    private EntryDirection direction;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, updatable = false)
     private CurrencyCode currency;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "account_id", nullable = false, updatable = false)
-    private Account account;
+    @JoinColumn(name = "ledger_account_id", nullable = false, updatable = false)
+    private LedgerAccount ledgerAccount;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "transaction_id", nullable = false, updatable = false)
     private BankTransaction bankTransaction;
 
-    public static AccountEntry createNew(
+    static LedgerEntry createNew(
+            String reference,
             BigDecimal amount,
             BigDecimal balanceAfter,
-            EntryDirection entryDirection,
-            Account account,
+            EntryDirection direction,
+            LedgerAccount ledgerAccount,
             BankTransaction bankTransaction
     ) {
-        if(amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+        if(reference == null) {
+            throw new IllegalArgumentException("Reference must not be null");
+        }
+
+        if (!reference.matches("[0-9a-f]{32}")) {
+            throw new IllegalArgumentException("Reference must be exactly 32 hexadecimal characters");
+        }
+
+        if(amount == null) {
+            throw new IllegalArgumentException("Amount must not be null");
+        }
+
+        if(amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Amount must be greater than zero");
         }
+
         if(amount.stripTrailingZeros().scale() > 2) {
             throw new IllegalArgumentException("Amount must not have more than 2 decimal places");
         }
-        if(balanceAfter == null || balanceAfter.compareTo(BigDecimal.ZERO) < 0) {
+
+        if(balanceAfter == null) {
+            throw new IllegalArgumentException("Balance after must not be null");
+        }
+
+        if(balanceAfter.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Balance after must not be less than zero");
         }
+
         if(balanceAfter.compareTo(BigDecimal.ZERO) != 0 && balanceAfter.stripTrailingZeros().scale() > 2) {
             throw new IllegalArgumentException("Balance after must not have more than 2 decimal places");
         }
-        if(entryDirection == null) {
+
+        if(direction == null) {
             throw new IllegalArgumentException("Entry direction cannot be null");
         }
-        if(account == null) {
-            throw new IllegalArgumentException("Account cannot be null");
+
+        if(ledgerAccount == null) {
+            throw new IllegalArgumentException("Ledger account cannot be null");
         }
+
         if(bankTransaction == null) {
             throw new IllegalArgumentException("Bank transaction cannot be null");
         }
@@ -73,6 +98,6 @@ public class AccountEntry extends BaseEntity {
         amount = amount.setScale(2, RoundingMode.UNNECESSARY);
         balanceAfter = balanceAfter.setScale(2, RoundingMode.UNNECESSARY);
 
-        return new AccountEntry(amount, balanceAfter, entryDirection, account.getCurrency(), account, bankTransaction);
+        return new LedgerEntry(reference, amount, balanceAfter, direction, ledgerAccount.getCurrency(), ledgerAccount, bankTransaction);
     }
 }

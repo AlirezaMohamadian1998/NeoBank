@@ -1,8 +1,8 @@
 package com.neobank.neobank.transaction.withdrawal;
 
 import com.neobank.neobank.account.AccountNotFoundException;
-import com.neobank.neobank.account.CurrencyCode;
-import com.neobank.neobank.account.InsufficientFundsException;
+import com.neobank.neobank.shared.money.CurrencyCode;
+import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.auth.SecurityConfig;
 import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.withdrawal.dto.WithdrawalRequest;
@@ -55,6 +55,7 @@ class WithdrawalControllerTest {
 
         WithdrawalResponse response = new WithdrawalResponse(
                 "7f3c8a21d9e64b5fa2c17e9084bd6a31",
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 TransactionType.WITHDRAWAL,
                 accountNumber,
                 new BigDecimal("150.00"),
@@ -74,6 +75,7 @@ class WithdrawalControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.transactionReference").value(response.transactionReference()))
+                .andExpect(jsonPath("$.entryReference").value(response.entryReference()))
                 .andExpect(jsonPath("$.transactionType").value(response.transactionType().name()))
                 .andExpect((jsonPath("$.accountNumber").value(accountNumber)))
                 .andExpect(jsonPath("$.amount").value(response.amount().doubleValue()))
@@ -84,6 +86,9 @@ class WithdrawalControllerTest {
                 .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.version").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.customer").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccount").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccountId").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccountReference").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.account").doesNotHaveJsonPath());
 
         verify(withdrawalService).withdraw(request, accountNumber, email);

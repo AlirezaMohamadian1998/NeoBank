@@ -1,8 +1,8 @@
 package com.neobank.neobank.transaction.transfer;
 
 import com.neobank.neobank.account.AccountNotFoundException;
-import com.neobank.neobank.account.CurrencyCode;
-import com.neobank.neobank.account.InsufficientFundsException;
+import com.neobank.neobank.shared.money.CurrencyCode;
+import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.auth.SecurityConfig;
 import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.transfer.dto.TransferRequest;
@@ -52,11 +52,13 @@ class TransferControllerTest {
         TransferRequest request = new TransferRequest(
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
-                "Test"
+                "Test",
+                CurrencyCode.TRY
         );
         
         TransferResponse response = new TransferResponse(
                 "7f3c8a21d9e64b5fa2c17e9084bd6a31",
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 TransactionType.TRANSFER,
                 sourceAccountNumber,
                 targetAccountNumber,
@@ -77,18 +79,24 @@ class TransferControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.transactionReference").value(response.transactionReference()))
+                .andExpect(jsonPath("$.sourceEntryReference").value(response.sourceEntryReference()))
                 .andExpect(jsonPath("$.transactionType").value(response.transactionType().name()))
                 .andExpect(jsonPath("$.sourceAccountNumber").value(response.sourceAccountNumber()))
                 .andExpect(jsonPath("$.destinationAccountNumber").value(response.destinationAccountNumber()))
                 .andExpect(jsonPath("$.amount").value(response.amount().doubleValue()))
-                .andExpect(jsonPath("$.balanceAfter").value(response.balanceAfter().doubleValue()))
+                .andExpect(jsonPath("$.sourceBalanceAfter").value(response.sourceBalanceAfter().doubleValue()))
                 .andExpect(jsonPath("$.currency").value(response.currency().name()))
                 .andExpect(jsonPath("$.note").value(response.note()))
                 .andExpect(jsonPath("$.createdAt").value(response.createdAt().toString()))
                 .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.version").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.account").doesNotHaveJsonPath())
-                .andExpect(jsonPath("$.customer").doesNotHaveJsonPath());
+                .andExpect(jsonPath("$.customer").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccount").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccountId").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccountReference").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.entries").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.destinationEntryReference").doesNotHaveJsonPath());
 
         verify(transferService).transfer(request, sourceAccountNumber, email);
     }
@@ -102,7 +110,8 @@ class TransferControllerTest {
         TransferRequest request = new TransferRequest(
                 new BigDecimal("1000.000"),
                 targetAccountNumber.repeat(2),
-                "Test".repeat(100)
+                "Test".repeat(100),
+                null
         );
 
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
@@ -117,7 +126,8 @@ class TransferControllerTest {
                 .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
                 .andExpect(jsonPath("$.errors.amount").value("Amount must be a valid decimal number"))
                 .andExpect(jsonPath("$.errors.destinationAccountNumber").value("Account number must be exactly 14 digits"))
-                .andExpect(jsonPath("$.errors.note").value("Note must not exceed 255 characters"));
+                .andExpect(jsonPath("$.errors.note").value("Note must not exceed 255 characters"))
+                .andExpect(jsonPath("$.errors.currency").value("Currency cannot be null"));
 
         verifyNoInteractions(transferService);
     }
@@ -130,7 +140,8 @@ class TransferControllerTest {
         TransferRequest request = new TransferRequest(
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
-                "Test"
+                "Test",
+                CurrencyCode.TRY
         );
 
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
@@ -150,7 +161,8 @@ class TransferControllerTest {
         TransferRequest request = new TransferRequest(
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
-                "Test"
+                "Test",
+                CurrencyCode.TRY
         );
 
         given(transferService.transfer(request, sourceAccountNumber, email))
@@ -179,7 +191,8 @@ class TransferControllerTest {
         TransferRequest request = new TransferRequest(
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
-                "Test"
+                "Test",
+                CurrencyCode.TRY
         );
 
         given(transferService.transfer(request, sourceAccountNumber, email))
@@ -207,7 +220,8 @@ class TransferControllerTest {
         TransferRequest request = new TransferRequest(
                 new BigDecimal("1000.00"),
                 sourceAccountNumber,
-                "Test"
+                "Test",
+                CurrencyCode.TRY
         );
 
         given(transferService.transfer(request, sourceAccountNumber, email))
@@ -236,11 +250,12 @@ class TransferControllerTest {
         TransferRequest request = new TransferRequest(
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
-                "Test"
+                "Test",
+                CurrencyCode.TRY
         );
 
         given(transferService.transfer(request, sourceAccountNumber, email))
-                .willThrow(new InvalidTransferException("Source and destination accounts must be in the same currency"));
+                .willThrow(new InvalidTransferException("Source and destination accounts must be in the same currency as request"));
 
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -249,7 +264,7 @@ class TransferControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Invalid transfer"))
-                .andExpect(jsonPath("$.detail").value("Source and destination accounts must be in the same currency"))
+                .andExpect(jsonPath("$.detail").value("Source and destination accounts must be in the same currency as request"))
                 .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
                 .andExpect(jsonPath("$.status").value(400));
 
@@ -265,7 +280,8 @@ class TransferControllerTest {
         TransferRequest request = new TransferRequest(
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
-                "Test"
+                "Test",
+                CurrencyCode.TRY
         );
 
         given(transferService.transfer(request, sourceAccountNumber, email))
