@@ -6,7 +6,14 @@ import com.neobank.neobank.auth.dto.LoginRequest;
 import com.neobank.neobank.auth.dto.LoginResponse;
 import com.neobank.neobank.customer.CustomerRepository;
 import com.neobank.neobank.customer.dto.RegisterCustomerRequest;
+import com.neobank.neobank.ledger.LedgerAccount;
+import com.neobank.neobank.ledger.LedgerAccountRepository;
+import com.neobank.neobank.ledger.LedgerAccountStatus;
+import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
+import com.neobank.neobank.shared.money.CurrencyCode;
+import com.neobank.neobank.transaction.BankTransactionRepository;
+import com.neobank.neobank.transaction.LedgerEntryRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,9 +53,21 @@ class AccountIntegrationTest {
     @Autowired
     private CustomerRepository customerRepository;
 
+    @Autowired
+    private LedgerAccountRepository ledgerAccountRepository;
+
+    @Autowired
+    private BankTransactionRepository bankTransactionRepository;
+
+    @Autowired
+    private LedgerEntryRepository ledgerEntryRepository;
+
     @BeforeEach
     void setUp() {
+        ledgerEntryRepository.deleteAll();
+        bankTransactionRepository.deleteAll();
         accountRepository.deleteAll();
+        ledgerAccountRepository.deleteAll();
         customerRepository.deleteAll();
     }
 
@@ -68,6 +87,32 @@ class AccountIntegrationTest {
 
         assertThat(accountNumber)
                 .matches("^[0-9]{14}$");
+        assertThat(response.currency())
+                .isSameAs(createAccountRequest.currency());
+
+        assertThat(ledgerAccountRepository.count())
+                .isEqualTo(1);
+
+        LedgerAccount persistedLedgerAccount = ledgerAccountRepository.findAll().getFirst();
+
+        assertThat(persistedLedgerAccount.getLedgerReference())
+                .matches("[a-f0-9]{32}");
+        assertThat(persistedLedgerAccount.getType())
+                .isSameAs(LedgerAccountType.LIABILITY);
+        assertThat(persistedLedgerAccount.getCurrency())
+                .isSameAs(response.currency());
+        assertThat(persistedLedgerAccount.getBalance())
+                .isEqualByComparingTo(BigDecimal.ZERO.setScale(2));
+        assertThat(persistedLedgerAccount.getStatus())
+                .isSameAs(LedgerAccountStatus.ACTIVE);
+        assertThat(persistedLedgerAccount.getVersion())
+                .isNotNull();
+        assertThat(persistedLedgerAccount.getId())
+                .isNotNull();
+        assertThat(persistedLedgerAccount.getCreatedAt())
+                .isNotNull();
+        assertThat(persistedLedgerAccount.getUpdatedAt())
+                .isNotNull();
 
         Optional<Account> accountOptional = accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
 
@@ -81,9 +126,11 @@ class AccountIntegrationTest {
         assertThat(account.getAccountType())
                 .isSameAs(createAccountRequest.accountType());
         assertThat(account.getCurrency())
-                .isSameAs(createAccountRequest.currency());
+                .isSameAs(persistedLedgerAccount.getCurrency());
         assertThat(account.getBalance())
-                .isEqualByComparingTo(BigDecimal.ZERO.setScale(2));
+                .isEqualByComparingTo(persistedLedgerAccount.getBalance());
+        assertThat(account.getLedgerAccount().getId())
+                .isEqualTo(persistedLedgerAccount.getId());
         assertThat(account.getId())
                 .isNotNull();
         assertThat(account.getCreatedAt())
@@ -110,6 +157,9 @@ class AccountIntegrationTest {
                 .andExpect(jsonPath("$[0].createdAt").exists())
                 .andExpect(jsonPath("$.[*].id").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.[*].version").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.[*].ledgerAccount").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.[*].ledgerAccountId").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.[*].ledgerAccountReference").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.[*].customer").doesNotHaveJsonPath());
 
         mockMvc.perform(get("/api/accounts/{accountNumber}", accountNumber)
@@ -124,6 +174,9 @@ class AccountIntegrationTest {
                 .andExpect(jsonPath("$.createdAt").exists())
                 .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.version").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccount").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccountId").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccountReference").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.customer").doesNotHaveJsonPath());
     }
 
@@ -245,6 +298,7 @@ class AccountIntegrationTest {
                 .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.version").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.customer").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.ledgerAccount").doesNotHaveJsonPath())
                 .andReturn();
 
         return objectMapper

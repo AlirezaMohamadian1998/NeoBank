@@ -1,5 +1,6 @@
 package com.neobank.neobank.transaction.transfer.dto;
 
+import com.neobank.neobank.shared.money.CurrencyCode;
 import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
@@ -16,7 +17,10 @@ public record TransferRequest(
         String destinationAccountNumber,
 
         @Size(max = 255, message = "Note must not exceed 255 characters")
-        String note
+        String note,
+
+        @NotNull(message = "Currency cannot be null")
+        CurrencyCode currency
 
 ) {
 }

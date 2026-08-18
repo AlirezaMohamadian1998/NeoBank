@@ -3,7 +3,11 @@ package com.neobank.neobank.transaction;
 import com.neobank.neobank.account.*;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerRepository;
+import com.neobank.neobank.ledger.LedgerAccount;
+import com.neobank.neobank.ledger.LedgerAccountRepository;
+import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
+import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.deposit.dto.DepositRequest;
 import com.neobank.neobank.transaction.deposit.dto.DepositResponse;
 import com.neobank.neobank.transaction.transfer.dto.TransferRequest;
@@ -50,7 +54,7 @@ class TransactionIntegrationTest {
     private BankTransactionRepository bankTransactionRepository;
 
     @Autowired
-    private AccountEntryRepository accountEntryRepository;
+    private LedgerEntryRepository ledgerEntryRepository;
 
     @Autowired
     private CustomerRepository customerRepository;
@@ -58,14 +62,18 @@ class TransactionIntegrationTest {
     @Autowired
     private AccountRepository accountRepository;
 
+    @Autowired
+    private LedgerAccountRepository ledgerAccountRepository;
+
     private Account account;
     private Customer customer;
 
     @BeforeEach
     void setUp() {
-        accountEntryRepository.deleteAll();
+        ledgerEntryRepository.deleteAll();
         bankTransactionRepository.deleteAll();
         accountRepository.deleteAll();
+        ledgerAccountRepository.deleteAll();
         customerRepository.deleteAll();
 
         customer = customerRepository.save(Customer.createNew(
@@ -75,12 +83,18 @@ class TransactionIntegrationTest {
                 )
         );
 
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "7f3c8a21d9e64b5fa2c17e9084bd6a31",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
         account = accountRepository.save(Account.createNew(
                 "12345678900987",
                 "Private Account",
                 AccountType.CURRENT,
-                CurrencyCode.TRY,
-                customer
+                customer,
+                ledgerAccount
                 )
         );
     }
@@ -104,11 +118,14 @@ class TransactionIntegrationTest {
                     .andExpect(jsonPath("$.accountNumber").value(account.getAccountNumber()))
                     .andExpect(jsonPath("$.note").value(request.note()))
                     .andExpect(jsonPath("$.transactionReference").value(matchesPattern("^[0-9a-f]{32}$")))
+                    .andExpect(jsonPath("$.entryReference").value(matchesPattern("^[0-9a-f]{32}$")))
                     .andExpect(jsonPath("$.createdAt").exists())
                     .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.version").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.account").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.customer").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.ledgerAccount").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.bankTransaction").doesNotHaveJsonPath())
                     .andReturn();
 
             DepositResponse response = objectMapper.readValue(depositMvcResult.getResponse().getContentAsString(), DepositResponse.class);
@@ -123,16 +140,22 @@ class TransactionIntegrationTest {
                             customer.getEmail())
                     .orElseThrow(() -> new AccountNotFoundException());
 
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(1);
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(1);
 
             BankTransaction transaction = bankTransactionRepository.findAll().getFirst();
-            AccountEntry entry = accountEntryRepository.findAll().getFirst();
+            var entry = ledgerEntryRepository.findAll().getFirst();
 
             assertThat(transaction.getTransactionType())
                     .isSameAs(TransactionType.DEPOSIT);
+            assertThat(transaction.getStatus())
+                    .isSameAs(TransactionStatus.COMPLETED);
+            assertThat(transaction.getRequestedAmount())
+                    .isEqualByComparingTo(request.amount());
+            assertThat(transaction.getRequestedCurrency())
+                    .isSameAs(savedAccount.getCurrency());
             assertThat(transaction.getNote())
                     .isEqualTo(response.note());
             assertThat(transaction.getReference())
@@ -144,14 +167,18 @@ class TransactionIntegrationTest {
             assertThat(transaction.getUpdatedAt())
                     .isNotNull();
 
-            assertThat(entry.getEntryDirection())
+            assertThat(entry.getDirection())
                     .isSameAs(EntryDirection.CREDIT);
+            assertThat(entry.getReference())
+                    .isEqualTo(response.entryReference());
             assertThat(entry.getAmount())
                     .isEqualByComparingTo(response.amount());
             assertThat(entry.getBalanceAfter())
-                    .isEqualByComparingTo(savedAccount.getBalance());
-            assertThat(entry.getAccount().getId())
-                    .isEqualTo(savedAccount.getId());
+                    .isEqualByComparingTo(response.balanceAfter());
+            assertThat(savedAccount.getBalance())
+                    .isEqualByComparingTo(response.balanceAfter());
+            assertThat(entry.getLedgerAccount().getId())
+                    .isEqualTo(savedAccount.getLedgerAccount().getId());
             assertThat(entry.getBankTransaction().getId())
                     .isEqualTo(transaction.getId());
             assertThat(entry.getCurrency())
@@ -193,7 +220,7 @@ class TransactionIntegrationTest {
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(0.00));
 
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
@@ -222,7 +249,7 @@ class TransactionIntegrationTest {
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(0.00));
 
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
@@ -243,7 +270,7 @@ class TransactionIntegrationTest {
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(0.00));
 
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
@@ -254,8 +281,7 @@ class TransactionIntegrationTest {
     class WithdrawalTests {
         @Test
         void authenticatedCustomerCanWithdrawFromOwnedAccount() throws Exception {
-            account.credit(new BigDecimal("1000.00"));
-            accountRepository.save(account);
+            creditAndSave(account, new BigDecimal("1000.00"));
 
             WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("500.00"), "Test");
 
@@ -266,17 +292,20 @@ class TransactionIntegrationTest {
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.transactionReference").value(matchesPattern("^[0-9a-f]{32}$")))
+                    .andExpect(jsonPath("$.entryReference").value(matchesPattern("^[0-9a-f]{32}$")))
                     .andExpect(jsonPath("$.transactionType").value(TransactionType.WITHDRAWAL.name()))
-                    .andExpect(jsonPath("$.accountNumber").exists())
-                    .andExpect(jsonPath("$.amount").exists())
-                    .andExpect(jsonPath("$.currency").exists())
-                    .andExpect(jsonPath("$.balanceAfter").exists())
-                    .andExpect(jsonPath("$.note").exists())
+                    .andExpect(jsonPath("$.accountNumber").value(account.getAccountNumber()))
+                    .andExpect(jsonPath("$.amount").value(500.00))
+                    .andExpect(jsonPath("$.currency").value(CurrencyCode.TRY.name()))
+                    .andExpect(jsonPath("$.balanceAfter").value(500.00))
+                    .andExpect(jsonPath("$.note").value(request.note()))
                     .andExpect(jsonPath("$.createdAt").exists())
                     .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.version").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.account").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.customer").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.ledgerAccount").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.bankTransaction").doesNotHaveJsonPath())
                     .andReturn();
 
             mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
@@ -286,7 +315,7 @@ class TransactionIntegrationTest {
 
             WithdrawalResponse response = objectMapper.readValue(withdrawMvcResult.getResponse().getContentAsString(), WithdrawalResponse.class);
 
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(1);
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(1);
@@ -297,7 +326,7 @@ class TransactionIntegrationTest {
                     .orElseThrow(() -> new AccountNotFoundException());
 
             BankTransaction transaction = bankTransactionRepository.findAll().getFirst();
-            AccountEntry entry = accountEntryRepository.findAll().getFirst();
+            var entry = ledgerEntryRepository.findAll().getFirst();
 
             assertThat(response.transactionReference())
                     .isEqualTo(transaction.getReference());
@@ -318,6 +347,12 @@ class TransactionIntegrationTest {
 
             assertThat(transaction.getTransactionType())
                     .isSameAs(TransactionType.WITHDRAWAL);
+            assertThat(transaction.getStatus())
+                    .isSameAs(TransactionStatus.COMPLETED);
+            assertThat(transaction.getRequestedAmount())
+                    .isEqualByComparingTo(request.amount());
+            assertThat(transaction.getRequestedCurrency())
+                    .isSameAs(savedAccount.getCurrency());
             assertThat(transaction.getNote())
                     .isEqualTo(response.note());
             assertThat(transaction.getReference())
@@ -331,15 +366,17 @@ class TransactionIntegrationTest {
 
             assertThat(entry.getAmount())
                     .isEqualByComparingTo(response.amount());
+            assertThat(entry.getReference())
+                    .isEqualTo(response.entryReference());
             assertThat(entry.getBalanceAfter())
                     .isEqualByComparingTo(savedAccount.getBalance());
-            assertThat(entry.getAccount().getId())
-                    .isEqualTo(savedAccount.getId());
+            assertThat(entry.getLedgerAccount().getId())
+                    .isEqualTo(savedAccount.getLedgerAccount().getId());
             assertThat(entry.getBankTransaction().getId())
                     .isEqualTo(transaction.getId());
             assertThat(entry.getCurrency())
                     .isSameAs(savedAccount.getCurrency());
-            assertThat(entry.getEntryDirection())
+            assertThat(entry.getDirection())
                     .isSameAs(EntryDirection.DEBIT);
             assertThat(entry.getCreatedAt())
                     .isNotNull();
@@ -370,7 +407,7 @@ class TransactionIntegrationTest {
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(0.00));
 
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
@@ -391,7 +428,7 @@ class TransactionIntegrationTest {
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(0.00));
 
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
@@ -420,7 +457,7 @@ class TransactionIntegrationTest {
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(0.00));
 
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
@@ -454,7 +491,7 @@ class TransactionIntegrationTest {
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(0.00));
 
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
@@ -477,21 +514,28 @@ class TransactionIntegrationTest {
 
             Account sourceAccount = account;
 
+            LedgerAccount targetLedger = LedgerAccount.createNew(
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                    LedgerAccountType.LIABILITY,
+                    CurrencyCode.TRY
+            );
+
             Account targetAccount = Account.createNew(
                     "98765432100123",
                     "Target Account",
                     AccountType.CURRENT,
-                    CurrencyCode.TRY,
-                    targetCustomer
+                    targetCustomer,
+                    targetLedger
             );
 
-            sourceAccount.credit(new BigDecimal("1000.00"));
-            accountRepository.saveAll(List.of(targetAccount, sourceAccount));
+            accountRepository.save(targetAccount);
+            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
 
             TransferRequest request = new TransferRequest(
                     new BigDecimal("500"),
                     targetAccount.getAccountNumber(),
-                    "test"
+                    "test",
+                    CurrencyCode.TRY
             );
 
             MvcResult transferMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
@@ -500,26 +544,30 @@ class TransactionIntegrationTest {
                             .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.transactionReference").exists())
-                    .andExpect(jsonPath("$.transactionType").exists())
-                    .andExpect(jsonPath("$.sourceAccountNumber").exists())
-                    .andExpect(jsonPath("$.destinationAccountNumber").exists())
-                    .andExpect(jsonPath("$.amount").exists())
-                    .andExpect(jsonPath("$.balanceAfter").exists())
-                    .andExpect(jsonPath("$.currency").exists())
-                    .andExpect(jsonPath("$.note").exists())
+                    .andExpect(jsonPath("$.transactionReference").value(matchesPattern("^[0-9a-f]{32}$")))
+                    .andExpect(jsonPath("$.sourceEntryReference").value(matchesPattern("^[0-9a-f]{32}$")))
+                    .andExpect(jsonPath("$.transactionType").value(TransactionType.TRANSFER.name()))
+                    .andExpect(jsonPath("$.sourceAccountNumber").value(sourceAccount.getAccountNumber()))
+                    .andExpect(jsonPath("$.destinationAccountNumber").value(targetAccount.getAccountNumber()))
+                    .andExpect(jsonPath("$.amount").value(500.00))
+                    .andExpect(jsonPath("$.sourceBalanceAfter").value(500.00))
+                    .andExpect(jsonPath("$.currency").value(CurrencyCode.TRY.name()))
+                    .andExpect(jsonPath("$.note").value(request.note()))
                     .andExpect(jsonPath("$.createdAt").exists())
                     .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.version").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.account").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.customer").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.ledgerAccount").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.entries").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.destinationEntryReference").doesNotHaveJsonPath())
                     .andReturn();
 
             TransferResponse response = objectMapper.readValue(transferMvcResult.getResponse().getContentAsString(), TransferResponse.class);
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(1);
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(2);
             assertThat(accountRepository.count())
                     .isEqualTo(2);
@@ -532,6 +580,12 @@ class TransactionIntegrationTest {
                     .isEqualTo(response.transactionReference());
             assertThat(transaction.getTransactionType())
                     .isEqualTo(TransactionType.TRANSFER);
+            assertThat(transaction.getStatus())
+                    .isSameAs(TransactionStatus.COMPLETED);
+            assertThat(transaction.getRequestedAmount())
+                    .isEqualByComparingTo(request.amount());
+            assertThat(transaction.getRequestedCurrency())
+                    .isSameAs(request.currency());
             assertThat(transaction.getNote())
                     .isEqualTo(request.note());
             assertThat(transaction.getCreatedAt())
@@ -551,27 +605,29 @@ class TransactionIntegrationTest {
                             targetCustomer.getEmail())
                     .orElseThrow(() -> new AccountNotFoundException());
 
-            List<AccountEntry> entries = accountEntryRepository.findAll();
-            AccountEntry sourceEntry = entries.stream()
-                    .filter(entry -> entry.getAccount().getId().equals(savedSourceAccount.getId()))
+            List<LedgerEntry> entries = ledgerEntryRepository.findAll();
+            var sourceEntry = entries.stream()
+                    .filter(entry -> entry.getLedgerAccount().getId().equals(savedSourceAccount.getLedgerAccount().getId()))
                     .findFirst()
                     .orElseThrow();
 
-            AccountEntry targetEntry = entries.stream()
-                    .filter(entry -> entry.getAccount().getId().equals(savedTargetAccount.getId()))
+            var targetEntry = entries.stream()
+                    .filter(entry -> entry.getLedgerAccount().getId().equals(savedTargetAccount.getLedgerAccount().getId()))
                     .findFirst()
                     .orElseThrow();
 
             assertThat(sourceEntry.getAmount())
                     .isEqualByComparingTo(request.amount());
+            assertThat(sourceEntry.getReference())
+                    .isEqualTo(response.sourceEntryReference());
             assertThat(sourceEntry.getBalanceAfter())
                     .isEqualByComparingTo(savedSourceAccount.getBalance());
-            assertThat(sourceEntry.getEntryDirection())
+            assertThat(sourceEntry.getDirection())
                     .isSameAs(EntryDirection.DEBIT);
             assertThat(sourceEntry.getCurrency())
                     .isSameAs(savedSourceAccount.getCurrency());
-            assertThat(sourceEntry.getAccount().getId())
-                    .isEqualTo(savedSourceAccount.getId());
+            assertThat(sourceEntry.getLedgerAccount().getId())
+                    .isEqualTo(savedSourceAccount.getLedgerAccount().getId());
             assertThat(sourceEntry.getBankTransaction().getId())
                     .isEqualTo(transaction.getId());
             assertThat(sourceEntry.getCreatedAt())
@@ -585,12 +641,12 @@ class TransactionIntegrationTest {
                     .isEqualByComparingTo(request.amount());
             assertThat(targetEntry.getBalanceAfter())
                     .isEqualByComparingTo(savedTargetAccount.getBalance());
-            assertThat(targetEntry.getEntryDirection())
+            assertThat(targetEntry.getDirection())
                     .isSameAs(EntryDirection.CREDIT);
             assertThat(targetEntry.getCurrency())
                     .isSameAs(savedTargetAccount.getCurrency());
-            assertThat(targetEntry.getAccount().getId())
-                    .isEqualTo(savedTargetAccount.getId());
+            assertThat(targetEntry.getLedgerAccount().getId())
+                    .isEqualTo(savedTargetAccount.getLedgerAccount().getId());
             assertThat(targetEntry.getBankTransaction().getId())
                     .isEqualTo(transaction.getId());
             assertThat(targetEntry.getCreatedAt())
@@ -610,7 +666,7 @@ class TransactionIntegrationTest {
                     .isEqualTo(savedTargetAccount.getAccountNumber());
             assertThat(response.amount())
                     .isEqualByComparingTo(request.amount());
-            assertThat(response.balanceAfter())
+            assertThat(response.sourceBalanceAfter())
                     .isEqualByComparingTo(savedSourceAccount.getBalance());
             assertThat(response.currency())
                     .isSameAs(savedSourceAccount.getCurrency());
@@ -639,21 +695,28 @@ class TransactionIntegrationTest {
 
             Account sourceAccount = account;
 
+            LedgerAccount targetLedger = LedgerAccount.createNew(
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                    LedgerAccountType.LIABILITY,
+                    CurrencyCode.TRY
+            );
+
             Account targetAccount = Account.createNew(
                     "98765432100123",
                     "Target Account",
                     AccountType.CURRENT,
-                    CurrencyCode.TRY,
-                    targetCustomer
+                    targetCustomer,
+                    targetLedger
             );
 
-            sourceAccount.credit(new BigDecimal("1000.00"));
-            accountRepository.saveAll(List.of(targetAccount, sourceAccount));
+            accountRepository.save(targetAccount);
+            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
 
             TransferRequest request = new TransferRequest(
                     new BigDecimal("500.0050"),
                     targetAccount.getAccountNumber().repeat(2),
-                    "test".repeat(100)
+                    "test".repeat(100),
+                    null
             );
 
             mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
@@ -668,6 +731,7 @@ class TransactionIntegrationTest {
                     .andExpect(jsonPath("$.instance").value("/api/accounts/%s/transfers".formatted(sourceAccount.getAccountNumber())))
                     .andExpect(jsonPath("$.errors.amount").value("Amount must be a valid decimal number"))
                     .andExpect(jsonPath("$.errors.destinationAccountNumber").value("Account number must be exactly 14 digits"))
+                    .andExpect(jsonPath("$.errors.currency").value("Currency cannot be null"))
                     .andExpect(jsonPath("$.errors.note").value("Note must not exceed 255 characters"));
 
             mockMvc.perform(get("/api/accounts/{accountNumber}", sourceAccount.getAccountNumber())
@@ -684,7 +748,7 @@ class TransactionIntegrationTest {
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
         }
 
@@ -702,21 +766,28 @@ class TransactionIntegrationTest {
 
             Account sourceAccount = account;
 
+            LedgerAccount targetLedger = LedgerAccount.createNew(
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                    LedgerAccountType.LIABILITY,
+                    CurrencyCode.TRY
+            );
+
             Account targetAccount = Account.createNew(
                     "98765432100123",
                     "Target Account",
                     AccountType.CURRENT,
-                    CurrencyCode.TRY,
-                    targetCustomer
+                    targetCustomer,
+                    targetLedger
             );
 
-            sourceAccount.credit(new BigDecimal("1000.00"));
-            accountRepository.saveAll(List.of(targetAccount, sourceAccount));
+            accountRepository.save(targetAccount);
+            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
 
             TransferRequest request = new TransferRequest(
                     new BigDecimal("500"),
                     targetAccount.getAccountNumber(),
-                    "test"
+                    "test",
+                    CurrencyCode.TRY
             );
 
             mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
@@ -738,7 +809,7 @@ class TransactionIntegrationTest {
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
         }
 
@@ -756,21 +827,28 @@ class TransactionIntegrationTest {
 
             Account sourceAccount = account;
 
+            LedgerAccount targetLedger = LedgerAccount.createNew(
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                    LedgerAccountType.LIABILITY,
+                    CurrencyCode.TRY
+            );
+
             Account targetAccount = Account.createNew(
                     "98765432100123",
                     "Target Account",
                     AccountType.CURRENT,
-                    CurrencyCode.TRY,
-                    targetCustomer
+                    targetCustomer,
+                    targetLedger
             );
 
-            targetAccount.credit(new BigDecimal("1000.00"));
             accountRepository.save(targetAccount);
+            creditAndSave(targetAccount, new BigDecimal("1000.00"));
 
             TransferRequest request = new TransferRequest(
                     new BigDecimal("500"),
                     sourceAccount.getAccountNumber(),
-                    "test"
+                    "test",
+                    CurrencyCode.TRY
             );
 
             mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", targetAccount.getAccountNumber())
@@ -798,7 +876,7 @@ class TransactionIntegrationTest {
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
         }
 
@@ -816,21 +894,28 @@ class TransactionIntegrationTest {
 
             Account sourceAccount = account;
 
+            LedgerAccount targetLedger = LedgerAccount.createNew(
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                    LedgerAccountType.LIABILITY,
+                    CurrencyCode.TRY
+            );
+
             Account targetAccount = Account.createNew(
                     "98765432100123",
                     "Target Account",
                     AccountType.CURRENT,
-                    CurrencyCode.TRY,
-                    targetCustomer
+                    targetCustomer,
+                    targetLedger
             );
 
-            sourceAccount.credit(new BigDecimal("100.00"));
-            accountRepository.saveAll(List.of(targetAccount, sourceAccount));
+            accountRepository.save(targetAccount);
+            creditAndSave(sourceAccount, new BigDecimal("100.00"));
 
             TransferRequest request = new TransferRequest(
                     new BigDecimal("500"),
                     targetAccount.getAccountNumber(),
-                    "test"
+                    "test",
+                    CurrencyCode.TRY
             );
 
             mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
@@ -858,7 +943,7 @@ class TransactionIntegrationTest {
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
         }
 
@@ -867,13 +952,13 @@ class TransactionIntegrationTest {
             Customer sourceCustomer = customer;
             Account sourceAccount = account;
 
-            sourceAccount.credit(new BigDecimal("1000.00"));
-            accountRepository.save(sourceAccount);
+            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
 
             TransferRequest request = new TransferRequest(
                     new BigDecimal("500"),
                     sourceAccount.getAccountNumber(),
-                    "test"
+                    "test",
+                    CurrencyCode.TRY
             );
 
             mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
@@ -895,7 +980,7 @@ class TransactionIntegrationTest {
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
         }
 
@@ -913,21 +998,28 @@ class TransactionIntegrationTest {
 
             Account sourceAccount = account;
 
+            LedgerAccount targetLedger = LedgerAccount.createNew(
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                    LedgerAccountType.LIABILITY,
+                    CurrencyCode.USD
+            );
+
             Account targetAccount = Account.createNew(
                     "98765432100123",
                     "Target Account",
                     AccountType.CURRENT,
-                    CurrencyCode.USD,
-                    targetCustomer
+                    targetCustomer,
+                    targetLedger
             );
 
-            sourceAccount.credit(new BigDecimal("1000.00"));
-            accountRepository.saveAll(List.of(targetAccount, sourceAccount));
+            accountRepository.save(targetAccount);
+            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
 
             TransferRequest request = new TransferRequest(
                     new BigDecimal("500"),
                     targetAccount.getAccountNumber(),
-                    "test"
+                    "test",
+                    CurrencyCode.TRY
             );
 
             mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
@@ -936,7 +1028,7 @@ class TransactionIntegrationTest {
                             .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
                     .andExpect(status().isBadRequest())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                    .andExpect(jsonPath("$.detail").value("Source and destination accounts must be in the same currency"))
+                    .andExpect(jsonPath("$.detail").value("Source and destination accounts must be in the same currency as request"))
                     .andExpect(jsonPath("$.title").value("Invalid transfer"))
                     .andExpect(jsonPath("$.instance").value("/api/accounts/%s/transfers".formatted(sourceAccount.getAccountNumber())))
                     .andExpect(jsonPath("$.status").value(400));
@@ -955,7 +1047,7 @@ class TransactionIntegrationTest {
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
         }
 
@@ -964,13 +1056,13 @@ class TransactionIntegrationTest {
             Customer sourceCustomer = customer;
             Account sourceAccount = account;
 
-            sourceAccount.credit(new BigDecimal("1000.00"));
-            accountRepository.save(sourceAccount);
+            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
 
             TransferRequest request = new TransferRequest(
                     new BigDecimal("500"),
                     "14725836914785",
-                    "test"
+                    "test",
+                    CurrencyCode.TRY
             );
 
             mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
@@ -992,12 +1084,17 @@ class TransactionIntegrationTest {
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
-            assertThat(accountEntryRepository.count())
+            assertThat(ledgerEntryRepository.count())
                     .isEqualTo(0);
             assertThat(accountRepository.count())
                     .isEqualTo(1);
             assertThat(customerRepository.count())
                     .isEqualTo(1);
         }
+    }
+
+    private void creditAndSave(Account account, BigDecimal amount) {
+        account.getLedgerAccount().credit(amount);
+        ledgerAccountRepository.save(account.getLedgerAccount());
     }
 }

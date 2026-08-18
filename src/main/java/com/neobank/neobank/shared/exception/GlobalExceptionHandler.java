@@ -1,7 +1,7 @@
 package com.neobank.neobank.shared.exception;
 
 import com.neobank.neobank.account.AccountNotFoundException;
-import com.neobank.neobank.account.InsufficientFundsException;
+import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
 import com.neobank.neobank.transaction.transfer.InvalidTransferException;

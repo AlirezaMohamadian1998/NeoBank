@@ -4,6 +4,7 @@ import com.neobank.neobank.account.dto.AccountResponse;
 import com.neobank.neobank.account.dto.CreateAccountRequest;
 import com.neobank.neobank.auth.SecurityConfig;
 import com.neobank.neobank.customer.CustomerNotFoundException;
+import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;

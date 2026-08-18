@@ -1,4 +1,4 @@
-package com.neobank.neobank.account;
+package com.neobank.neobank.ledger;
 
 public class InsufficientFundsException extends RuntimeException {
     public InsufficientFundsException() {

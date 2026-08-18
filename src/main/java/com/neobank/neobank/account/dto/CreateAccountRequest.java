@@ -1,7 +1,7 @@
 package com.neobank.neobank.account.dto;
 
 import com.neobank.neobank.account.AccountType;
-import com.neobank.neobank.account.CurrencyCode;
+import com.neobank.neobank.shared.money.CurrencyCode;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 

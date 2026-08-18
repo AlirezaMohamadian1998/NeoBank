@@ -5,6 +5,9 @@ import com.neobank.neobank.account.dto.CreateAccountRequest;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.CustomerRepository;
+import com.neobank.neobank.ledger.LedgerAccount;
+import com.neobank.neobank.ledger.LedgerAccountType;
+import com.neobank.neobank.shared.reference.ReferenceGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,13 +25,28 @@ public class AccountService {
 
     private final CustomerRepository customerRepository;
 
+    private final ReferenceGenerator referenceGenerator;
+
     @Transactional
     public AccountResponse createAccount(CreateAccountRequest request, String customerEmail) {
         Customer customer = customerRepository.findByEmailIgnoreCase(customerEmail)
                 .orElseThrow(() -> new CustomerNotFoundException("Customer not found"));
 
         String accountNumber = generateUniqueAccountNumber();
-        Account account = AccountMapper.toAccountEntity(request, accountNumber, customer);
+
+        String reference = referenceGenerator.generate();
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                reference,
+                LedgerAccountType.LIABILITY,
+                request.currency()
+        );
+
+        Account account = AccountMapper.toAccountEntity(
+                request,
+                accountNumber,
+                customer,
+                ledgerAccount
+        );
 
         return AccountMapper.toResponse(accountRepository.save(account));
     }

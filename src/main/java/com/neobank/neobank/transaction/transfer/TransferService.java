@@ -3,7 +3,12 @@ package com.neobank.neobank.transaction.transfer;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.transaction.*;
+import com.neobank.neobank.ledger.LedgerPostingService;
+import com.neobank.neobank.shared.reference.ReferenceGenerator;
+import com.neobank.neobank.transaction.BankTransaction;
+import com.neobank.neobank.transaction.BankTransactionRepository;
+import com.neobank.neobank.transaction.EntryDirection;
+import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.transfer.dto.TransferRequest;
 import com.neobank.neobank.transaction.transfer.dto.TransferResponse;
 import lombok.RequiredArgsConstructor;
@@ -16,11 +21,11 @@ public class TransferService {
 
     private final BankTransactionRepository bankTransactionRepository;
 
-    private final AccountEntryRepository accountEntryRepository;
-
-    private final TransactionReferenceGenerator transactionReferenceGenerator;
+    private final ReferenceGenerator referenceGenerator;
 
     private final AccountRepository accountRepository;
+
+    private final LedgerPostingService ledgerPostingService;
 
     @Transactional
     public TransferResponse transfer(TransferRequest request, String sourceAccountNumber,String senderEmail) {
@@ -34,35 +39,40 @@ public class TransferService {
         Account destinationAccount = accountRepository.findByAccountNumber(request.destinationAccountNumber())
                 .orElseThrow(() -> new AccountNotFoundException("Destination account not found"));
 
-        if(sourceAccount.getCurrency() != destinationAccount.getCurrency()) {
-            throw new InvalidTransferException("Source and destination accounts must be in the same currency");
+        if((sourceAccount.getCurrency() != destinationAccount.getCurrency()) || (sourceAccount.getCurrency() != request.currency())) {
+            throw new InvalidTransferException("Source and destination accounts must be in the same currency as request");
         }
 
-        var sourceAccountBalanceAfter = sourceAccount.debit(request.amount());
-        var destinationAccountBalanceAfter = destinationAccount.credit(request.amount());
-
-        BankTransaction bankTransaction = bankTransactionRepository.save(BankTransaction.createNew(
+        BankTransaction bankTransaction = BankTransaction.createNew(
+                request.amount(),
+                request.currency(),
                 TransactionType.TRANSFER,
-                transactionReferenceGenerator.generate(),
+                referenceGenerator.generate(),
                 request.note()
-        ));
+        );
 
-        AccountEntry sourceAccountEntry = accountEntryRepository.save(AccountEntry.createNew(
-                request.amount(),
-                sourceAccountBalanceAfter,
+        var sourceLedgerEntry = ledgerPostingService.post(
+                bankTransaction,
+                sourceAccount.getLedgerAccount(),
                 EntryDirection.DEBIT,
-                sourceAccount,
-                bankTransaction
-        ));
+                request.amount()
+        );
 
-        AccountEntry destinationAccountEntry = accountEntryRepository.save(AccountEntry.createNew(
-                request.amount(),
-                destinationAccountBalanceAfter,
+        ledgerPostingService.post(
+                bankTransaction,
+                destinationAccount.getLedgerAccount(),
                 EntryDirection.CREDIT,
-                destinationAccount,
-                bankTransaction
-        ));
+                request.amount()
+        );
 
-        return TransferMapper.toResponse(bankTransaction, sourceAccountEntry, destinationAccountEntry);
+        bankTransaction.complete();
+        var savedTransaction = bankTransactionRepository.save(bankTransaction);
+
+        return TransferMapper.toResponse(
+                savedTransaction,
+                sourceLedgerEntry,
+                sourceAccount.getAccountNumber(),
+                destinationAccount.getAccountNumber()
+        );
     }
 }

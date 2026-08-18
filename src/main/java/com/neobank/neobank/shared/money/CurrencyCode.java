@@ -1,4 +1,4 @@
-package com.neobank.neobank.account;
+package com.neobank.neobank.shared.money;
 
 public enum CurrencyCode {
     USD,
