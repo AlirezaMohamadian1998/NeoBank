@@ -21,8 +21,11 @@ public class DepositController {
     public ResponseEntity<DepositResponse> deposit(
             @PathVariable String accountNumber,
             @RequestBody @Valid DepositRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal Jwt jwt
     ) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(depositService.deposit(request, accountNumber, jwt.getSubject()));
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(depositService.deposit(request, accountNumber, jwt.getSubject(), idempotencyKey));
     }
 }

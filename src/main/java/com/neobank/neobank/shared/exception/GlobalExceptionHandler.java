@@ -1,10 +1,11 @@
 package com.neobank.neobank.shared.exception;
 
 import com.neobank.neobank.account.AccountNotFoundException;
-import com.neobank.neobank.idempotency.IdempotencyConflictException;
-import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
+import com.neobank.neobank.idempotency.IdempotencyConflictException;
+import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
+import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.transaction.transfer.InvalidTransferException;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.*;
@@ -129,5 +130,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problemDetail.setTitle("Idempotency Conflict");
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidIdempotencyKeyException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidIdempotencyKeyException(
+            InvalidIdempotencyKeyException ex,
+            WebRequest req
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setInstance(URI.create(req.getDescription(false).replace("uri=", "")));
+        problemDetail.setTitle("Invalid idempotency key");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
     }
 }
