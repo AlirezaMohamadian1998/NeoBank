@@ -1,7 +1,7 @@
 spring:
   jpa:
     hibernate:
-      ddl-auto: create-only
+      ddl-auto: validate
 
 security:
   jwt:

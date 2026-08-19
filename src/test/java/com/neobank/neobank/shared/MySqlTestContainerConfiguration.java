@@ -11,6 +11,6 @@ public class MySqlTestContainerConfiguration {
     @Bean
     @ServiceConnection
     public MySQLContainer mysql() {
-        return new MySQLContainer("mysql:latest");
+        return new MySQLContainer("mysql:9.7.2");
     }
 }
