@@ -13,7 +13,7 @@ import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.deposit.dto.DepositRequest;
 import com.neobank.neobank.transaction.deposit.dto.DepositResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,10 +40,10 @@ public class DepositService {
     @Retryable(maxRetries = 4,
             delay = 200,
             multiplier = 2,
-            maxDelay = 1000,
+            maxDelay = 4000,
             jitter = 50,
             includes = {
-                    OptimisticLockingFailureException.class,
+                    ConcurrencyFailureException.class,
                     IdempotencyKeyRaceException.class
             }
     )

@@ -10,7 +10,7 @@ import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.transaction.transfer.InvalidTransferException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.Nullable;
-import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.http.*;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
@@ -165,20 +165,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(problemDetail);
     }
 
-    @ExceptionHandler(OptimisticLockingFailureException.class)
-    public ResponseEntity<ProblemDetail> handleOptimisticLockingFailure(
+    @ExceptionHandler(ConcurrencyFailureException.class)
+    public ResponseEntity<ProblemDetail> handleConcurrencyFailure(
             HttpServletRequest request
     ) {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
-                HttpStatus.CONFLICT,
-                "The request could not be completed because the resource was updated concurrently."
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "The request could not be completed because of a temporary database concurrency conflict. Please retry."
         );
 
-        problemDetail.setTitle("Concurrent update conflict");
+        problemDetail.setTitle("Temporary concurrency failure");
         problemDetail.setInstance(URI.create(request.getRequestURI()));
 
         return ResponseEntity
-                .status(HttpStatus.CONFLICT)
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, "1")
                 .body(problemDetail);
     }
 }
