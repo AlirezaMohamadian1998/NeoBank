@@ -5,19 +5,19 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.idempotency.IdempotencyRecord;
+import com.neobank.neobank.idempotency.IdempotencyService;
+import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
+import com.neobank.neobank.idempotency.RequestHasher;
 import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.ledger.LedgerPostingService;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
-import com.neobank.neobank.transaction.BankTransaction;
-import com.neobank.neobank.transaction.BankTransactionRepository;
-import com.neobank.neobank.transaction.EntryDirection;
-import com.neobank.neobank.transaction.LedgerEntry;
-import com.neobank.neobank.transaction.TransactionStatus;
-import com.neobank.neobank.transaction.TransactionType;
+import com.neobank.neobank.transaction.*;
 import com.neobank.neobank.transaction.withdrawal.dto.WithdrawalRequest;
+import com.neobank.neobank.transaction.withdrawal.dto.WithdrawalResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,8 +25,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,10 +53,18 @@ class WithdrawalServiceTest {
     @Mock
     private AccountRepository accountRepository;
 
+    @Mock
+    private IdempotencyService idempotencyService;
+
+    private final RequestHasher requestHasher = new RequestHasher();
+
     private WithdrawalService withdrawalService;
 
     @Captor
     private ArgumentCaptor<BankTransaction> bankTransactionCaptor;
+
+    @Captor
+    private ArgumentCaptor<IdempotencyRecord> idempotencyRecordCaptor;
 
     @BeforeEach
     void setUp() {
@@ -63,7 +73,9 @@ class WithdrawalServiceTest {
                 bankTransactionRepository,
                 accountRepository,
                 referenceGenerator,
-                ledgerPostingService
+                ledgerPostingService,
+                idempotencyService,
+                requestHasher
         );
     }
 
@@ -71,6 +83,7 @@ class WithdrawalServiceTest {
     void withdrawDebitsOwnedAccountAndSavesCompletedTransactionWithEntry() {
         String email = "customer@example.com";
         String accountNumber = "12345678900987";
+        String idempotencyKey = "11111111111111111111111111111111";
 
         Customer customer = Customer.createNew(
                 email,
@@ -101,14 +114,20 @@ class WithdrawalServiceTest {
                 .willReturn(TRANSACTION_REFERENCE, ENTRY_REFERENCE);
         given(bankTransactionRepository.save(any(BankTransaction.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, any(String.class)))
+                .willReturn(Optional.empty());
 
-        var response = withdrawalService.withdraw(request, accountNumber, email);
+        var response = withdrawalService.withdraw(request, accountNumber, email, idempotencyKey);
 
         verify(bankTransactionRepository).save(bankTransactionCaptor.capture());
 
         BankTransaction savedTransaction = bankTransactionCaptor.getValue();
         assertThat(savedTransaction.getEntries()).hasSize(1);
         LedgerEntry savedEntry = savedTransaction.getEntries().getFirst();
+
+        verify(idempotencyService).save(idempotencyRecordCaptor.capture());
+
+        IdempotencyRecord idempotencyRecord = idempotencyRecordCaptor.getValue();
 
         assertThat(savedTransaction.getReference())
                 .isEqualTo(TRANSACTION_REFERENCE);
@@ -155,6 +174,24 @@ class WithdrawalServiceTest {
         assertThat(account.getBalance())
                 .isEqualByComparingTo("0.00");
 
+        assertThat(idempotencyRecord.getIdempotencyKey())
+                .isEqualTo(idempotencyKey);
+        assertThat(idempotencyRecord.getCustomer())
+                .isSameAs(customer);
+        assertThat(idempotencyRecord.getBankTransaction())
+                .isSameAs(savedTransaction);
+        assertThat(idempotencyRecord.getRequestHash())
+                .isEqualTo(
+                        requestHasher.hashRequest(String.join(
+                                        "|",
+                                        savedTransaction.getTransactionType().name(),
+                                        accountNumber,
+                                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                                        request.note().trim()
+                                )
+                        )
+                );
+
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
         verify(referenceGenerator, times(2)).generate();
         verify(accountRepository, never()).save(any(Account.class));
@@ -164,6 +201,7 @@ class WithdrawalServiceTest {
     void withdrawThrowsInsufficientFundsExceptionWhenBalanceIsInsufficient() {
         String email = "customer@example.com";
         String accountNumber = "12345678900987";
+        String idempotencyKey = "11111111111111111111111111111111";
 
         Customer customer = Customer.createNew(
                 email,
@@ -191,8 +229,10 @@ class WithdrawalServiceTest {
                 .willReturn(Optional.of(account));
         given(referenceGenerator.generate())
                 .willReturn(TRANSACTION_REFERENCE, ENTRY_REFERENCE);
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, any(String.class)))
+                .willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email))
+        assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
                 .isInstanceOf(InsufficientFundsException.class)
                 .hasMessage("Insufficient funds");
 
@@ -201,24 +241,141 @@ class WithdrawalServiceTest {
         verify(referenceGenerator, times(2)).generate();
         verifyNoInteractions(bankTransactionRepository);
         verify(accountRepository, never()).save(any(Account.class));
+        verify(idempotencyService, never()).save(any(IdempotencyRecord.class));
     }
 
     @Test
     void withdrawThrowsAccountNotFoundExceptionWhenOwnedAccountDoesNotExist() {
         String email = "customer@example.com";
         String accountNumber = "12345678900987";
+        String idempotencyKey = "11111111111111111111111111111111";
 
         WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email))
+        assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
                 .isInstanceOf(AccountNotFoundException.class)
                 .hasMessage("Account not found");
 
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
-        verifyNoInteractions(bankTransactionRepository, referenceGenerator);
+        verifyNoInteractions(bankTransactionRepository, referenceGenerator, idempotencyService);
         verify(accountRepository, never()).save(any(Account.class));
+    }
+
+    @Test
+    void withdrawThrowsInvalidIdempotencyKeyExceptionWhenIdempotencyKeyInvalid() {
+        String email = "customer@example.com";
+        String accountNumber = "12345678900987";
+        String idempotencyKey = "11111111111111!11111111111111111";
+
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+
+        assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
+                .isInstanceOf(InvalidIdempotencyKeyException.class)
+                .hasMessage("Invalid idempotency key");
+
+        verifyNoInteractions(bankTransactionRepository, referenceGenerator, idempotencyService, accountRepository);
+    }
+
+    @Test
+    void withdrawalReturnsOldResponseForExistingIdempotencyKey() {
+        String email = "customer@example.com";
+        String accountNumber = "12345678900987";
+        String idempotencyKey = "11111111111111111111111111111111";
+
+        Customer customer = Customer.createNew(
+                email,
+                "{bcrypt}raw-password123",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                LEDGER_REFERENCE,
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+        ledgerAccount.credit(new BigDecimal("1000.00"));
+
+        Account account = Account.createNew(
+                accountNumber,
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                ledgerAccount
+        );
+
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+
+        String requestHash = requestHasher
+                .hashRequest(String
+                        .join(
+                                "|",
+                                TransactionType.WITHDRAWAL.name(),
+                                accountNumber,
+                                request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                                request.note().trim()
+                        )
+                );
+
+        BankTransaction transaction = BankTransaction.createNew(
+                request.amount(),
+                account.getCurrency(),
+                TransactionType.WITHDRAWAL,
+                TRANSACTION_REFERENCE,
+                request.note()
+        );
+
+        BigDecimal balanceAfter = ledgerAccount.debit(request.amount());
+
+        transaction.addEntry(
+                ENTRY_REFERENCE,
+                request.amount(),
+                balanceAfter,
+                EntryDirection.DEBIT,
+                ledgerAccount
+        );
+
+        transaction.complete();
+
+        ReflectionTestUtils.setField(ledgerAccount, "id", 1L);
+
+        IdempotencyRecord idempotencyRecord = IdempotencyRecord.createNew(
+                idempotencyKey,
+                requestHash,
+                customer,
+                transaction
+        );
+
+        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
+                .willReturn(Optional.of(account));
+
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
+                .willReturn(Optional.of(idempotencyRecord));
+
+        WithdrawalResponse response = withdrawalService.withdraw(request, accountNumber, email, idempotencyKey);
+
+        assertThat(response.balanceAfter())
+                .isEqualByComparingTo(account.getBalance());
+        assertThat(response.accountNumber())
+                .isEqualTo(account.getAccountNumber());
+        assertThat(response.transactionReference())
+                .isEqualTo(TRANSACTION_REFERENCE);
+        assertThat(response.entryReference())
+                .isEqualTo(ENTRY_REFERENCE);
+        assertThat(response.transactionType())
+                .isSameAs(TransactionType.WITHDRAWAL);
+        assertThat(response.amount())
+                .isEqualByComparingTo(request.amount());
+        assertThat(response.currency())
+                .isSameAs(account.getCurrency());
+        assertThat(response.note())
+                .isEqualTo(request.note());
+
+        verify(bankTransactionRepository, never()).save(any());
+        verify(idempotencyService, never()).save(any());
+        verifyNoInteractions(referenceGenerator);
+
     }
 }
