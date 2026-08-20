@@ -20,8 +20,11 @@ public class WithdrawalController {
     public ResponseEntity<WithdrawalResponse> withdraw(
             @PathVariable String accountNumber,
             @RequestBody @Valid WithdrawalRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal Jwt jwt
     ) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(withdrawalService.withdraw(request, accountNumber, jwt.getSubject()));
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(withdrawalService.withdraw(request, accountNumber, jwt.getSubject(), idempotencyKey));
     }
 }
