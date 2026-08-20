@@ -1,9 +1,9 @@
 package com.neobank.neobank.transaction.withdrawal;
 
 import com.neobank.neobank.account.AccountNotFoundException;
-import com.neobank.neobank.shared.money.CurrencyCode;
-import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.auth.SecurityConfig;
+import com.neobank.neobank.ledger.InsufficientFundsException;
+import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.withdrawal.dto.WithdrawalRequest;
 import com.neobank.neobank.transaction.withdrawal.dto.WithdrawalResponse;
@@ -45,6 +45,7 @@ class WithdrawalControllerTest {
 
     @Test
     void withdrawReturnsCreatedTransactionForAuthenticatedJwt() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "customer@example.com";
         String accountNumber = "12345678900987";
 
@@ -65,12 +66,13 @@ class WithdrawalControllerTest {
                 Instant.parse("2026-08-15T12:00:00Z")
         );
 
-        given(withdrawalService.withdraw(request, accountNumber, email))
+        given(withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
                 .willReturn(response);
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", accountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -91,11 +93,12 @@ class WithdrawalControllerTest {
                 .andExpect(jsonPath("$.ledgerAccountReference").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.account").doesNotHaveJsonPath());
 
-        verify(withdrawalService).withdraw(request, accountNumber, email);
+        verify(withdrawalService).withdraw(request, accountNumber, email, idempotencyKey);
     }
 
     @Test
     void withdrawReturnsValidationProblemForInvalidRequest() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "customer@example.com";
         String accountNumber = "12345678900987";
 
@@ -105,8 +108,9 @@ class WithdrawalControllerTest {
         );
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", accountNumber)
-                         .contentType(MediaType.APPLICATION_JSON)
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -122,6 +126,7 @@ class WithdrawalControllerTest {
 
     @Test
     void withdrawReturnsAccountNotFoundExceptionWhenAccountNotOwned() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "customer@example.com";
         String accountNumber = "12345678900987";
 
@@ -130,12 +135,13 @@ class WithdrawalControllerTest {
                 "Test"
         );
 
-        given(withdrawalService.withdraw(request, accountNumber, email))
+        given(withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
                 .willThrow(new AccountNotFoundException());
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", accountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -144,11 +150,12 @@ class WithdrawalControllerTest {
                 .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900987/withdrawals"))
                 .andExpect(jsonPath("$.status").value(404));
 
-        verify(withdrawalService).withdraw(request, accountNumber, email);
+        verify(withdrawalService).withdraw(request, accountNumber, email, idempotencyKey);
     }
 
     @Test
     void withdrawReturnsUnauthorizedWithoutAuthentication() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String accountNumber = "12345678900987";
 
         WithdrawalRequest request = new WithdrawalRequest(
@@ -158,7 +165,8 @@ class WithdrawalControllerTest {
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", accountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(withdrawalService);
@@ -166,6 +174,7 @@ class WithdrawalControllerTest {
 
     @Test
     void withdrawReturnsInsufficientFundsWhenBalanceIsLessThanAmount() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "customer@example.com";
         String accountNumber = "12345678900987";
 
@@ -174,12 +183,13 @@ class WithdrawalControllerTest {
                 "Test"
         );
 
-        given(withdrawalService.withdraw(request, accountNumber, email))
+        given(withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
                 .willThrow(new InsufficientFundsException());
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", accountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -188,6 +198,26 @@ class WithdrawalControllerTest {
                 .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900987/withdrawals"))
                 .andExpect(jsonPath("$.status").value(409));
 
-        verify(withdrawalService).withdraw(request, accountNumber, email);
+        verify(withdrawalService).withdraw(request, accountNumber, email, idempotencyKey);
+    }
+
+    @Test
+    void withdrawReturnsBadRequestWhenIdempotencyKeyHeaderIsMissing() throws Exception {
+        String email = "customer@example.com";
+        String accountNumber = "12345678900987";
+
+        WithdrawalRequest request = new WithdrawalRequest(
+                new BigDecimal("150.00"),
+                "Test"
+        );
+
+        mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", accountNumber)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        verifyNoInteractions(withdrawalService);
     }
 }

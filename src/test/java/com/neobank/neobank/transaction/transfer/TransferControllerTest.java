@@ -1,9 +1,9 @@
 package com.neobank.neobank.transaction.transfer;
 
 import com.neobank.neobank.account.AccountNotFoundException;
-import com.neobank.neobank.shared.money.CurrencyCode;
-import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.auth.SecurityConfig;
+import com.neobank.neobank.ledger.InsufficientFundsException;
+import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.transfer.dto.TransferRequest;
 import com.neobank.neobank.transaction.transfer.dto.TransferResponse;
@@ -45,17 +45,18 @@ class TransferControllerTest {
 
     @Test
     void transferReturnsCreatedTransactionForAuthenticatedJwt() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "source@example.com";
         String sourceAccountNumber = "98765432100123";
         String targetAccountNumber = "12345678900987";
-        
+
         TransferRequest request = new TransferRequest(
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
                 "Test",
                 CurrencyCode.TRY
         );
-        
+
         TransferResponse response = new TransferResponse(
                 "7f3c8a21d9e64b5fa2c17e9084bd6a31",
                 "8f3c8a21d9e64b5fa2c17e9084bd6a32",
@@ -68,13 +69,14 @@ class TransferControllerTest {
                 request.note(),
                 Instant.parse("2026-08-15T12:00:00Z")
         );
-        
-        given(transferService.transfer(request, sourceAccountNumber, email))
+
+        given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
                 .willReturn(response);
-        
+
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -98,11 +100,12 @@ class TransferControllerTest {
                 .andExpect(jsonPath("$.entries").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.destinationEntryReference").doesNotHaveJsonPath());
 
-        verify(transferService).transfer(request, sourceAccountNumber, email);
+        verify(transferService).transfer(request, sourceAccountNumber, email, idempotencyKey);
     }
 
     @Test
     void transferReturnsValidationProblemForInvalidRequest() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "source@example.com";
         String sourceAccountNumber = "98765432100123";
         String targetAccountNumber = "12345678900987";
@@ -117,6 +120,7 @@ class TransferControllerTest {
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -134,6 +138,7 @@ class TransferControllerTest {
 
     @Test
     void transferReturnsUnauthorizedWithoutAuthentication() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String sourceAccountNumber = "98765432100123";
         String targetAccountNumber = "12345678900987";
 
@@ -146,6 +151,7 @@ class TransferControllerTest {
 
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Idempotency-Key", idempotencyKey)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized());
 
@@ -154,6 +160,7 @@ class TransferControllerTest {
 
     @Test
     void transferReturnsAccountNotFoundExceptionWhenAccountNotOwned() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "source@example.com";
         String sourceAccountNumber = "98765432100123";
         String targetAccountNumber = "12345678900987";
@@ -165,12 +172,13 @@ class TransferControllerTest {
                 CurrencyCode.TRY
         );
 
-        given(transferService.transfer(request, sourceAccountNumber, email))
+        given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
                 .willThrow(new AccountNotFoundException());
 
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -179,11 +187,12 @@ class TransferControllerTest {
                 .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
                 .andExpect(jsonPath("$.status").value(404));
 
-        verify(transferService).transfer(request, sourceAccountNumber, email);
+        verify(transferService).transfer(request, sourceAccountNumber, email, idempotencyKey);
     }
 
     @Test
     void transferReturnsInsufficientBalanceExceptionWhenInsufficientBalance() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "source@example.com";
         String sourceAccountNumber = "98765432100123";
         String targetAccountNumber = "12345678900987";
@@ -195,12 +204,13 @@ class TransferControllerTest {
                 CurrencyCode.TRY
         );
 
-        given(transferService.transfer(request, sourceAccountNumber, email))
+        given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
                 .willThrow(new InsufficientFundsException());
 
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -209,11 +219,12 @@ class TransferControllerTest {
                 .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
                 .andExpect(jsonPath("$.status").value(409));
 
-        verify(transferService).transfer(request, sourceAccountNumber, email);
+        verify(transferService).transfer(request, sourceAccountNumber, email, idempotencyKey);
     }
 
     @Test
     void transferReturnsInvalidTransferExceptionWhenTransferToSourceAccount() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "source@example.com";
         String sourceAccountNumber = "98765432100123";
 
@@ -224,12 +235,13 @@ class TransferControllerTest {
                 CurrencyCode.TRY
         );
 
-        given(transferService.transfer(request, sourceAccountNumber, email))
+        given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
                 .willThrow(new InvalidTransferException("Source and destination accounts cannot be the same"));
 
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -238,11 +250,12 @@ class TransferControllerTest {
                 .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verify(transferService).transfer(request, sourceAccountNumber, email);
+        verify(transferService).transfer(request, sourceAccountNumber, email, idempotencyKey);
     }
 
     @Test
     void transferReturnsInvalidTransferExceptionWhenCurrencyMismatch() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "source@example.com";
         String sourceAccountNumber = "98765432100123";
         String targetAccountNumber = "12345678900987";
@@ -254,12 +267,13 @@ class TransferControllerTest {
                 CurrencyCode.TRY
         );
 
-        given(transferService.transfer(request, sourceAccountNumber, email))
+        given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
                 .willThrow(new InvalidTransferException("Source and destination accounts must be in the same currency as request"));
 
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -268,11 +282,12 @@ class TransferControllerTest {
                 .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verify(transferService).transfer(request, sourceAccountNumber, email);
+        verify(transferService).transfer(request, sourceAccountNumber, email, idempotencyKey);
     }
 
     @Test
     void transferReturnsAccountNotFoundExceptionWhenTargetDoesNotExist() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "source@example.com";
         String sourceAccountNumber = "98765432100123";
         String targetAccountNumber = "12345678900987";
@@ -284,11 +299,12 @@ class TransferControllerTest {
                 CurrencyCode.TRY
         );
 
-        given(transferService.transfer(request, sourceAccountNumber, email))
+        given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
                 .willThrow(new AccountNotFoundException("Destination account not found"));
 
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Idempotency-Key", idempotencyKey)
                         .content(objectMapper.writeValueAsString(request))
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isNotFound())
@@ -298,6 +314,29 @@ class TransferControllerTest {
                 .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
                 .andExpect(jsonPath("$.status").value(404));
 
-        verify(transferService).transfer(request, sourceAccountNumber, email);
+        verify(transferService).transfer(request, sourceAccountNumber, email, idempotencyKey);
+    }
+
+    @Test
+    void transferReturnsBadRequestWhenIdempotencyKeyHeaderIsMissing() throws Exception {
+        String email = "source@example.com";
+        String sourceAccountNumber = "98765432100123";
+        String targetAccountNumber = "12345678900987";
+
+        TransferRequest request = new TransferRequest(
+                new BigDecimal("1000.00"),
+                targetAccountNumber,
+                "Test",
+                CurrencyCode.TRY
+        );
+
+        mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccountNumber)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        verifyNoInteractions(transferService);
     }
 }
