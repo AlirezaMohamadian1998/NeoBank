@@ -81,6 +81,7 @@ public class TransferService {
                 sourceAccountNumber,
                 destinationAccount.getAccountNumber(),
                 request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                request.currency().name(),
                 normalizedNote
         );
 
