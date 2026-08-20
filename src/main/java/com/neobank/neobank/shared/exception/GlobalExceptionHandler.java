@@ -4,10 +4,13 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
 import com.neobank.neobank.idempotency.IdempotencyConflictException;
+import com.neobank.neobank.idempotency.IdempotencyKeyRaceException;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.transaction.transfer.InvalidTransferException;
+import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.Nullable;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.*;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
@@ -142,5 +145,40 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problemDetail.setTitle("Invalid idempotency key");
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(IdempotencyKeyRaceException.class)
+    public ResponseEntity<ProblemDetail> handleIdempotencyKeyRace(
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "The idempotency key is currently being processed. Retry the same request using the same key."
+        );
+
+        problemDetail.setTitle("Idempotency request in progress");
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, "1")
+                .body(problemDetail);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ProblemDetail> handleOptimisticLockingFailure(
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "The request could not be completed because the resource was updated concurrently."
+        );
+
+        problemDetail.setTitle("Concurrent update conflict");
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(problemDetail);
     }
 }

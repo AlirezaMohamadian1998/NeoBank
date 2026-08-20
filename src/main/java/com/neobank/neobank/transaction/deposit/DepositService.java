@@ -13,6 +13,8 @@ import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.deposit.dto.DepositRequest;
 import com.neobank.neobank.transaction.deposit.dto.DepositResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,13 +37,23 @@ public class DepositService {
     private final IdempotencyService idempotencyService;
 
     @Transactional
+    @Retryable(maxRetries = 4,
+            delay = 200,
+            multiplier = 2,
+            maxDelay = 1000,
+            jitter = 50,
+            includes = {
+                    OptimisticLockingFailureException.class,
+                    IdempotencyKeyRaceException.class
+            }
+    )
     public DepositResponse deposit(
             DepositRequest request,
             String accountNumber,
             String customerEmail,
             String idempotencyKey
     ) {
-        if(!idempotencyKey.matches("[a-f0-9]{32}")) {
+        if (!idempotencyKey.matches("[a-f0-9]{32}")) {
             throw new InvalidIdempotencyKeyException("Invalid idempotency key");
         }
 
