@@ -108,13 +108,22 @@ class WithdrawalServiceTest {
 
         WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
 
+        String requestHash = requestHasher.hashRequest(String.join(
+                        "|",
+                        TransactionType.WITHDRAWAL.name(),
+                        accountNumber,
+                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                        request.note().trim()
+                )
+        );
+
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
         given(referenceGenerator.generate())
                 .willReturn(TRANSACTION_REFERENCE, ENTRY_REFERENCE);
         given(bankTransactionRepository.save(any(BankTransaction.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
-        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, any(String.class)))
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
                 .willReturn(Optional.empty());
 
         var response = withdrawalService.withdraw(request, accountNumber, email, idempotencyKey);
@@ -225,11 +234,20 @@ class WithdrawalServiceTest {
 
         WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
 
+        String requestHash = requestHasher.hashRequest(String.join(
+                        "|",
+                        TransactionType.WITHDRAWAL.name(),
+                        accountNumber,
+                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                        request.note().trim()
+                )
+        );
+
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
         given(referenceGenerator.generate())
                 .willReturn(TRANSACTION_REFERENCE, ENTRY_REFERENCE);
-        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, any(String.class)))
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
                 .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))

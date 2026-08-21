@@ -107,13 +107,22 @@ class DepositServiceTest {
                 ledgerAccount
         );
 
+        String requestHash = requestHasher.hashRequest(String.join(
+                        "|",
+                        TransactionType.DEPOSIT.name(),
+                        accountNumber,
+                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                        request.note().trim()
+                )
+        );
+
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
         given(referenceGenerator.generate())
                 .willReturn(transactionReference, entryReference);
         given(bankTransactionRepository.save(any(BankTransaction.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
-        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, any(String.class)))
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
                 .willReturn(Optional.empty());
 
         DepositResponse response = depositService.deposit(request, accountNumber, email, idempotencyKey);

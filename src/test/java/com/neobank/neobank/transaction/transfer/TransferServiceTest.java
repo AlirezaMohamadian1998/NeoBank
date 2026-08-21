@@ -108,6 +108,17 @@ class TransferServiceTest {
                 CurrencyCode.TRY
         );
 
+        String requestHash = requestHasher.hashRequest(String.join(
+                        "|",
+                        TransactionType.TRANSFER.name(),
+                        sourceAccount.getAccountNumber(),
+                        destinationAccount.getAccountNumber(),
+                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                        request.currency().name(),
+                        request.note().trim()
+                )
+        );
+
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(
                 sourceAccount.getAccountNumber(),
                 sourceCustomer.getEmail()
@@ -123,7 +134,7 @@ class TransferServiceTest {
         given(bankTransactionRepository.save(any(BankTransaction.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
 
-        given(idempotencyService.findAndValidateRecord(idempotencyKey, sourceCustomer.getEmail(), any(String.class)))
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, sourceCustomer.getEmail(), requestHash))
                 .willReturn(Optional.empty());
 
         var response = transferService.transfer(
@@ -479,7 +490,18 @@ class TransferServiceTest {
                 CurrencyCode.TRY
         );
 
-        given(idempotencyService.findAndValidateRecord(idempotencyKey, sourceCustomer.getEmail(), any(String.class)))
+        String requestHash = requestHasher.hashRequest(String.join(
+                        "|",
+                        TransactionType.TRANSFER.name(),
+                        sourceAccount.getAccountNumber(),
+                        destinationAccount.getAccountNumber(),
+                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                        request.currency().name(),
+                        request.note().trim()
+                )
+        );
+
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, sourceCustomer.getEmail(), requestHash))
                 .willReturn(Optional.empty());
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(
