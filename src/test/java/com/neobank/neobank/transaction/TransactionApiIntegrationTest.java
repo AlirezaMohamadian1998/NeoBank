@@ -2,9 +2,7 @@ package com.neobank.neobank.transaction;
 
 import com.neobank.neobank.account.*;
 import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.customer.CustomerRepository;
 import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountRepository;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
 import com.neobank.neobank.shared.money.CurrencyCode;
@@ -14,7 +12,6 @@ import com.neobank.neobank.transaction.transfer.dto.TransferRequest;
 import com.neobank.neobank.transaction.transfer.dto.TransferResponse;
 import com.neobank.neobank.transaction.withdrawal.dto.WithdrawalRequest;
 import com.neobank.neobank.transaction.withdrawal.dto.WithdrawalResponse;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,63 +38,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("integration")
 @Import(MySqlTestContainerConfiguration.class)
-
-class TransactionIntegrationTest {
+class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
     private ObjectMapper objectMapper;
-
-    @Autowired
-    private BankTransactionRepository bankTransactionRepository;
-
-    @Autowired
-    private LedgerEntryRepository ledgerEntryRepository;
-
-    @Autowired
-    private CustomerRepository customerRepository;
-
-    @Autowired
-    private AccountRepository accountRepository;
-
-    @Autowired
-    private LedgerAccountRepository ledgerAccountRepository;
-
-    private Account account;
-    private Customer customer;
-
-    @BeforeEach
-    void setUp() {
-        ledgerEntryRepository.deleteAll();
-        bankTransactionRepository.deleteAll();
-        accountRepository.deleteAll();
-        ledgerAccountRepository.deleteAll();
-        customerRepository.deleteAll();
-
-        customer = customerRepository.save(Customer.createNew(
-                "customer@example.com",
-                "{bcrypt}encoded-password",
-                "Ada Lovelace"
-                )
-        );
-
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "7f3c8a21d9e64b5fa2c17e9084bd6a31",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
-        account = accountRepository.save(Account.createNew(
-                "12345678900987",
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                ledgerAccount
-                )
-        );
-    }
 
     @Nested
     class DepositTests {
@@ -108,6 +55,7 @@ class TransactionIntegrationTest {
             MvcResult depositMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
                             .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -206,6 +154,7 @@ class TransactionIntegrationTest {
             mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
                             .with(jwt().jwt(jwt -> jwt.subject(customer2.getEmail()))))
                     .andExpect(status().isNotFound())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -227,53 +176,86 @@ class TransactionIntegrationTest {
         }
 
         @Test
-        void invalidDepositRequestDoesNotChangeFinancialState() throws Exception {
-            DepositRequest request = new DepositRequest(new BigDecimal("-1000.00"), "Test".repeat(100));
+        void customerCannotDepositMoreThanOnceWithSameIdempotencyKeyAndSameRequest() throws Exception {
+            DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test");
 
-            mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
+            String firstResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
                             .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                    .andExpect(jsonPath("$.title").value("Validation failed"))
-                    .andExpect(jsonPath("$.detail").value("Validation failed for one or more fields."))
-                    .andExpect(jsonPath("$.status").value(400))
-                    .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900987/deposits"))
-                    .andExpect(jsonPath("$.errors.amount").value("Amount must be a positive number"))
-                    .andExpect(jsonPath("$.errors.note").value("Note must not exceed 255 characters"));
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andReturn().getResponse().getContentAsString();
+
+            String secondResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andReturn().getResponse().getContentAsString();
 
             mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
                             .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(0.00));
+                    .andExpect(jsonPath("$.balance").value(1000.00));
+
+            assertThat(firstResponse)
+                    .isEqualTo(secondResponse);
 
             assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(0);
+                    .isEqualTo(1);
+
             assertThat(bankTransactionRepository.count())
-                    .isEqualTo(0);
+                    .isEqualTo(1);
+
+            assertThat(idempotencyRecordRepository.count())
+                    .isEqualTo(1);
         }
 
         @Test
-        void unauthenticatedDepositRequestDoesNotChangeFinancialState() throws Exception {
-            DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test");
+        void customerCannotUseTheSameIdempotencyKeyForDifferentDepositsRequests() throws Exception {
+            DepositRequest request1 = new DepositRequest(new BigDecimal("1000.00"), "Test");
+            DepositRequest request2 = new DepositRequest(new BigDecimal("2000.00"), "Test");
 
             mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isUnauthorized());
+                            .content(objectMapper.writeValueAsString(request1))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.balanceAfter").value(1000.00));
+
+            mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(objectMapper.writeValueAsString(request2))
+                                    .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isConflict())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.detail").value("request hash mismatch"))
+                    .andExpect(jsonPath("$.title").value("Idempotency Conflict"))
+                    .andExpect(jsonPath("$.instance").value("/api/accounts/%s/deposits".formatted(account.getAccountNumber())))
+                    .andExpect(jsonPath("$.status").value(409));
 
             mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
                             .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(0.00));
+                    .andExpect(jsonPath("$.balance").value(1000.00));
 
             assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(0);
+                    .isEqualTo(1);
+
             assertThat(bankTransactionRepository.count())
-                    .isEqualTo(0);
+                    .isEqualTo(1);
+
+            assertThat(idempotencyRecordRepository.count())
+                    .isEqualTo(1);
         }
     }
 
@@ -288,6 +270,7 @@ class TransactionIntegrationTest {
             MvcResult withdrawMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
                             .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -387,83 +370,6 @@ class TransactionIntegrationTest {
         }
 
         @Test
-        void authenticatedCustomerCannotWithdrawFromOwnedAccountWithInsufficientBalance() throws Exception {
-            WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("500.00"), "Test");
-
-            mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                    .andExpect(status().isConflict())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                    .andExpect(jsonPath("$.detail").value("Insufficient funds"))
-                    .andExpect(jsonPath("$.title").value("Insufficient funds"))
-                    .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900987/withdrawals"))
-                    .andExpect(jsonPath("$.status").value(409));
-
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(0.00));
-
-            assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(0);
-            assertThat(bankTransactionRepository.count())
-                    .isEqualTo(0);
-        }
-
-        @Test
-        void unauthenticatedWithdrawalRequestDoesNotChangeFinancialState() throws Exception {
-            WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
-
-            mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isUnauthorized());
-
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(0.00));
-
-            assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(0);
-            assertThat(bankTransactionRepository.count())
-                    .isEqualTo(0);
-        }
-
-        @Test
-        void invalidWithdrawalRequestDoesNotChangeFinancialState() throws Exception {
-            WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("-1000.00"), "Test".repeat(100));
-
-            mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                    .andExpect(jsonPath("$.title").value("Validation failed"))
-                    .andExpect(jsonPath("$.detail").value("Validation failed for one or more fields."))
-                    .andExpect(jsonPath("$.status").value(400))
-                    .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900987/withdrawals"))
-                    .andExpect(jsonPath("$.errors.amount").value("Amount must be a positive number"))
-                    .andExpect(jsonPath("$.errors.note").value("Note must not exceed 255 characters"));
-
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(0.00));
-
-            assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(0);
-            assertThat(bankTransactionRepository.count())
-                    .isEqualTo(0);
-        }
-
-        @Test
         void customerCannotWithdrawFromAnotherCustomersAccount() throws Exception {
             Customer customer2 = Customer.createNew(
                     "customer2@example.com",
@@ -477,6 +383,7 @@ class TransactionIntegrationTest {
             mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
                             .with(jwt().jwt(jwt -> jwt.subject(customer2.getEmail()))))
                     .andExpect(status().isNotFound())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -495,6 +402,93 @@ class TransactionIntegrationTest {
                     .isEqualTo(0);
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(0);
+        }
+
+        @Test
+        void customerCannotWithdrawMoreThanOnceWithSameIdempotencyKeyAndSameRequest() throws Exception {
+            creditAndSave(account, new BigDecimal("1000.00"));
+
+            WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("500.00"), "Test");
+
+            String firstResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andReturn().getResponse().getContentAsString();
+
+            String secondResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andReturn().getResponse().getContentAsString();
+
+            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.balance").value(500.00));
+
+            assertThat(firstResponse)
+                    .isEqualTo(secondResponse);
+
+            assertThat(ledgerEntryRepository.count())
+                    .isEqualTo(1);
+
+            assertThat(bankTransactionRepository.count())
+                    .isEqualTo(1);
+
+            assertThat(idempotencyRecordRepository.count())
+                    .isEqualTo(1);
+        }
+
+        @Test
+        void customerCannotUseTheSameIdempotencyKeyForDifferentWithdrawalRequests() throws Exception {
+            creditAndSave(account, new BigDecimal("1000.00"));
+
+            WithdrawalRequest request1 = new WithdrawalRequest(new BigDecimal("500.00"), "Test");
+            WithdrawalRequest request2 = new WithdrawalRequest(new BigDecimal("250.00"), "Test");
+
+            mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request1))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.balanceAfter").value(500.00));
+
+            mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request2))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isConflict())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.detail").value("request hash mismatch"))
+                    .andExpect(jsonPath("$.title").value("Idempotency Conflict"))
+                    .andExpect(jsonPath("$.instance").value("/api/accounts/%s/withdrawals".formatted(account.getAccountNumber())))
+                    .andExpect(jsonPath("$.status").value(409));
+
+            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.balance").value(500.00));
+
+            assertThat(ledgerEntryRepository.count())
+                    .isEqualTo(1);
+
+            assertThat(bankTransactionRepository.count())
+                    .isEqualTo(1);
+
+            assertThat(idempotencyRecordRepository.count())
+                    .isEqualTo(1);
         }
     }
 
@@ -541,6 +535,7 @@ class TransactionIntegrationTest {
             MvcResult transferMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
                             .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -682,138 +677,6 @@ class TransactionIntegrationTest {
         }
 
         @Test
-        void invalidTransferRequestDoesNotChangeFinancialState() throws Exception {
-            Customer sourceCustomer = customer;
-
-            Customer targetCustomer = Customer.createNew(
-                    "target@example.com",
-                    "{bcrypt}raw-password321",
-                    "Lovelace Ada"
-            );
-
-            customerRepository.save(targetCustomer);
-
-            Account sourceAccount = account;
-
-            LedgerAccount targetLedger = LedgerAccount.createNew(
-                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                    LedgerAccountType.LIABILITY,
-                    CurrencyCode.TRY
-            );
-
-            Account targetAccount = Account.createNew(
-                    "98765432100123",
-                    "Target Account",
-                    AccountType.CURRENT,
-                    targetCustomer,
-                    targetLedger
-            );
-
-            accountRepository.save(targetAccount);
-            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
-
-            TransferRequest request = new TransferRequest(
-                    new BigDecimal("500.0050"),
-                    targetAccount.getAccountNumber().repeat(2),
-                    "test".repeat(100),
-                    null
-            );
-
-            mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                    .andExpect(jsonPath("$.title").value("Validation failed"))
-                    .andExpect(jsonPath("$.detail").value("Validation failed for one or more fields."))
-                    .andExpect(jsonPath("$.status").value(400))
-                    .andExpect(jsonPath("$.instance").value("/api/accounts/%s/transfers".formatted(sourceAccount.getAccountNumber())))
-                    .andExpect(jsonPath("$.errors.amount").value("Amount must be a valid decimal number"))
-                    .andExpect(jsonPath("$.errors.destinationAccountNumber").value("Account number must be exactly 14 digits"))
-                    .andExpect(jsonPath("$.errors.currency").value("Currency cannot be null"))
-                    .andExpect(jsonPath("$.errors.note").value("Note must not exceed 255 characters"));
-
-            mockMvc.perform(get("/api/accounts/{accountNumber}", sourceAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(1000.00));
-
-            mockMvc.perform(get("/api/accounts/{accountNumber}", targetAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(targetCustomer.getEmail()))))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(0.00));
-
-            assertThat(bankTransactionRepository.count())
-                    .isEqualTo(0);
-            assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(0);
-        }
-
-        @Test
-        void unauthenticatedTransferRequestDoesNotChangeFinancialState() throws Exception {
-            Customer sourceCustomer = customer;
-
-            Customer targetCustomer = Customer.createNew(
-                    "target@example.com",
-                    "{bcrypt}raw-password321",
-                    "Lovelace Ada"
-            );
-
-            customerRepository.save(targetCustomer);
-
-            Account sourceAccount = account;
-
-            LedgerAccount targetLedger = LedgerAccount.createNew(
-                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                    LedgerAccountType.LIABILITY,
-                    CurrencyCode.TRY
-            );
-
-            Account targetAccount = Account.createNew(
-                    "98765432100123",
-                    "Target Account",
-                    AccountType.CURRENT,
-                    targetCustomer,
-                    targetLedger
-            );
-
-            accountRepository.save(targetAccount);
-            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
-
-            TransferRequest request = new TransferRequest(
-                    new BigDecimal("500"),
-                    targetAccount.getAccountNumber(),
-                    "test",
-                    CurrencyCode.TRY
-            );
-
-            mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isUnauthorized());
-
-            mockMvc.perform(get("/api/accounts/{accountNumber}", sourceAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(1000.00));
-
-            mockMvc.perform(get("/api/accounts/{accountNumber}", targetAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(targetCustomer.getEmail()))))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(0.00));
-
-            assertThat(bankTransactionRepository.count())
-                    .isEqualTo(0);
-            assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(0);
-        }
-
-        @Test
         void customerCannotTransferFromAnotherCustomersAccount() throws Exception {
             Customer sourceCustomer = customer;
 
@@ -854,6 +717,7 @@ class TransactionIntegrationTest {
             mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", targetAccount.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
                             .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
                     .andExpect(status().isNotFound())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -881,7 +745,7 @@ class TransactionIntegrationTest {
         }
 
         @Test
-        void customerCannotTransferMoreThanTheirBalance() throws Exception {
+        void customerCannotTransferMoreThanOnceWithSameIdempotencyKeyAndSameRequest() throws Exception {
             Customer sourceCustomer = customer;
 
             Customer targetCustomer = Customer.createNew(
@@ -909,7 +773,7 @@ class TransactionIntegrationTest {
             );
 
             accountRepository.save(targetAccount);
-            creditAndSave(sourceAccount, new BigDecimal("100.00"));
+            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
 
             TransferRequest request = new TransferRequest(
                     new BigDecimal("500"),
@@ -918,183 +782,135 @@ class TransactionIntegrationTest {
                     CurrencyCode.TRY
             );
 
-            mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
+            String firstResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andReturn().getResponse().getContentAsString();
+
+            String secondResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andReturn().getResponse().getContentAsString();
+
+            mockMvc.perform(get("/api/accounts/{accountNumber}", sourceAccount.getAccountNumber())
+                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.balance").value(500.00));
+
+            mockMvc.perform(get("/api/accounts/{accountNumber}", targetAccount.getAccountNumber())
+                            .with(jwt().jwt(jwt -> jwt.subject(targetCustomer.getEmail()))))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.balance").value(500.00));
+
+            assertThat(firstResponse)
+                    .isEqualTo(secondResponse);
+
+            assertThat(ledgerEntryRepository.count())
+                    .isEqualTo(2);
+
+            assertThat(bankTransactionRepository.count())
+                    .isEqualTo(1);
+
+            assertThat(idempotencyRecordRepository.count())
+                    .isEqualTo(1);
+        }
+
+        @Test
+        void customerCannotUseTheSameIdempotencyKeyForDifferentTransferRequests() throws Exception {
+            Customer sourceCustomer = customer;
+
+            Customer targetCustomer = Customer.createNew(
+                    "target@example.com",
+                    "{bcrypt}raw-password321",
+                    "Lovelace Ada"
+            );
+
+            customerRepository.save(targetCustomer);
+
+            Account sourceAccount = account;
+
+            LedgerAccount targetLedger = LedgerAccount.createNew(
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                    LedgerAccountType.LIABILITY,
+                    CurrencyCode.TRY
+            );
+
+            Account targetAccount = Account.createNew(
+                    "98765432100123",
+                    "Target Account",
+                    AccountType.CURRENT,
+                    targetCustomer,
+                    targetLedger
+            );
+
+            accountRepository.save(targetAccount);
+            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
+
+            TransferRequest request1 = new TransferRequest(
+                    new BigDecimal("500"),
+                    targetAccount.getAccountNumber(),
+                    "test",
+                    CurrencyCode.TRY
+            );
+
+            TransferRequest request2 = new TransferRequest(
+                    new BigDecimal("250"),
+                    targetAccount.getAccountNumber(),
+                    "test",
+                    CurrencyCode.TRY
+            );
+            mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request1))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.sourceBalanceAfter").value(500.00));
+
+            mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request2))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
                             .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
                     .andExpect(status().isConflict())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                    .andExpect(jsonPath("$.detail").value("Insufficient funds"))
-                    .andExpect(jsonPath("$.title").value("Insufficient funds"))
-                    .andExpect(jsonPath("$.instance").value("/api/accounts/%s/transfers".formatted(sourceAccount.getAccountNumber())))
+                    .andExpect(jsonPath("$.detail").value("request hash mismatch"))
+                    .andExpect(jsonPath("$.title").value("Idempotency Conflict"))
+                    .andExpect(jsonPath("$.instance").value("/api/accounts/%s/transfers".formatted(account.getAccountNumber())))
                     .andExpect(jsonPath("$.status").value(409));
 
             mockMvc.perform(get("/api/accounts/{accountNumber}", sourceAccount.getAccountNumber())
                             .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(100.00));
+                    .andExpect(jsonPath("$.balance").value(500.00));
 
             mockMvc.perform(get("/api/accounts/{accountNumber}", targetAccount.getAccountNumber())
                             .with(jwt().jwt(jwt -> jwt.subject(targetCustomer.getEmail()))))
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(0.00));
+                    .andExpect(jsonPath("$.balance").value(500.00));
+
+            assertThat(ledgerEntryRepository.count())
+                    .isEqualTo(2);
 
             assertThat(bankTransactionRepository.count())
-                    .isEqualTo(0);
-            assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(0);
-        }
-
-        @Test
-        void customerCannotTransferToTheirOwnAccount() throws Exception {
-            Customer sourceCustomer = customer;
-            Account sourceAccount = account;
-
-            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
-
-            TransferRequest request = new TransferRequest(
-                    new BigDecimal("500"),
-                    sourceAccount.getAccountNumber(),
-                    "test",
-                    CurrencyCode.TRY
-            );
-
-            mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                    .andExpect(jsonPath("$.detail").value("Source and destination accounts cannot be the same"))
-                    .andExpect(jsonPath("$.title").value("Invalid transfer"))
-                    .andExpect(jsonPath("$.instance").value("/api/accounts/%s/transfers".formatted(sourceAccount.getAccountNumber())))
-                    .andExpect(jsonPath("$.status").value(400));
-
-            mockMvc.perform(get("/api/accounts/{accountNumber}", sourceAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(1000.00));
-
-            assertThat(bankTransactionRepository.count())
-                    .isEqualTo(0);
-            assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(0);
-        }
-
-        @Test
-        void customerCannotTransferToAnAccountWithDifferentCurrency() throws Exception {
-            Customer sourceCustomer = customer;
-
-            Customer targetCustomer = Customer.createNew(
-                    "target@example.com",
-                    "{bcrypt}raw-password321",
-                    "Lovelace Ada"
-            );
-
-            customerRepository.save(targetCustomer);
-
-            Account sourceAccount = account;
-
-            LedgerAccount targetLedger = LedgerAccount.createNew(
-                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                    LedgerAccountType.LIABILITY,
-                    CurrencyCode.USD
-            );
-
-            Account targetAccount = Account.createNew(
-                    "98765432100123",
-                    "Target Account",
-                    AccountType.CURRENT,
-                    targetCustomer,
-                    targetLedger
-            );
-
-            accountRepository.save(targetAccount);
-            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
-
-            TransferRequest request = new TransferRequest(
-                    new BigDecimal("500"),
-                    targetAccount.getAccountNumber(),
-                    "test",
-                    CurrencyCode.TRY
-            );
-
-            mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                    .andExpect(jsonPath("$.detail").value("Source and destination accounts must be in the same currency as request"))
-                    .andExpect(jsonPath("$.title").value("Invalid transfer"))
-                    .andExpect(jsonPath("$.instance").value("/api/accounts/%s/transfers".formatted(sourceAccount.getAccountNumber())))
-                    .andExpect(jsonPath("$.status").value(400));
-
-            mockMvc.perform(get("/api/accounts/{accountNumber}", sourceAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(1000.00));
-
-            mockMvc.perform(get("/api/accounts/{accountNumber}", targetAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(targetCustomer.getEmail()))))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(0.00));
-
-            assertThat(bankTransactionRepository.count())
-                    .isEqualTo(0);
-            assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(0);
-        }
-
-        @Test
-        void customerCannotTransferToAnAccountThatDoesNotExist() throws Exception {
-            Customer sourceCustomer = customer;
-            Account sourceAccount = account;
-
-            creditAndSave(sourceAccount, new BigDecimal("1000.00"));
-
-            TransferRequest request = new TransferRequest(
-                    new BigDecimal("500"),
-                    "14725836914785",
-                    "test",
-                    CurrencyCode.TRY
-            );
-
-            mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
-                    .andExpect(status().isNotFound())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                    .andExpect(jsonPath("$.title").value("Account not found"))
-                    .andExpect(jsonPath("$.detail").value("Destination account not found"))
-                    .andExpect(jsonPath("$.instance").value("/api/accounts/%s/transfers".formatted(sourceAccount.getAccountNumber())))
-                    .andExpect(jsonPath("$.status").value(404));
-
-            mockMvc.perform(get("/api/accounts/{accountNumber}", sourceAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.balance").value(1000.00));
-
-            assertThat(bankTransactionRepository.count())
-                    .isEqualTo(0);
-            assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(0);
-            assertThat(accountRepository.count())
                     .isEqualTo(1);
-            assertThat(customerRepository.count())
+
+            assertThat(idempotencyRecordRepository.count())
                     .isEqualTo(1);
         }
     }
 
-    private void creditAndSave(Account account, BigDecimal amount) {
-        account.getLedgerAccount().credit(amount);
-        ledgerAccountRepository.save(account.getLedgerAccount());
-    }
 }
