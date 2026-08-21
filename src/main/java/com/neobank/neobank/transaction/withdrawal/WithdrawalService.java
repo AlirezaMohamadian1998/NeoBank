@@ -58,9 +58,6 @@ public class WithdrawalService {
         String normalizedNote = "";
         if (request.note() != null) {
             normalizedNote = request.note().trim();
-            if (normalizedNote.length() > 255) {
-                throw new IllegalArgumentException("Note length must not exceed 255 characters");
-            }
         }
 
         String canonicalRequest = String.join(
