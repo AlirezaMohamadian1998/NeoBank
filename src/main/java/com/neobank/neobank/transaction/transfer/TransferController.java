@@ -21,8 +21,9 @@ public class TransferController {
     public ResponseEntity<TransferResponse> transfer(
             @PathVariable String sourceAccountNumber,
             @RequestBody @Valid TransferRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal Jwt jwt
     ) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(transferService.transfer(request, sourceAccountNumber, jwt.getSubject()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(transferService.transfer(request, sourceAccountNumber, jwt.getSubject(), idempotencyKey));
     }
 }

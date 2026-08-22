@@ -1,8 +1,8 @@
 package com.neobank.neobank.transaction.deposit;
 
 import com.neobank.neobank.account.AccountNotFoundException;
-import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.auth.SecurityConfig;
+import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.deposit.dto.DepositRequest;
 import com.neobank.neobank.transaction.deposit.dto.DepositResponse;
@@ -44,6 +44,7 @@ class DepositControllerTest {
 
     @Test
     void depositReturnsCreatedTransactionForAuthenticatedJwt() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String email = "customer@example.com";
         DepositRequest request = new DepositRequest(
                 new BigDecimal("1000.00"),
@@ -62,12 +63,13 @@ class DepositControllerTest {
                 Instant.parse("2026-08-14T12:00:00Z")
         );
 
-        given(depositService.deposit(request, response.accountNumber(), email))
+        given(depositService.deposit(request, response.accountNumber(), email, idempotencyKey))
                 .willReturn(response);
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", response.accountNumber())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -80,11 +82,12 @@ class DepositControllerTest {
                 .andExpect(jsonPath("$.ledgerAccountReference").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.account").doesNotHaveJsonPath());
 
-        verify(depositService).deposit(request, response.accountNumber(), email);
+        verify(depositService).deposit(request, response.accountNumber(), email, idempotencyKey);
     }
 
     @Test
     void depositReturnsNotFoundWhenAccountIsNotOwned() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String accountNumber = "12345678900321";
         String email = "customer@example.com";
 
@@ -93,12 +96,13 @@ class DepositControllerTest {
                 "Test"
         );
 
-        given(depositService.deposit(request, accountNumber, email))
+        given(depositService.deposit(request, accountNumber, email, idempotencyKey))
                 .willThrow(new AccountNotFoundException());
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", accountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -107,11 +111,12 @@ class DepositControllerTest {
                 .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900321/deposits"))
                 .andExpect(jsonPath("$.status").value(404));
 
-        verify(depositService).deposit(request, accountNumber, email);
+        verify(depositService).deposit(request, accountNumber, email, idempotencyKey);
     }
 
     @Test
     void depositReturnsValidationProblemForInvalidRequest() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String accountNumber = "12345678900321";
         String email = "customer@example.com";
 
@@ -123,6 +128,7 @@ class DepositControllerTest {
         mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", accountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -138,6 +144,7 @@ class DepositControllerTest {
 
     @Test
     void depositReturnsUnauthorizedWithoutAuthentication() throws Exception {
+        String idempotencyKey = "11111111111111111111111111111111";
         String accountNumber = "12345678900321";
 
         DepositRequest request = new DepositRequest(
@@ -147,8 +154,29 @@ class DepositControllerTest {
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", accountNumber)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", idempotencyKey))
                 .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(depositService);
+    }
+
+    @Test
+    void depositReturnsBadRequestWhenIdempotencyKeyHeaderIsMissing() throws Exception {
+        String email = "customer@example.com";
+        String accountNumber = "12345678900987";
+
+        DepositRequest request = new DepositRequest(
+                new BigDecimal("1000.00"),
+                "Test"
+        );
+
+        mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", accountNumber)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
 
         verifyNoInteractions(depositService);
     }

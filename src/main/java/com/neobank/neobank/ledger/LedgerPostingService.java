@@ -7,11 +7,14 @@ import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.TransactionStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(propagation = Propagation.MANDATORY)
 public class LedgerPostingService {
 
     private final ReferenceGenerator referenceGenerator;
