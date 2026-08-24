@@ -2,8 +2,10 @@ package com.neobank.neobank.transaction.withdrawal;
 
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
+import com.neobank.neobank.internalaccount.InternalAccountPurpose;
 import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
+import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.SimulatedFailureException;
 import com.neobank.neobank.transaction.TransactionIntegrationTestSupport;
 import com.neobank.neobank.transaction.withdrawal.dto.WithdrawalRequest;
@@ -80,6 +82,12 @@ class WithdrawalTransactionSafetyIntegrationTest extends TransactionIntegrationT
 
         assertThat(reloadedAccount.getBalance())
                 .isEqualTo(new BigDecimal("1000.00"));
+
+        var reloadedInternalAccount = internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY)
+                .orElseThrow();
+
+        assertThat(reloadedInternalAccount.getBalance())
+                .isEqualByComparingTo("10000.00");
     }
 
     @Test
@@ -163,6 +171,12 @@ class WithdrawalTransactionSafetyIntegrationTest extends TransactionIntegrationT
         assertThat(reloadedAccount.getBalance())
                 .isEqualByComparingTo("800.00");
 
+        var reloadedInternalAccount = internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY)
+                .orElseThrow();
+
+        assertThat(reloadedInternalAccount.getBalance())
+                .isEqualByComparingTo("9800.00");
+
         assertThat(idempotencyRecordRepository.count())
                 .isOne();
 
@@ -170,7 +184,7 @@ class WithdrawalTransactionSafetyIntegrationTest extends TransactionIntegrationT
                 .isOne();
 
         assertThat(ledgerEntryRepository.count())
-                .isOne();
+                .isEqualTo(2);
     }
 
     @Test
@@ -262,6 +276,12 @@ class WithdrawalTransactionSafetyIntegrationTest extends TransactionIntegrationT
         assertThat(reloadedAccount.getBalance())
                 .isEqualByComparingTo("500.00");
 
+        var reloadedInternalAccount = internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY)
+                .orElseThrow();
+
+        assertThat(reloadedInternalAccount.getBalance())
+                .isEqualByComparingTo("9500.00");
+
         assertThat(idempotencyRecordRepository.count())
                 .isEqualTo(2);
 
@@ -269,7 +289,7 @@ class WithdrawalTransactionSafetyIntegrationTest extends TransactionIntegrationT
                 .isEqualTo(2);
 
         assertThat(ledgerEntryRepository.count())
-                .isEqualTo(2);
+                .isEqualTo(4);
     }
 
     @Test
@@ -358,7 +378,7 @@ class WithdrawalTransactionSafetyIntegrationTest extends TransactionIntegrationT
                 .isOne();
 
         assertThat(ledgerEntryRepository.count())
-                .isOne();
+                .isEqualTo(2);
 
         assertThat(idempotencyRecordRepository.count())
                 .isOne();
@@ -371,5 +391,11 @@ class WithdrawalTransactionSafetyIntegrationTest extends TransactionIntegrationT
 
         assertThat(reloadedAccount.getBalance())
                 .isEqualByComparingTo(initialBalance.subtract(successfulResponse.amount()));
+
+        var reloadedInternalAccount = internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY)
+                .orElseThrow();
+
+        assertThat(reloadedInternalAccount.getBalance())
+                .isEqualByComparingTo(new BigDecimal("10000.00").subtract(successfulResponse.amount()));
     }
 }

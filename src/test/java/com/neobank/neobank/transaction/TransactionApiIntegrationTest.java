@@ -1,6 +1,8 @@
 package com.neobank.neobank.transaction;
 
-import com.neobank.neobank.account.*;
+import com.neobank.neobank.account.Account;
+import com.neobank.neobank.account.AccountNotFoundException;
+import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
@@ -89,12 +91,17 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .orElseThrow(() -> new AccountNotFoundException());
 
             assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(1);
+                    .isEqualTo(2);
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(1);
 
             BankTransaction transaction = bankTransactionRepository.findAll().getFirst();
-            var entry = ledgerEntryRepository.findAll().getFirst();
+            var entry = ledgerEntryRepository
+                    .findAll()
+                    .stream()
+                    .filter(e -> e.getDirection() == EntryDirection.CREDIT)
+                    .findFirst()
+                    .orElseThrow();
 
             assertThat(transaction.getTransactionType())
                     .isSameAs(TransactionType.DEPOSIT);
@@ -207,7 +214,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .isEqualTo(secondResponse);
 
             assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(1);
+                    .isEqualTo(2);
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(1);
@@ -231,9 +238,9 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.balanceAfter").value(1000.00));
 
             mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
-                                    .contentType(MediaType.APPLICATION_JSON)
-                                    .content(objectMapper.writeValueAsString(request2))
-                                    .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request2))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
                             .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
                     .andExpect(status().isConflict())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -249,7 +256,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.balance").value(1000.00));
 
             assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(1);
+                    .isEqualTo(2);
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(1);
@@ -299,7 +306,8 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
             WithdrawalResponse response = objectMapper.readValue(withdrawMvcResult.getResponse().getContentAsString(), WithdrawalResponse.class);
 
             assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(1);
+                    .isEqualTo(2);
+
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(1);
 
@@ -309,7 +317,12 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .orElseThrow(() -> new AccountNotFoundException());
 
             BankTransaction transaction = bankTransactionRepository.findAll().getFirst();
-            var entry = ledgerEntryRepository.findAll().getFirst();
+            var entry = ledgerEntryRepository
+                    .findAll()
+                    .stream()
+                    .filter(e -> e.getDirection() == EntryDirection.DEBIT)
+                    .findFirst()
+                    .orElseThrow();
 
             assertThat(response.transactionReference())
                     .isEqualTo(transaction.getReference());
@@ -438,7 +451,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .isEqualTo(secondResponse);
 
             assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(1);
+                    .isEqualTo(2);
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(1);
@@ -482,7 +495,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.balance").value(500.00));
 
             assertThat(ledgerEntryRepository.count())
-                    .isEqualTo(1);
+                    .isEqualTo(2);
 
             assertThat(bankTransactionRepository.count())
                     .isEqualTo(1);

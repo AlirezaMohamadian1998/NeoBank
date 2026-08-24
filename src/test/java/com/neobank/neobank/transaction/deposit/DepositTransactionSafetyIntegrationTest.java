@@ -2,7 +2,9 @@ package com.neobank.neobank.transaction.deposit;
 
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
+import com.neobank.neobank.internalaccount.InternalAccountPurpose;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
+import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.SimulatedFailureException;
 import com.neobank.neobank.transaction.TransactionIntegrationTestSupport;
 import com.neobank.neobank.transaction.deposit.dto.DepositRequest;
@@ -79,6 +81,12 @@ class DepositTransactionSafetyIntegrationTest extends TransactionIntegrationTest
 
         assertThat(reloadedAccount.getBalance())
                 .isEqualByComparingTo("0.00");
+
+        var reloadedInternalAccount = internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY)
+                .orElseThrow();
+
+        assertThat(reloadedInternalAccount.getBalance())
+                .isEqualByComparingTo("10000.00");
     }
 
     @Test
@@ -158,7 +166,7 @@ class DepositTransactionSafetyIntegrationTest extends TransactionIntegrationTest
                 .isEqualTo(1);
 
         assertThat(ledgerEntryRepository.count())
-                .isEqualTo(1);
+                .isEqualTo(2);
 
         assertThat(bankTransactionRepository.count())
                 .isEqualTo(1);
@@ -168,6 +176,12 @@ class DepositTransactionSafetyIntegrationTest extends TransactionIntegrationTest
 
         assertThat(reloadedAccount.getBalance())
                 .isEqualByComparingTo("100.00");
+
+        var reloadedInternalAccount = internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY)
+                .orElseThrow();
+
+        assertThat(reloadedInternalAccount.getBalance())
+                .isEqualByComparingTo("10100.00");
     }
 
     @Test
@@ -240,14 +254,25 @@ class DepositTransactionSafetyIntegrationTest extends TransactionIntegrationTest
                         new BigDecimal("200.00")
                 );
 
-        assertThat(idempotencyRecordRepository.count()).isEqualTo(2);
-        assertThat(ledgerEntryRepository.count()).isEqualTo(2);
-        assertThat(bankTransactionRepository.count()).isEqualTo(2);
+        assertThat(idempotencyRecordRepository.count())
+                .isEqualTo(2);
+
+        assertThat(ledgerEntryRepository.count())
+                .isEqualTo(4);
+
+        assertThat(bankTransactionRepository.count())
+                .isEqualTo(2);
 
         var reloadedAccount = accountRepository.findByAccountNumber(accountNumber)
                 .orElseThrow();
 
         assertThat(reloadedAccount.getBalance())
                 .isEqualByComparingTo("200.00");
+
+        var reloadedInternalAccount = internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY)
+                .orElseThrow();
+
+        assertThat(reloadedInternalAccount.getBalance())
+                .isEqualByComparingTo("10200.00");
     }
 }
