@@ -6,6 +6,9 @@ import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerRepository;
 import com.neobank.neobank.idempotency.IdempotencyRecordRepository;
+import com.neobank.neobank.internalaccount.InternalAccount;
+import com.neobank.neobank.internalaccount.InternalAccountPurpose;
+import com.neobank.neobank.internalaccount.InternalAccountRepository;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountRepository;
 import com.neobank.neobank.ledger.LedgerAccountType;
@@ -37,8 +40,12 @@ public abstract class TransactionIntegrationTestSupport {
     @Autowired
     protected IdempotencyRecordRepository idempotencyRecordRepository;
 
+    @Autowired
+    protected InternalAccountRepository internalAccountRepository;
+
     protected Account account;
     protected Customer customer;
+    protected InternalAccount internalAccount;
 
     @BeforeEach
     protected void setUpTransactionIntegrationFixture() {
@@ -46,6 +53,7 @@ public abstract class TransactionIntegrationTestSupport {
         ledgerEntryRepository.deleteAll();
         bankTransactionRepository.deleteAll();
         accountRepository.deleteAll();
+        internalAccountRepository.deleteAll();
         ledgerAccountRepository.deleteAll();
         customerRepository.deleteAll();
 
@@ -70,6 +78,19 @@ public abstract class TransactionIntegrationTestSupport {
                 ledgerAccount
                 )
         );
+
+        LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
+                "9f3c8a21d9e64b5fa2c17e9084bd6a33",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        );
+
+        internalLedgerAccount.debit(new BigDecimal("10000.00"));
+
+        internalAccount = internalAccountRepository.save(InternalAccount.createNew(
+                InternalAccountPurpose.SETTLEMENT,
+                internalLedgerAccount
+        ));
     }
 
     protected void creditAndSave(Account account, BigDecimal amount) {

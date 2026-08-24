@@ -1,0 +1,75 @@
+INSERT INTO ledger_accounts
+(
+    created_at,
+    updated_at,
+    version,
+    ledger_reference,
+    type,
+    currency,
+    balance,
+    status
+)
+VALUES
+    (
+        UTC_TIMESTAMP(6),
+        UTC_TIMESTAMP(6),
+        0,
+        '00000000000000000000000000000001',
+        'ASSET',
+        'TRY',
+        1000000000.00,
+        'ACTIVE'
+    ),
+    (
+        UTC_TIMESTAMP(6),
+        UTC_TIMESTAMP(6),
+        0,
+        '00000000000000000000000000000002',
+        'ASSET',
+        'USD',
+        1000000000.00,
+        'ACTIVE'
+    ),
+    (
+        UTC_TIMESTAMP(6),
+        UTC_TIMESTAMP(6),
+        0,
+        '00000000000000000000000000000003',
+        'ASSET',
+        'EUR',
+        1000000000.00,
+        'ACTIVE'
+    ),
+    (
+        UTC_TIMESTAMP(6),
+        UTC_TIMESTAMP(6),
+        0,
+        '00000000000000000000000000000004',
+        'ASSET',
+        'GBP',
+        1000000000.00,
+        'ACTIVE'
+    );
+
+INSERT INTO internal_accounts
+(
+    created_at,
+    updated_at,
+    internal_account_purpose,
+    currency_code,
+    ledger_account_id
+)
+SELECT
+    UTC_TIMESTAMP(6),
+    UTC_TIMESTAMP(6),
+    'SETTLEMENT',
+    ledger_account.currency,
+    ledger_account.id
+FROM ledger_accounts ledger_account
+WHERE ledger_account.ledger_reference IN
+      (
+       '00000000000000000000000000000001',
+       '00000000000000000000000000000002',
+       '00000000000000000000000000000003',
+       '00000000000000000000000000000004'
+          );
