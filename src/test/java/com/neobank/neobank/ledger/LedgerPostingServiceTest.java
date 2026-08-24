@@ -296,10 +296,23 @@ class LedgerPostingServiceTest {
 
     @Test
     void postingToCompletedTransactionIsRejectedBeforeChangingBalance() {
+        LedgerAccount assetAccount = LedgerAccount.createNew(
+                "44444444444444444444444444444444",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        );
+
         postingService.post(
                 transaction,
                 liabilityAccount,
                 EntryDirection.CREDIT,
+                new BigDecimal("100.00")
+        );
+
+        postingService.post(
+                transaction,
+                assetAccount,
+                EntryDirection.DEBIT,
                 new BigDecimal("100.00")
         );
 

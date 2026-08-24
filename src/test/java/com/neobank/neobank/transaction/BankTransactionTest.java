@@ -556,6 +556,14 @@ class BankTransactionTest {
                 ledgerAccount
         );
 
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE.replace("1", "2"),
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                EntryDirection.DEBIT,
+                ledgerAccount
+        );
+
         transaction.complete();
 
         assertThat(transaction.getStatus())
@@ -577,6 +585,60 @@ class BankTransactionTest {
     }
 
     @Test
+    void unbalancedTransactionCannotComplete() {
+        BankTransaction transaction = createTransaction();
+
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE,
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                EntryDirection.CREDIT,
+                ledgerAccount
+        );
+
+        assertThatThrownBy(transaction::complete)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Transaction debits and credits must balance");
+
+        assertThat(transaction.getStatus())
+                .isEqualTo(TransactionStatus.PENDING);
+    }
+
+    @Test
+    void transactionWithEntryInDifferentCurrencyCannotComplete() {
+        BankTransaction transaction = createTransaction();
+
+        LedgerAccount usdLedgerAccount = LedgerAccount.createNew(
+                "22222222222222222222222222222222",
+                LedgerAccountType.ASSET,
+                CurrencyCode.USD
+        );
+
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE,
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                EntryDirection.CREDIT,
+                ledgerAccount
+        );
+
+        transaction.addEntry(
+                "33333333333333333333333333333333",
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                EntryDirection.DEBIT,
+                usdLedgerAccount
+        );
+
+        assertThatThrownBy(transaction::complete)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("All entries must use the transaction currency");
+
+        assertThat(transaction.getStatus())
+                .isEqualTo(TransactionStatus.PENDING);
+    }
+
+    @Test
     void completedTransactionCannotAcceptAnotherEntry() {
         BankTransaction transaction = createTransaction();
 
@@ -585,6 +647,14 @@ class BankTransactionTest {
                 new BigDecimal("100.00"),
                 new BigDecimal("100.00"),
                 EntryDirection.CREDIT,
+                ledgerAccount
+        );
+
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE.replace("1", "2"),
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                EntryDirection.DEBIT,
                 ledgerAccount
         );
 
@@ -601,7 +671,7 @@ class BankTransactionTest {
                 .hasMessage("Transaction is not pending");
 
         assertThat(transaction.getEntries())
-                .hasSize(1);
+                .hasSize(2);
 
         assertThat(transaction.getStatus())
                 .isEqualTo(TransactionStatus.COMPLETED);
@@ -616,6 +686,14 @@ class BankTransactionTest {
                 new BigDecimal("100.00"),
                 new BigDecimal("100.00"),
                 EntryDirection.CREDIT,
+                ledgerAccount
+        );
+
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE.replace("1", "2"),
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                EntryDirection.DEBIT,
                 ledgerAccount
         );
 
