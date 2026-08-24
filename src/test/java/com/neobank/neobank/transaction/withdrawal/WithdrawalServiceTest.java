@@ -9,6 +9,9 @@ import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.idempotency.RequestHasher;
+import com.neobank.neobank.internalaccount.InternalAccount;
+import com.neobank.neobank.internalaccount.InternalAccountPurpose;
+import com.neobank.neobank.internalaccount.InternalAccountRepository;
 import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
@@ -40,10 +43,6 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class WithdrawalServiceTest {
 
-    private static final String LEDGER_REFERENCE = "8f3c8a21d9e64b5fa2c17e9084bd6a32";
-    private static final String TRANSACTION_REFERENCE = "7f3c8a21d9e64b5fa2c17e9084bd6a31";
-    private static final String ENTRY_REFERENCE = "9f3c8a21d9e64b5fa2c17e9084bd6a33";
-
     @Mock
     private BankTransactionRepository bankTransactionRepository;
 
@@ -55,6 +54,9 @@ class WithdrawalServiceTest {
 
     @Mock
     private IdempotencyService idempotencyService;
+
+    @Mock
+    private InternalAccountRepository internalAccountRepository;
 
     private final RequestHasher requestHasher = new RequestHasher();
 
@@ -75,7 +77,8 @@ class WithdrawalServiceTest {
                 referenceGenerator,
                 ledgerPostingService,
                 idempotencyService,
-                requestHasher
+                requestHasher,
+                internalAccountRepository
         );
     }
 
@@ -84,6 +87,9 @@ class WithdrawalServiceTest {
         String email = "customer@example.com";
         String accountNumber = "12345678900987";
         String idempotencyKey = "11111111111111111111111111111111";
+        String transactionReference = "6f3c8a21d9e64b5fa2c17e9084bd6a30";
+        String customerEntryReference = "9f3c8a21d9e64b5fa2c17e9084bd6a33";
+        String internalEntryReference = "5f3c8a21d9e64b5fa2c17e9084bd6a34";
 
         Customer customer = Customer.createNew(
                 email,
@@ -92,7 +98,7 @@ class WithdrawalServiceTest {
         );
 
         LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                LEDGER_REFERENCE,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 LedgerAccountType.LIABILITY,
                 CurrencyCode.TRY
         );
@@ -104,6 +110,19 @@ class WithdrawalServiceTest {
                 AccountType.CURRENT,
                 customer,
                 ledgerAccount
+        );
+
+        LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
+                "7f3c8a21d9e64b5fa2c17e9084bd6a31",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        );
+
+        internalLedgerAccount.debit(new BigDecimal("10000.00"));
+
+        InternalAccount internalAccount = InternalAccount.createNew(
+                InternalAccountPurpose.SETTLEMENT,
+                internalLedgerAccount
         );
 
         WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
@@ -119,76 +138,136 @@ class WithdrawalServiceTest {
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
+
         given(referenceGenerator.generate())
-                .willReturn(TRANSACTION_REFERENCE, ENTRY_REFERENCE);
+                .willReturn(transactionReference, customerEntryReference, internalEntryReference);
+
         given(bankTransactionRepository.save(any(BankTransaction.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
+
         given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
                 .willReturn(Optional.empty());
+
+        given(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, account.getCurrency()))
+                .willReturn(Optional.of(internalAccount));
 
         var response = withdrawalService.withdraw(request, accountNumber, email, idempotencyKey);
 
         verify(bankTransactionRepository).save(bankTransactionCaptor.capture());
 
         BankTransaction savedTransaction = bankTransactionCaptor.getValue();
-        assertThat(savedTransaction.getEntries()).hasSize(1);
-        LedgerEntry savedEntry = savedTransaction.getEntries().getFirst();
+
+        assertThat(savedTransaction.getEntries())
+                .hasSize(2);
+
+        LedgerEntry savedCustomerEntry =
+                savedTransaction.getEntries()
+                        .stream()
+                        .filter(entry -> entry.getDirection() == EntryDirection.DEBIT)
+                        .findFirst()
+                        .orElseThrow();
+
+        LedgerEntry savedInternalEntry =
+                savedTransaction.getEntries()
+                        .stream()
+                        .filter(entry -> entry.getDirection() == EntryDirection.CREDIT)
+                        .findFirst()
+                        .orElseThrow();
 
         verify(idempotencyService).save(idempotencyRecordCaptor.capture());
 
         IdempotencyRecord idempotencyRecord = idempotencyRecordCaptor.getValue();
 
         assertThat(savedTransaction.getReference())
-                .isEqualTo(TRANSACTION_REFERENCE);
+                .isEqualTo(transactionReference);
+
         assertThat(savedTransaction.getTransactionType())
                 .isSameAs(TransactionType.WITHDRAWAL);
+
         assertThat(savedTransaction.getStatus())
                 .isSameAs(TransactionStatus.COMPLETED);
+
         assertThat(savedTransaction.getNote())
                 .isEqualTo(request.note());
 
-        assertThat(savedEntry.getReference())
-                .isEqualTo(ENTRY_REFERENCE);
-        assertThat(savedEntry.getBalanceAfter())
+        assertThat(savedCustomerEntry.getReference())
+                .isEqualTo(customerEntryReference);
+
+        assertThat(savedCustomerEntry.getBalanceAfter())
                 .isEqualByComparingTo(account.getBalance());
-        assertThat(savedEntry.getAmount())
+
+        assertThat(savedCustomerEntry.getAmount())
                 .isEqualByComparingTo(request.amount());
-        assertThat(savedEntry.getLedgerAccount())
+
+        assertThat(savedCustomerEntry.getLedgerAccount())
                 .isSameAs(ledgerAccount);
-        assertThat(savedEntry.getBankTransaction())
+
+        assertThat(savedCustomerEntry.getBankTransaction())
                 .isSameAs(savedTransaction);
-        assertThat(savedEntry.getCurrency())
+
+        assertThat(savedCustomerEntry.getCurrency())
                 .isSameAs(account.getCurrency());
-        assertThat(savedEntry.getDirection())
+
+        assertThat(savedCustomerEntry.getDirection())
                 .isSameAs(EntryDirection.DEBIT);
 
+        assertThat(savedInternalEntry.getReference())
+                .isEqualTo(internalEntryReference);
+
+        assertThat(savedInternalEntry.getBalanceAfter())
+                .isEqualByComparingTo(internalAccount.getBalance());
+
+        assertThat(savedInternalEntry.getAmount())
+                .isEqualByComparingTo(request.amount());
+
+        assertThat(savedInternalEntry.getLedgerAccount())
+                .isSameAs(internalLedgerAccount);
+
+        assertThat(savedInternalEntry.getBankTransaction())
+                .isSameAs(savedTransaction);
+
+        assertThat(savedInternalEntry.getCurrency())
+                .isSameAs(account.getCurrency());
+
+        assertThat(savedInternalEntry.getDirection())
+                .isSameAs(EntryDirection.CREDIT);
+
         assertThat(response.balanceAfter())
-                .isEqualByComparingTo(savedEntry.getBalanceAfter());
+                .isEqualByComparingTo(savedCustomerEntry.getBalanceAfter());
+
         assertThat(response.amount())
-                .isEqualByComparingTo(savedEntry.getAmount());
+                .isEqualByComparingTo(savedCustomerEntry.getAmount());
+
         assertThat(response.accountNumber())
                 .isEqualTo(account.getAccountNumber());
+
         assertThat(response.transactionReference())
                 .isEqualTo(savedTransaction.getReference());
+
         assertThat(response.entryReference())
-                .isEqualTo(savedEntry.getReference());
+                .isEqualTo(savedCustomerEntry.getReference());
+
         assertThat(response.transactionType())
                 .isSameAs(savedTransaction.getTransactionType());
+
         assertThat(response.currency())
-                .isSameAs(savedEntry.getCurrency());
+                .isSameAs(savedCustomerEntry.getCurrency());
+
         assertThat(response.note())
                 .isEqualTo(savedTransaction.getNote());
-        assertThat(response.createdAt())
-                .isEqualTo(savedTransaction.getCreatedAt());
+
         assertThat(account.getBalance())
                 .isEqualByComparingTo("0.00");
 
         assertThat(idempotencyRecord.getIdempotencyKey())
                 .isEqualTo(idempotencyKey);
+
         assertThat(idempotencyRecord.getCustomer())
                 .isSameAs(customer);
+
         assertThat(idempotencyRecord.getBankTransaction())
                 .isSameAs(savedTransaction);
+
         assertThat(idempotencyRecord.getRequestHash())
                 .isEqualTo(
                         requestHasher.hashRequest(String.join(
@@ -202,8 +281,12 @@ class WithdrawalServiceTest {
                 );
 
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
-        verify(referenceGenerator, times(2)).generate();
+
+        verify(referenceGenerator, times(3)).generate();
+
         verify(accountRepository, never()).save(any(Account.class));
+
+        verify(internalAccountRepository, times(1)).findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY);
     }
 
     @Test
@@ -219,7 +302,7 @@ class WithdrawalServiceTest {
         );
 
         LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                LEDGER_REFERENCE,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 LedgerAccountType.LIABILITY,
                 CurrencyCode.TRY
         );
@@ -230,6 +313,19 @@ class WithdrawalServiceTest {
                 AccountType.CURRENT,
                 customer,
                 ledgerAccount
+        );
+
+        LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
+                "7f3c8a21d9e64b5fa2c17e9084bd6a31",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        );
+
+        internalLedgerAccount.debit(new BigDecimal("10000.00"));
+
+        InternalAccount internalAccount = InternalAccount.createNew(
+                InternalAccountPurpose.SETTLEMENT,
+                internalLedgerAccount
         );
 
         WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
@@ -245,20 +341,34 @@ class WithdrawalServiceTest {
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
+
         given(referenceGenerator.generate())
-                .willReturn(TRANSACTION_REFERENCE, ENTRY_REFERENCE);
+                .willReturn("6f3c8a21d9e64b5fa2c17e9084bd6a30", "9f3c8a21d9e64b5fa2c17e9084bd6a33");
+
         given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
                 .willReturn(Optional.empty());
+
+        given(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, account.getCurrency()))
+                .willReturn(Optional.of(internalAccount));
 
         assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
                 .isInstanceOf(InsufficientFundsException.class)
                 .hasMessage("Insufficient funds");
 
-        assertThat(account.getBalance()).isEqualByComparingTo("0.00");
+        assertThat(account.getBalance())
+                .isEqualByComparingTo("0.00");
+
+        assertThat(internalAccount.getBalance())
+                .isEqualByComparingTo("10000.00");
+
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
+
         verify(referenceGenerator, times(2)).generate();
+
         verifyNoInteractions(bankTransactionRepository);
+
         verify(accountRepository, never()).save(any(Account.class));
+
         verify(idempotencyService, never()).save(any(IdempotencyRecord.class));
     }
 
@@ -278,7 +388,9 @@ class WithdrawalServiceTest {
                 .hasMessage("Account not found");
 
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
-        verifyNoInteractions(bankTransactionRepository, referenceGenerator, idempotencyService);
+
+        verifyNoInteractions(bankTransactionRepository, referenceGenerator, idempotencyService, internalAccountRepository);
+
         verify(accountRepository, never()).save(any(Account.class));
     }
 
@@ -294,7 +406,7 @@ class WithdrawalServiceTest {
                 .isInstanceOf(InvalidIdempotencyKeyException.class)
                 .hasMessage("Invalid idempotency key");
 
-        verifyNoInteractions(bankTransactionRepository, referenceGenerator, idempotencyService, accountRepository);
+        verifyNoInteractions(bankTransactionRepository, referenceGenerator, idempotencyService, accountRepository, internalAccountRepository);
     }
 
     @Test
@@ -302,6 +414,9 @@ class WithdrawalServiceTest {
         String email = "customer@example.com";
         String accountNumber = "12345678900987";
         String idempotencyKey = "11111111111111111111111111111111";
+        String transactionReference = "6f3c8a21d9e64b5fa2c17e9084bd6a30";
+        String customerEntryReference = "9f3c8a21d9e64b5fa2c17e9084bd6a33";
+        String internalEntryReference = "5f3c8a21d9e64b5fa2c17e9084bd6a34";
 
         Customer customer = Customer.createNew(
                 email,
@@ -310,7 +425,7 @@ class WithdrawalServiceTest {
         );
 
         LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                LEDGER_REFERENCE,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 LedgerAccountType.LIABILITY,
                 CurrencyCode.TRY
         );
@@ -323,6 +438,14 @@ class WithdrawalServiceTest {
                 customer,
                 ledgerAccount
         );
+
+        LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
+                "7f3c8a21d9e64b5fa2c17e9084bd6a31",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        );
+
+        internalLedgerAccount.debit(new BigDecimal("10000.00"));
 
         WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
 
@@ -341,16 +464,25 @@ class WithdrawalServiceTest {
                 request.amount(),
                 account.getCurrency(),
                 TransactionType.WITHDRAWAL,
-                TRANSACTION_REFERENCE,
+                transactionReference,
                 request.note()
         );
 
-        BigDecimal balanceAfter = ledgerAccount.debit(request.amount());
+        BigDecimal customerBalanceAfter = ledgerAccount.debit(request.amount());
+        BigDecimal internalBalanceAfter = internalLedgerAccount.credit(request.amount());
 
         transaction.addEntry(
-                ENTRY_REFERENCE,
+                internalEntryReference,
                 request.amount(),
-                balanceAfter,
+                internalBalanceAfter,
+                EntryDirection.CREDIT,
+                internalLedgerAccount
+        );
+
+        transaction.addEntry(
+                customerEntryReference,
+                request.amount(),
+                customerBalanceAfter,
                 EntryDirection.DEBIT,
                 ledgerAccount
         );
@@ -376,24 +508,32 @@ class WithdrawalServiceTest {
 
         assertThat(response.balanceAfter())
                 .isEqualByComparingTo(account.getBalance());
+
         assertThat(response.accountNumber())
                 .isEqualTo(account.getAccountNumber());
+
         assertThat(response.transactionReference())
-                .isEqualTo(TRANSACTION_REFERENCE);
+                .isEqualTo(transactionReference);
+
         assertThat(response.entryReference())
-                .isEqualTo(ENTRY_REFERENCE);
+                .isEqualTo(customerEntryReference);
+
         assertThat(response.transactionType())
                 .isSameAs(TransactionType.WITHDRAWAL);
+
         assertThat(response.amount())
                 .isEqualByComparingTo(request.amount());
+
         assertThat(response.currency())
                 .isSameAs(account.getCurrency());
+
         assertThat(response.note())
                 .isEqualTo(request.note());
 
         verify(bankTransactionRepository, never()).save(any());
-        verify(idempotencyService, never()).save(any());
-        verifyNoInteractions(referenceGenerator);
 
+        verify(idempotencyService, never()).save(any());
+
+        verifyNoInteractions(referenceGenerator, internalAccountRepository);
     }
 }

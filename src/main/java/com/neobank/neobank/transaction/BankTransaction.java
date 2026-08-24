@@ -57,23 +57,23 @@ public class BankTransaction extends BaseEntity {
             String reference,
             String note
     ) {
-        if(requestedAmount == null) {
+        if (requestedAmount == null) {
             throw new IllegalArgumentException("Amount must not be null");
         }
 
-        if(requestedAmount.compareTo(BigDecimal.ZERO) <= 0) {
+        if (requestedAmount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Amount must be greater than zero");
         }
 
-        if(requestedAmount.stripTrailingZeros().scale() > 2) {
+        if (requestedAmount.stripTrailingZeros().scale() > 2) {
             throw new IllegalArgumentException("Amount must not have more than 2 decimal places");
         }
 
-        if(requestedCurrency == null) {
+        if (requestedCurrency == null) {
             throw new IllegalArgumentException("Currency cannot be null");
         }
 
-        if(reference == null) {
+        if (reference == null) {
             throw new IllegalArgumentException("Reference cannot be null");
         }
 
@@ -81,7 +81,7 @@ public class BankTransaction extends BaseEntity {
             throw new IllegalArgumentException("Reference must be exactly 32 hexadecimal characters");
         }
 
-        if(transactionType == null) {
+        if (transactionType == null) {
             throw new IllegalArgumentException("Transaction type cannot be null");
         }
 
@@ -118,20 +118,20 @@ public class BankTransaction extends BaseEntity {
             EntryDirection direction,
             LedgerAccount ledgerAccount
     ) {
-        if(status != TransactionStatus.PENDING) {
+        if (status != TransactionStatus.PENDING) {
             throw new IllegalStateException("Transaction is not pending");
         }
 
-            LedgerEntry entry = LedgerEntry.createNew(
-                    ledgerEntryReference,
-                    amount,
-                    balanceAfter,
-                    direction,
-                    ledgerAccount,
-                    this
-            );
-            entries.add(entry);
-            return entry;
+        LedgerEntry entry = LedgerEntry.createNew(
+                ledgerEntryReference,
+                amount,
+                balanceAfter,
+                direction,
+                ledgerAccount,
+                this
+        );
+        entries.add(entry);
+        return entry;
 
     }
 
@@ -144,6 +144,29 @@ public class BankTransaction extends BaseEntity {
             throw new IllegalStateException(
                     "Transaction cannot be completed without entries"
             );
+        }
+
+        boolean containsDifferentCurrency = entries
+                .stream()
+                .anyMatch(entry ->
+                        entry.getCurrency() != requestedCurrency
+                );
+
+        if (containsDifferentCurrency) {
+            throw new IllegalStateException("All entries must use the transaction currency");
+        }
+
+        BigDecimal totalAmount =
+                entries
+                        .stream()
+                        .map(entry ->
+                                entry.getDirection() == EntryDirection.CREDIT
+                                        ? entry.getAmount()
+                                        : entry.getAmount().negate())
+                        .reduce(BigDecimal.ZERO, (a, b) -> a.add(b));
+
+        if(totalAmount.compareTo(BigDecimal.ZERO) != 0) {
+            throw new IllegalStateException("Transaction debits and credits must balance");
         }
 
         status = TransactionStatus.COMPLETED;

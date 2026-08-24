@@ -3,6 +3,8 @@ package com.neobank.neobank.transaction.withdrawal;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.idempotency.*;
+import com.neobank.neobank.internalaccount.InternalAccountPurpose;
+import com.neobank.neobank.internalaccount.InternalAccountRepository;
 import com.neobank.neobank.ledger.LedgerPostingService;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
 import com.neobank.neobank.transaction.BankTransaction;
@@ -34,6 +36,8 @@ public class WithdrawalService {
     private final IdempotencyService idempotencyService;
 
     private final RequestHasher requestHasher;
+
+    private final InternalAccountRepository internalAccountRepository;
 
     @Transactional
     @Retryable(
@@ -90,6 +94,9 @@ public class WithdrawalService {
 
         var ledgerAccount = account.getLedgerAccount();
 
+        var settlementAccount = internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, account.getCurrency())
+                .orElseThrow(() -> new IllegalStateException("Settlement account is not configured for " + account.getCurrency()));
+
         var bankTransaction = BankTransaction.createNew(
                 request.amount(),
                 account.getCurrency(),
@@ -102,6 +109,13 @@ public class WithdrawalService {
                 bankTransaction,
                 ledgerAccount,
                 EntryDirection.DEBIT,
+                request.amount()
+        );
+
+        ledgerPostingService.post(
+                bankTransaction,
+                settlementAccount.getLedgerAccount(),
+                EntryDirection.CREDIT,
                 request.amount()
         );
 

@@ -9,6 +9,9 @@ import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.idempotency.RequestHasher;
+import com.neobank.neobank.internalaccount.InternalAccount;
+import com.neobank.neobank.internalaccount.InternalAccountPurpose;
+import com.neobank.neobank.internalaccount.InternalAccountRepository;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.ledger.LedgerPostingService;
@@ -51,6 +54,9 @@ class DepositServiceTest {
     @Mock
     private IdempotencyService idempotencyService;
 
+    @Mock
+    private InternalAccountRepository internalAccountRepository;
+
     private final RequestHasher requestHasher = new RequestHasher();
 
     private DepositService depositService;
@@ -70,7 +76,8 @@ class DepositServiceTest {
                 referenceGenerator,
                 ledgerPostingService,
                 requestHasher,
-                idempotencyService
+                idempotencyService,
+                internalAccountRepository
         );
     }
 
@@ -79,7 +86,8 @@ class DepositServiceTest {
         String accountNumber = "12345678900321";
         String email = "customer@example.com";
         String transactionReference = "7f3c8a21d9e64b5fa2c17e9084bd6a31";
-        String entryReference = "9f3c8a21d9e64b5fa2c17e9084bd6a33";
+        String customerEntryReference = "9f3c8a21d9e64b5fa2c17e9084bd6a33";
+        String internalEntryReference = "8f3c8a21d9e64b5fa2c17e9084bd6a32";
         String idempotencyKey = "11111111111111111111111111111111";
 
         DepositRequest request = new DepositRequest(
@@ -107,6 +115,17 @@ class DepositServiceTest {
                 ledgerAccount
         );
 
+        LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
+                "9f3c8a21d9e64b5fa2c17e9084bd6a31",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        );
+
+        InternalAccount internalAccount = InternalAccount.createNew(
+                InternalAccountPurpose.SETTLEMENT,
+                internalLedgerAccount
+        );
+
         String requestHash = requestHasher.hashRequest(String.join(
                         "|",
                         TransactionType.DEPOSIT.name(),
@@ -118,20 +137,45 @@ class DepositServiceTest {
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
+
         given(referenceGenerator.generate())
-                .willReturn(transactionReference, entryReference);
+                .willReturn(transactionReference, internalEntryReference, customerEntryReference);
+
         given(bankTransactionRepository.save(any(BankTransaction.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
+
         given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
                 .willReturn(Optional.empty());
+
+        given(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, account.getCurrency()))
+                .willReturn(Optional.of(internalAccount));
 
         DepositResponse response = depositService.deposit(request, accountNumber, email, idempotencyKey);
 
         verify(bankTransactionRepository).save(bankTransactionCaptor.capture());
 
         BankTransaction savedTransaction = bankTransactionCaptor.getValue();
-        assertThat(savedTransaction.getEntries()).hasSize(1);
-        LedgerEntry savedEntry = savedTransaction.getEntries().getFirst();
+
+        assertThat(savedTransaction.getEntries())
+                .hasSize(2);
+
+        assertThat(savedTransaction.getEntries())
+                .extracting(LedgerEntry::getReference)
+                .doesNotHaveDuplicates();
+
+        LedgerEntry savedCustomerEntry = savedTransaction
+                .getEntries()
+                .stream()
+                .filter(entry -> entry.getDirection() == EntryDirection.CREDIT)
+                .findFirst()
+                .orElseThrow();
+
+        LedgerEntry savedInternalEntry = savedTransaction
+                .getEntries()
+                .stream()
+                .filter(entry -> entry.getDirection() == EntryDirection.DEBIT)
+                .findFirst()
+                .orElseThrow();
 
         verify(idempotencyService).save(idempotencyRecordCaptor.capture());
 
@@ -139,53 +183,94 @@ class DepositServiceTest {
 
         assertThat(savedTransaction.getReference())
                 .isEqualTo(transactionReference);
+
         assertThat(savedTransaction.getTransactionType())
                 .isSameAs(TransactionType.DEPOSIT);
+
         assertThat(savedTransaction.getStatus())
                 .isSameAs(TransactionStatus.COMPLETED);
+
         assertThat(savedTransaction.getNote())
                 .isEqualTo(request.note());
 
-        assertThat(savedEntry.getReference())
-                .isEqualTo(entryReference);
-        assertThat(savedEntry.getAmount())
+        assertThat(savedCustomerEntry.getReference())
+                .isEqualTo(customerEntryReference);
+
+        assertThat(savedCustomerEntry.getAmount())
                 .isEqualByComparingTo(request.amount());
-        assertThat(savedEntry.getCurrency())
+
+        assertThat(savedCustomerEntry.getCurrency())
                 .isSameAs(account.getCurrency());
-        assertThat(savedEntry.getBalanceAfter())
+
+        assertThat(savedCustomerEntry.getBalanceAfter())
                 .isEqualByComparingTo(account.getBalance());
-        assertThat(savedEntry.getDirection())
+
+        assertThat(savedCustomerEntry.getDirection())
                 .isSameAs(EntryDirection.CREDIT);
-        assertThat(savedEntry.getBankTransaction())
+
+        assertThat(savedCustomerEntry.getBankTransaction())
                 .isSameAs(savedTransaction);
-        assertThat(savedEntry.getLedgerAccount())
+
+        assertThat(savedCustomerEntry.getLedgerAccount())
                 .isSameAs(ledgerAccount);
 
+        assertThat(savedInternalEntry.getReference())
+                .isEqualTo(internalEntryReference);
+
+        assertThat(savedInternalEntry.getAmount())
+                .isEqualByComparingTo(request.amount());
+
+        assertThat(savedInternalEntry.getCurrency())
+                .isSameAs(account.getCurrency());
+
+        assertThat(savedInternalEntry.getBalanceAfter())
+                .isEqualByComparingTo(internalAccount.getBalance());
+
+        assertThat(savedInternalEntry.getDirection())
+                .isSameAs(EntryDirection.DEBIT);
+
+        assertThat(savedInternalEntry.getBankTransaction())
+                .isSameAs(savedTransaction);
+
+        assertThat(savedInternalEntry.getLedgerAccount())
+                .isSameAs(internalLedgerAccount);
+
         assertThat(response.balanceAfter())
-                .isEqualByComparingTo(savedEntry.getBalanceAfter());
+                .isEqualByComparingTo(savedCustomerEntry.getBalanceAfter());
+
         assertThat(response.accountNumber())
                 .isEqualTo(account.getAccountNumber());
+
         assertThat(response.transactionReference())
                 .isEqualTo(savedTransaction.getReference());
+
         assertThat(response.entryReference())
-                .isEqualTo(savedEntry.getReference());
+                .isEqualTo(savedCustomerEntry.getReference());
+
         assertThat(response.transactionType())
                 .isSameAs(savedTransaction.getTransactionType());
+
         assertThat(response.amount())
-                .isEqualByComparingTo(savedEntry.getAmount());
+                .isEqualByComparingTo(savedCustomerEntry.getAmount());
+
         assertThat(response.note())
                 .isEqualTo(savedTransaction.getNote());
+
         assertThat(response.currency())
-                .isSameAs(savedEntry.getCurrency());
+                .isSameAs(savedCustomerEntry.getCurrency());
+
         assertThat(account.getBalance())
-                .isEqualByComparingTo(savedEntry.getBalanceAfter());
+                .isEqualByComparingTo(savedCustomerEntry.getBalanceAfter());
 
         assertThat(idempotencyRecord.getIdempotencyKey())
                 .isEqualTo(idempotencyKey);
+
         assertThat(idempotencyRecord.getCustomer())
                 .isSameAs(customer);
+
         assertThat(idempotencyRecord.getBankTransaction())
                 .isSameAs(savedTransaction);
+
         assertThat(idempotencyRecord.getRequestHash())
                 .isEqualTo(
                         requestHasher.hashRequest(String.join(
@@ -199,8 +284,12 @@ class DepositServiceTest {
                 );
 
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
-        verify(referenceGenerator, times(2)).generate();
+
+        verify(referenceGenerator, times(3)).generate();
+
         verify(accountRepository, never()).save(any(Account.class));
+
+        verify(internalAccountRepository, times(1)).findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY);
     }
 
     @Test
@@ -221,7 +310,7 @@ class DepositServiceTest {
                 .isInstanceOf(AccountNotFoundException.class)
                 .hasMessage("Account not found");
 
-        verifyNoInteractions(referenceGenerator, bankTransactionRepository, idempotencyService);
+        verifyNoInteractions(referenceGenerator, bankTransactionRepository, idempotencyService, internalAccountRepository);
     }
 
     @Test
@@ -239,7 +328,7 @@ class DepositServiceTest {
                 .isInstanceOf(InvalidIdempotencyKeyException.class)
                 .hasMessage("Invalid idempotency key");
 
-        verifyNoInteractions(referenceGenerator, bankTransactionRepository, idempotencyService, accountRepository);
+        verifyNoInteractions(referenceGenerator, bankTransactionRepository, idempotencyService, accountRepository, internalAccountRepository);
     }
 
     @Test
@@ -248,7 +337,8 @@ class DepositServiceTest {
         String email = "customer@example.com";
         String idempotencyKey = "11111111111111111111111111111111";
         String transactionReference = "7f3c8a21d9e64b5fa2c17e9084bd6a31";
-        String entryReference = "9f3c8a21d9e64b5fa2c17e9084bd6a33";
+        String internalEntryReference = "9f3c8a21d9e64b5fa2c17e9084bd6a33";
+        String customerEntryReference = "8f3c8a21d9e64b5fa2c17e9084bd6a32";
 
         DepositRequest request = new DepositRequest(
                 new BigDecimal("1000.00"),
@@ -273,6 +363,12 @@ class DepositServiceTest {
                 AccountType.CURRENT,
                 customer,
                 ledgerAccount
+        );
+
+        LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
+                "9f3c8a21d9e64b5fa2c17e9084bd6a31",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
         );
 
         String requestHash = requestHasher
@@ -295,9 +391,18 @@ class DepositServiceTest {
         );
 
         BigDecimal balanceAfter = ledgerAccount.credit(request.amount());
+        BigDecimal internalAccountBalanceAfter = internalLedgerAccount.debit(request.amount());
 
         bankTransaction.addEntry(
-                entryReference,
+                internalEntryReference,
+                request.amount(),
+                internalAccountBalanceAfter,
+                EntryDirection.DEBIT,
+                internalLedgerAccount
+        );
+
+        bankTransaction.addEntry(
+                customerEntryReference,
                 request.amount(),
                 balanceAfter,
                 EntryDirection.CREDIT,
@@ -325,17 +430,23 @@ class DepositServiceTest {
 
         assertThat(response.balanceAfter())
                 .isEqualByComparingTo(account.getBalance());
+
         assertThat(response.accountNumber())
                 .isEqualTo(account.getAccountNumber());
+
         assertThat(response.transactionReference())
                 .isEqualTo(transactionReference);
+
         assertThat(response.entryReference())
-                .isEqualTo(entryReference);
+                .isEqualTo(customerEntryReference);
+
         assertThat(response.transactionType())
                 .isSameAs(TransactionType.DEPOSIT);
 
         verify(bankTransactionRepository, never()).save(any());
+
         verify(idempotencyService, never()).save(any());
-        verifyNoInteractions(referenceGenerator);
+
+        verifyNoInteractions(referenceGenerator, internalAccountRepository);
     }
 }
