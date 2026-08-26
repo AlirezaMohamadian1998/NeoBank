@@ -6,3 +6,7 @@ spring:
 security:
   jwt:
     secret: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE
+
+fx:
+  provider:
+    app-id: integration-test-app-id
