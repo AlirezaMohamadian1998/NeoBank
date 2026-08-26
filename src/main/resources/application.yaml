@@ -26,3 +26,9 @@ security:
     issuer: neo-bank
     secret: ${JWT_SECRET}
     access-token-ttl: 15m
+fx:
+  provider:
+    app-id: ${OPEN_EXCHANGE_RATES_APP_ID}
+    base-url: https://openexchangerates.org
+    connect-timeout: 2s
+    read-timeout: 5s
