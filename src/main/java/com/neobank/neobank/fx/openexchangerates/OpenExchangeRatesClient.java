@@ -5,6 +5,7 @@ import com.neobank.neobank.fx.FxProviderUnavailableException;
 import com.neobank.neobank.fx.FxRateProvider;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -22,6 +23,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @Component
+@Qualifier("openExchangeRates")
 @RequiredArgsConstructor
 public class OpenExchangeRatesClient implements FxRateProvider {
 

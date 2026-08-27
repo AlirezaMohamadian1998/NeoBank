@@ -3,6 +3,7 @@ package com.neobank.neobank.shared.exception;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
+import com.neobank.neobank.fx.FxProviderUnavailableException;
 import com.neobank.neobank.idempotency.IdempotencyConflictException;
 import com.neobank.neobank.idempotency.IdempotencyKeyRaceException;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
@@ -181,5 +182,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
                 .header(HttpHeaders.RETRY_AFTER, "1")
                 .body(problemDetail);
+    }
+
+    @ExceptionHandler(FxProviderUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleFxProviderUnavailableException(
+            FxProviderUnavailableException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Fx provider unavailable");
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problemDetail);
     }
 }
