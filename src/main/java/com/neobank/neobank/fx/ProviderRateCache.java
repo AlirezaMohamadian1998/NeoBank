@@ -3,6 +3,7 @@ package com.neobank.neobank.fx;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Expiry;
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -27,9 +28,7 @@ public class ProviderRateCache {
                 .expireAfter(new Expiry<String, FxProviderRates>() {
                     @Override
                     public long expireAfterCreate(String key, FxProviderRates value, long currentTime) {
-                        Instant validUntil = value.providerTimestamp().plus(PROVIDER_UPDATE_INTERVAL);
-
-                        Duration remaining = Duration.between(Instant.now(clock), validUntil);
+                        Duration remaining = Duration.between(Instant.now(clock), getExpiration(value));
 
                         return remaining.toNanos();
                     }
@@ -48,10 +47,7 @@ public class ProviderRateCache {
                 .build(key -> {
                     FxProviderRates rates = rateProvider.fetchLatestRates();
 
-                    Instant validUntil =
-                            rates.providerTimestamp().plus(PROVIDER_UPDATE_INTERVAL);
-
-                    if (!validUntil.isAfter(Instant.now(clock))) {
+                    if(!getExpiration(rates).isAfter(Instant.now(clock))) {
                         throw new FxProviderUnavailableException("Provider returned stale FX rates");
                     }
 
@@ -61,5 +57,10 @@ public class ProviderRateCache {
 
     public FxProviderRates getLatestRates() {
         return cache.get(CACHE_KEY);
+    }
+
+    public Instant getExpiration(@NonNull FxProviderRates rates) {
+        return rates.providerTimestamp()
+                .plus(PROVIDER_UPDATE_INTERVAL);
     }
 }
