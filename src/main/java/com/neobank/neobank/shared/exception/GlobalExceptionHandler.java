@@ -4,6 +4,7 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
 import com.neobank.neobank.fx.FxProviderUnavailableException;
+import com.neobank.neobank.fx.FxRateLockUnavailableException;
 import com.neobank.neobank.idempotency.IdempotencyConflictException;
 import com.neobank.neobank.idempotency.IdempotencyKeyRaceException;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
@@ -194,5 +195,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problemDetail.setTitle("Fx provider unavailable");
 
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problemDetail);
+    }
+
+    @ExceptionHandler(FxRateLockUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleFxRateLockUnavailableException(
+            FxRateLockUnavailableException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Fx rate lock unavailable");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
     }
 }
