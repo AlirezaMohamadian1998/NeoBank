@@ -6,8 +6,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
 
-public record SnapshotRateResponse(
-        String rateId,
+public record FxRateLockResponse(
+        String lockId,
 
         Instant expiresAt,
 

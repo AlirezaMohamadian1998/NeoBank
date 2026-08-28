@@ -1,7 +1,7 @@
 package com.neobank.neobank.fx;
 
 import com.neobank.neobank.auth.SecurityConfig;
-import com.neobank.neobank.fx.dto.SnapshotRateResponse;
+import com.neobank.neobank.fx.dto.FxRateLockResponse;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,10 +18,11 @@ import java.time.Instant;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(FxRateController.class)
@@ -42,7 +43,8 @@ class FxRateControllerTest {
 
     @Test
     void authenticatedValidBaseReturnsExpectedResponse() throws Exception {
-        SnapshotRateResponse response = new SnapshotRateResponse(
+        String email = "example.com";
+        FxRateLockResponse response = new FxRateLockResponse(
                 "example:2026-08-27T12:00:00Z",
                 Instant.parse("2026-08-27T13:00:00Z"),
                 CurrencyCode.TRY,
@@ -54,12 +56,12 @@ class FxRateControllerTest {
                 )
         );
 
-        given(rateService.getLatestRates(CurrencyCode.TRY))
+        given(rateService.createRateLock(CurrencyCode.TRY, email))
                 .willReturn(response);
 
-        mockMvc.perform(get("/api/fx/rates")
+        mockMvc.perform(post("/api/fx/rate-locks")
                         .param("base", CurrencyCode.TRY.name())
-                        .with(jwt().jwt(jwt -> jwt.subject("test-user"))))
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(content().json(objectMapper.writeValueAsString(response)));
@@ -67,7 +69,7 @@ class FxRateControllerTest {
 
     @Test
     void missingBaseReturnsBadRequest() throws Exception {
-        mockMvc.perform(get("/api/fx/rates")
+        mockMvc.perform(post("/api/fx/rate-locks")
                         .with(jwt().jwt(jwt -> jwt.subject("test-user"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
@@ -77,7 +79,7 @@ class FxRateControllerTest {
 
     @Test
     void invalidBaseReturnsBadRequest() throws Exception {
-        mockMvc.perform(get("/api/fx/rates")
+        mockMvc.perform(post("/api/fx/rate-locks")
                         .param("base", CurrencyCode.USD.name().toLowerCase())
                         .with(jwt().jwt(jwt -> jwt.subject("test-user"))))
                 .andExpect(status().isBadRequest())
@@ -88,7 +90,7 @@ class FxRateControllerTest {
 
     @Test
     void unauthenticatedRequestReturnsUnauthorized() throws Exception {
-        mockMvc.perform(get("/api/fx/rates")
+        mockMvc.perform(post("/api/fx/rate-locks")
                         .param("base", CurrencyCode.USD.name()))
                 .andExpect(status().isUnauthorized());
 
@@ -97,15 +99,16 @@ class FxRateControllerTest {
 
     @Test
     void providerUnavailableReturnsServiceUnavailable() throws Exception {
-        given(rateService.getLatestRates(any(CurrencyCode.class)))
+        String email = "example.com";
+        given(rateService.createRateLock(any(CurrencyCode.class), eq(email)))
                 .willThrow(new FxProviderUnavailableException("Provider unavailable"));
 
-        mockMvc.perform(get("/api/fx/rates")
+        mockMvc.perform(post("/api/fx/rate-locks")
                         .param("base", CurrencyCode.USD.name())
-                        .with(jwt().jwt(jwt -> jwt.subject("test-user"))))
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.instance").value("/api/fx/rates"))
+                .andExpect(jsonPath("$.instance").value("/api/fx/rate-locks"))
                 .andExpect(jsonPath("$.title").value("Fx provider unavailable"))
                 .andExpect(jsonPath("$.detail").value("Provider unavailable"));
     }
