@@ -32,3 +32,5 @@ fx:
     base-url: https://openexchangerates.org
     connect-timeout: 2s
     read-timeout: 5s
+  rate-lock:
+    duration: 5m
