@@ -52,7 +52,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
     class DepositTests {
         @Test
         void authenticatedCustomerCanDepositIntoOwnedAccount() throws Exception {
-            DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test");
+            DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
             MvcResult depositMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
@@ -156,7 +156,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
             customerRepository.save(customer2);
 
-            DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test");
+            DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
             mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
@@ -184,7 +184,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
         @Test
         void customerCannotDepositMoreThanOnceWithSameIdempotencyKeyAndSameRequest() throws Exception {
-            DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test");
+            DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
             String firstResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
@@ -225,8 +225,8 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
         @Test
         void customerCannotUseTheSameIdempotencyKeyForDifferentDepositsRequests() throws Exception {
-            DepositRequest request1 = new DepositRequest(new BigDecimal("1000.00"), "Test");
-            DepositRequest request2 = new DepositRequest(new BigDecimal("2000.00"), "Test");
+            DepositRequest request1 = new DepositRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
+            DepositRequest request2 = new DepositRequest(new BigDecimal("2000.00"), "Test", CurrencyCode.TRY, null);
 
             mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)

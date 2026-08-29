@@ -49,7 +49,7 @@ class DepositTransactionSafetyIntegrationTest extends TransactionIntegrationTest
 
     @Test
     void failedDepositRollsBackBalanceTransactionEntryAndIdempotencyRecord() {
-        DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test");
+        DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
         IdempotencyService idempotencyServiceSpy = AopTestUtils.getUltimateTargetObject(idempotencyService);
 
@@ -93,7 +93,7 @@ class DepositTransactionSafetyIntegrationTest extends TransactionIntegrationTest
     void concurrentDepositsWithSameKeyApplyDepositExactlyOnce() throws Exception {
         String accountNumber = account.getAccountNumber();
         String customerEmail = customer.getEmail();
-        DepositRequest request = new DepositRequest(new BigDecimal("100.00"), "Same key");
+        DepositRequest request = new DepositRequest(new BigDecimal("100.00"), "Same key", CurrencyCode.TRY, null);
 
         CountDownLatch bothInitialLookupsFinished = new CountDownLatch(2);
 
@@ -188,7 +188,7 @@ class DepositTransactionSafetyIntegrationTest extends TransactionIntegrationTest
     void concurrentDepositsWithDifferentKeysProduceCorrectFinalBalance() throws Exception {
         String accountNumber = account.getAccountNumber();
         String customerEmail = customer.getEmail();
-        DepositRequest request = new DepositRequest(new BigDecimal("100.00"), "Different keys");
+        DepositRequest request = new DepositRequest(new BigDecimal("100.00"), "Different keys", CurrencyCode.TRY, null);
 
         CountDownLatch bothInitialLookupsFinished = new CountDownLatch(2);
 

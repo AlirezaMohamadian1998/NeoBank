@@ -5,6 +5,7 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
@@ -57,6 +58,9 @@ class DepositServiceTest {
     @Mock
     private InternalAccountRepository internalAccountRepository;
 
+    @Mock
+    private FxRateService fxRateService;
+
     private final RequestHasher requestHasher = new RequestHasher();
 
     private DepositService depositService;
@@ -77,7 +81,8 @@ class DepositServiceTest {
                 ledgerPostingService,
                 requestHasher,
                 idempotencyService,
-                internalAccountRepository
+                internalAccountRepository,
+                fxRateService
         );
     }
 
@@ -92,7 +97,9 @@ class DepositServiceTest {
 
         DepositRequest request = new DepositRequest(
                 new BigDecimal("1000.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         Customer customer = Customer.createNew(
@@ -131,6 +138,9 @@ class DepositServiceTest {
                         TransactionType.DEPOSIT.name(),
                         accountNumber,
                         request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                        request.requestedCurrency().name(),
+                        account.getCurrency().name(),
+                        "",
                         request.note().trim()
                 )
         );
@@ -278,6 +288,9 @@ class DepositServiceTest {
                                         savedTransaction.getTransactionType().name(),
                                         accountNumber,
                                         request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                                        request.requestedCurrency().name(),
+                                        account.getCurrency().name(),
+                                        "",
                                         request.note().trim()
                                 )
                         )
@@ -300,7 +313,9 @@ class DepositServiceTest {
 
         DepositRequest request = new DepositRequest(
                 new BigDecimal("1000.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
@@ -321,7 +336,9 @@ class DepositServiceTest {
 
         DepositRequest request = new DepositRequest(
                 new BigDecimal("1000.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         assertThatThrownBy(() -> depositService.deposit(request, accountNumber, email, idempotencyKey))
@@ -342,7 +359,9 @@ class DepositServiceTest {
 
         DepositRequest request = new DepositRequest(
                 new BigDecimal("1000.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         Customer customer = Customer.createNew(
@@ -378,6 +397,9 @@ class DepositServiceTest {
                                 TransactionType.DEPOSIT.name(),
                                 accountNumber,
                                 request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                                request.requestedCurrency().name(),
+                                account.getCurrency().name(),
+                                "",
                                 request.note().trim()
                         )
                 );
