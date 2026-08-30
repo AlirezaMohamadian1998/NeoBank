@@ -179,8 +179,6 @@ public class DepositService {
                 settlementAccount.getLedgerAccount(),
                 EntryDirection.DEBIT,
                 request.amount()
-                        .multiply(fxInfo != null ? fxInfo.getRate(CurrencyContext.SOURCE) : BigDecimal.ONE)
-                        .setScale(2, RoundingMode.HALF_EVEN)
         );
 
         var entry = ledgerPostingService.post(
