@@ -2,15 +2,15 @@ package com.neobank.neobank.transaction.withdrawal;
 
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
+import com.neobank.neobank.fx.FxRateLockUnavailableException;
+import com.neobank.neobank.fx.FxRateService;
+import com.neobank.neobank.fx.dto.FxRateLockResponse;
 import com.neobank.neobank.idempotency.*;
 import com.neobank.neobank.internalaccount.InternalAccountPurpose;
 import com.neobank.neobank.internalaccount.InternalAccountRepository;
 import com.neobank.neobank.ledger.LedgerPostingService;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
-import com.neobank.neobank.transaction.BankTransaction;
-import com.neobank.neobank.transaction.BankTransactionRepository;
-import com.neobank.neobank.transaction.EntryDirection;
-import com.neobank.neobank.transaction.TransactionType;
+import com.neobank.neobank.transaction.*;
 import com.neobank.neobank.transaction.withdrawal.dto.WithdrawalRequest;
 import com.neobank.neobank.transaction.withdrawal.dto.WithdrawalResponse;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +19,9 @@ import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +41,8 @@ public class WithdrawalService {
 
     private final InternalAccountRepository internalAccountRepository;
 
+    private final FxRateService fxRateService;
+
     @Transactional
     @Retryable(
             maxRetries = 4,
@@ -52,15 +56,25 @@ public class WithdrawalService {
             }
     )
     public WithdrawalResponse withdraw(WithdrawalRequest request, String accountNumber, String customerEmail, String idempotencyKey) {
-        if (!idempotencyKey.matches("[a-f0-9]{32}")) {
+        if(!idempotencyKey.matches("[a-f0-9]{32}")) {
             throw new InvalidIdempotencyKeyException("Invalid idempotency key");
         }
 
         var account = accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, customerEmail)
                 .orElseThrow(() -> new AccountNotFoundException());
 
+        boolean isCrossCurrency = account.getCurrency() != request.requestedCurrency();
+
+        if(!isCrossCurrency && request.lockId() != null) {
+            throw new IllegalArgumentException("Lock ID is not required for same currency operation.");
+        }
+
+        if(isCrossCurrency && request.lockId() == null) {
+            throw new FxRateLockUnavailableException("Lock ID is required for cross-currency operation.");
+        }
+
         String normalizedNote = "";
-        if (request.note() != null) {
+        if(request.note() != null) {
             normalizedNote = request.note().trim();
         }
 
@@ -69,6 +83,9 @@ public class WithdrawalService {
                 TransactionType.WITHDRAWAL.name(),
                 accountNumber,
                 request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                request.requestedCurrency().name(),
+                account.getCurrency().name(),
+                request.lockId() != null ? request.lockId() : "",
                 normalizedNote
         );
 
@@ -76,7 +93,7 @@ public class WithdrawalService {
 
         var existingIdempotencyRecord = idempotencyService.findAndValidateRecord(idempotencyKey, customerEmail, requestHash);
 
-        if (existingIdempotencyRecord.isPresent()) {
+        if(existingIdempotencyRecord.isPresent()) {
             var existingTransaction = existingIdempotencyRecord.get().getBankTransaction();
 
             var existingEntry = existingTransaction
@@ -94,22 +111,59 @@ public class WithdrawalService {
 
         var ledgerAccount = account.getLedgerAccount();
 
-        var settlementAccount = internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, account.getCurrency())
-                .orElseThrow(() -> new IllegalStateException("Settlement account is not configured for " + account.getCurrency()));
+        var settlementAccount = internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, request.requestedCurrency())
+                .orElseThrow(() -> new IllegalStateException("Settlement account is not configured for " + request.requestedCurrency()));
 
         var bankTransaction = BankTransaction.createNew(
                 request.amount(),
-                account.getCurrency(),
+                request.requestedCurrency(),
                 TransactionType.WITHDRAWAL,
                 referenceGenerator.generate(),
                 request.note()
         );
+
+        FxInfo fxInfo = null;
+
+        if(isCrossCurrency) {
+            FxRateLockResponse fxResponse = fxRateService.getCachedRate(customerEmail, request.lockId());
+
+            if(fxResponse.baseCurrency() != request.requestedCurrency()) {
+                throw new FxRateLockUnavailableException("The base currency in the cached fx rate must be the same as the requested currency");
+            }
+
+            fxInfo = FxInfo.createNew(
+                    request.lockId(),
+                    Set.of(
+                            FxRate.createNew(
+                                    CurrencyContext.REQUEST,
+                                    request.requestedCurrency(),
+                                    BigDecimal.ONE
+                            ),
+                            FxRate.createNew(
+                                    CurrencyContext.SOURCE,
+                                    account.getCurrency(),
+                                    fxResponse.rates().get(account.getCurrency())
+                            ),
+                            FxRate.createNew(
+                                    CurrencyContext.DESTINATION,
+                                    request.requestedCurrency(),
+                                    BigDecimal.ONE
+                            )
+                    )
+            );
+
+            bankTransaction.addFxInfo(fxInfo);
+        }
 
         var ledgerEntry = ledgerPostingService.post(
                 bankTransaction,
                 ledgerAccount,
                 EntryDirection.DEBIT,
                 request.amount()
+                        .multiply(fxInfo != null
+                                ? fxInfo.getRate(CurrencyContext.SOURCE)
+                                : BigDecimal.ONE
+                        ).setScale(2, RoundingMode.HALF_EVEN)
         );
 
         ledgerPostingService.post(

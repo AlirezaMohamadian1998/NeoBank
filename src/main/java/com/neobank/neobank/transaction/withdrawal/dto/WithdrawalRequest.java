@@ -1,9 +1,7 @@
 package com.neobank.neobank.transaction.withdrawal.dto;
 
-import jakarta.validation.constraints.Digits;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.Size;
+import com.neobank.neobank.shared.money.CurrencyCode;
+import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
 
@@ -14,6 +12,14 @@ public record WithdrawalRequest(
         BigDecimal amount,
 
         @Size(max = 255, message = "Note must not exceed 255 characters")
-        String note
+        String note,
+
+        @NotNull(message = "Currency must not be null")
+        CurrencyCode requestedCurrency,
+
+        @Pattern(regexp = "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[ab89][a-f0-9]{3}-[a-f0-9]{12}$",
+                message = "Lock ID must be a valid UUID format"
+        )
+        String lockId
 ) {
 }
