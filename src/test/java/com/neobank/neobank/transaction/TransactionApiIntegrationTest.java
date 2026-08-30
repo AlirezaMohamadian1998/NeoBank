@@ -4,6 +4,12 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.fx.FxProviderRates;
+import com.neobank.neobank.fx.FxRateService;
+import com.neobank.neobank.fx.ProviderRateCache;
+import com.neobank.neobank.fx.dto.FxRateLockResponse;
+import com.neobank.neobank.internalaccount.InternalAccount;
+import com.neobank.neobank.internalaccount.InternalAccountPurpose;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
@@ -22,15 +28,21 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -47,6 +59,15 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private FxRateService fxRateService;
+
+    @MockitoBean
+    private ProviderRateCache providerRateCache;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     @Nested
     class DepositTests {
@@ -143,6 +164,188 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
             assertThat(entry.getId())
                     .isNotNull();
             assertThat(entry.getUpdatedAt())
+                    .isNotNull();
+        }
+
+        @Test
+        void authenticatedCustomerCanDepositDifferentCurrencyIntoOwnedAccount() throws Exception {
+            FxProviderRates providerRates = new FxProviderRates(
+                    "test-provider",
+                    CurrencyCode.USD,
+                    Map.of(
+                            CurrencyCode.USD, BigDecimal.ONE,
+                            CurrencyCode.EUR, new BigDecimal("0.85"),
+                            CurrencyCode.GBP, new BigDecimal("0.75"),
+                            CurrencyCode.TRY, new BigDecimal("40.00")
+                    ),
+                    Instant.now()
+            );
+
+            given(providerRateCache.getLatestRates())
+                    .willReturn(providerRates);
+
+            FxRateLockResponse fxRateResponse = fxRateService.createRateLock(CurrencyCode.USD, customer.getEmail());
+
+            DepositRequest request = new DepositRequest(
+                    new BigDecimal("1000.00"),
+                    "Test", CurrencyCode.USD,
+                    fxRateResponse.lockId()
+            );
+
+            MvcResult mvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.transactionReference").isNotEmpty())
+                    .andExpect(jsonPath("$.entryReference").isNotEmpty())
+                    .andExpect(jsonPath("$.transactionType").isNotEmpty())
+                    .andExpect(jsonPath("$.accountNumber").isNotEmpty())
+                    .andExpect(jsonPath("$.amount").isNotEmpty())
+                    .andExpect(jsonPath("$.currency").isNotEmpty())
+                    .andExpect(jsonPath("$.balanceAfter").isNotEmpty())
+                    .andExpect(jsonPath("$.note").isNotEmpty())
+                    .andExpect(jsonPath("$.createdAt").isNotEmpty())
+                    .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.version").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.account").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.customer").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.ledgerAccount").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.bankTransaction").doesNotHaveJsonPath())
+                    .andReturn();
+
+            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.balance").value(40000.00));
+
+            DepositResponse response = objectMapper.readValue(mvcResult.getResponse().getContentAsString(), DepositResponse.class);
+
+            Account savedAccount = accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(account.getAccountNumber(), customer.getEmail())
+                    .orElseThrow();
+
+            InternalAccount internalAccount = internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, request.requestedCurrency())
+                    .orElseThrow();
+
+            assertThat(internalAccount.getBalance())
+                    .isEqualByComparingTo(new BigDecimal("11000"));
+
+            assertThat(bankTransactionRepository.count())
+                    .isOne();
+
+            assertThat(ledgerEntryRepository.count())
+                    .isEqualTo(2);
+
+            BankTransaction savedTransaction = bankTransactionRepository.findAll().getFirst();
+
+            LedgerEntry savedEntry = ledgerEntryRepository
+                    .findAll()
+                    .stream()
+                    .filter(entry -> entry.getDirection() == EntryDirection.CREDIT)
+                    .findFirst()
+                    .orElseThrow();
+
+            assertThat(response.transactionReference())
+                    .isEqualTo(savedTransaction.getReference());
+
+            assertThat(response.entryReference())
+                    .isEqualTo(savedEntry.getReference());
+
+            assertThat(response.transactionType())
+                    .isEqualTo(savedTransaction.getTransactionType());
+
+            assertThat(response.accountNumber())
+                    .isEqualTo(savedAccount.getAccountNumber());
+
+            assertThat(response.amount())
+                    .isEqualByComparingTo(savedEntry.getAmount());
+
+            assertThat(response.currency())
+                    .isSameAs(savedEntry.getCurrency());
+
+            assertThat(response.balanceAfter())
+                    .isEqualByComparingTo(savedEntry.getBalanceAfter());
+
+            assertThat(response.note())
+                    .isEqualTo(request.note());
+
+            assertThat(response.createdAt())
+                    .isEqualTo(savedTransaction.getCreatedAt());
+
+            assertThat(savedTransaction.getTransactionType())
+                    .isSameAs(TransactionType.DEPOSIT);
+
+            assertThat(savedTransaction.getStatus())
+                    .isSameAs(TransactionStatus.COMPLETED);
+
+            assertThat(savedTransaction.getRequestedAmount())
+                    .isEqualByComparingTo(request.amount());
+
+            assertThat(savedTransaction.getRequestedCurrency())
+                    .isSameAs(request.requestedCurrency());
+
+            assertThat(savedTransaction.getNote())
+                    .isEqualTo(response.note());
+
+
+            assertThat(savedTransaction.getId())
+                    .isNotNull();
+
+            assertThat(savedTransaction.getUpdatedAt())
+                    .isNotNull();
+
+            transactionTemplate.executeWithoutResult(status -> {
+                FxInfo savedFxInfo = bankTransactionRepository.findById(savedTransaction.getId())
+                        .orElseThrow()
+                        .getFxInfo();
+
+                assertThat(savedFxInfo.getLockId())
+                        .isEqualTo(fxRateResponse.lockId());
+
+                assertThat(savedFxInfo.getRates().size())
+                        .isEqualTo(3);
+
+                assertThat(savedFxInfo.getRate(CurrencyContext.REQUEST))
+                        .isEqualByComparingTo(BigDecimal.ONE);
+
+                assertThat(savedFxInfo.getRate(CurrencyContext.SOURCE))
+                        .isEqualByComparingTo(BigDecimal.ONE);
+
+                assertThat(savedFxInfo.getRate(CurrencyContext.DESTINATION))
+                        .isEqualByComparingTo(new BigDecimal("40.00"));
+            });
+
+            assertThat(savedEntry.getDirection())
+                    .isSameAs(EntryDirection.CREDIT);
+
+            assertThat(savedEntry.getAmount())
+                    .isEqualByComparingTo(
+                            request.amount()
+                                    .multiply(fxRateResponse.rates().get(account.getCurrency()))
+                                    .setScale(2, RoundingMode.HALF_EVEN)
+                    );
+
+            assertThat(savedEntry.getBalanceAfter())
+                    .isEqualByComparingTo(savedAccount.getBalance());
+
+            assertThat(savedEntry.getLedgerAccount().getId())
+                    .isEqualTo(savedAccount.getLedgerAccount().getId());
+
+            assertThat(savedEntry.getBankTransaction().getId())
+                    .isEqualTo(savedTransaction.getId());
+
+            assertThat(savedEntry.getCurrency())
+                    .isSameAs(savedAccount.getCurrency());
+
+            assertThat(savedEntry.getCreatedAt())
+                    .isNotNull();
+
+            assertThat(savedEntry.getId())
+                    .isNotNull();
+
+            assertThat(savedEntry.getUpdatedAt())
                     .isNotNull();
         }
 
