@@ -927,7 +927,8 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     new BigDecimal("500"),
                     targetAccount.getAccountNumber(),
                     "test",
-                    CurrencyCode.TRY
+                    CurrencyCode.TRY,
+                    null
             );
 
             MvcResult transferMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
@@ -1109,7 +1110,8 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     new BigDecimal("500"),
                     sourceAccount.getAccountNumber(),
                     "test",
-                    CurrencyCode.TRY
+                    CurrencyCode.TRY,
+                    null
             );
 
             mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", targetAccount.getAccountNumber())
@@ -1177,7 +1179,8 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     new BigDecimal("500"),
                     targetAccount.getAccountNumber(),
                     "test",
-                    CurrencyCode.TRY
+                    CurrencyCode.TRY,
+                    null
             );
 
             String firstResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
@@ -1258,14 +1261,16 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     new BigDecimal("500"),
                     targetAccount.getAccountNumber(),
                     "test",
-                    CurrencyCode.TRY
+                    CurrencyCode.TRY,
+                    null
             );
 
             TransferRequest request2 = new TransferRequest(
                     new BigDecimal("250"),
                     targetAccount.getAccountNumber(),
                     "test",
-                    CurrencyCode.TRY
+                    CurrencyCode.TRY,
+                    null
             );
             mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)

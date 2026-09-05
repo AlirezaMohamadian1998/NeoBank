@@ -5,6 +5,7 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
@@ -59,6 +60,9 @@ class TransferServiceTest {
     @Mock
     private IdempotencyService idempotencyService;
 
+    @Mock
+    private FxRateService fxRateService;
+
     private final RequestHasher requestHasher = new RequestHasher();
 
     private TransferService transferService;
@@ -78,7 +82,8 @@ class TransferServiceTest {
                 accountRepository,
                 ledgerPostingService,
                 idempotencyService,
-                requestHasher
+                requestHasher,
+                fxRateService
         );
     }
 
@@ -105,19 +110,11 @@ class TransferServiceTest {
         TransferRequest request = createTransferRequest(
                 destinationAccount.getAccountNumber(),
                 new BigDecimal("500.00"),
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
-        String requestHash = requestHasher.hashRequest(String.join(
-                        "|",
-                        TransactionType.TRANSFER.name(),
-                        sourceAccount.getAccountNumber(),
-                        destinationAccount.getAccountNumber(),
-                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
-                        request.currency().name(),
-                        request.note().trim()
-                )
-        );
+        String requestHash = hash(sourceAccount, destinationAccount, request, null);
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(
                 sourceAccount.getAccountNumber(),
@@ -230,18 +227,7 @@ class TransferServiceTest {
         assertThat(idempotencyRecord.getBankTransaction())
                 .isSameAs(savedTransaction);
         assertThat(idempotencyRecord.getRequestHash())
-                .isEqualTo(
-                        requestHasher.hashRequest(String.join(
-                                        "|",
-                                        savedTransaction.getTransactionType().name(),
-                                        sourceAccount.getAccountNumber(),
-                                        destinationAccount.getAccountNumber(),
-                                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
-                                        request.currency().name(),
-                                        request.note().trim()
-                                )
-                        )
-                );
+                .isEqualTo(hash(sourceAccount, destinationAccount, request, null));
 
 
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(
@@ -263,7 +249,8 @@ class TransferServiceTest {
         TransferRequest request = createTransferRequest(
                 destinationAccountNumber,
                 new BigDecimal("500.00"),
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(sourceAccountNumber, email))
@@ -295,7 +282,8 @@ class TransferServiceTest {
         TransferRequest request = createTransferRequest(
                 sameAccountNumber,
                 new BigDecimal("500.00"),
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(
@@ -337,7 +325,8 @@ class TransferServiceTest {
         TransferRequest request = createTransferRequest(
                 destinationAccountNumber,
                 new BigDecimal("500.00"),
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(
@@ -367,105 +356,6 @@ class TransferServiceTest {
     }
 
     @Test
-    void transferThrowsInvalidTransferExceptionWhenSourceAndDestinationCurrenciesDiffer() {
-        String idempotencyKey = "11111111111111111111111111111111";
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
-        Account sourceAccount = createAccount(
-                "12345678900987",
-                SOURCE_LEDGER_REFERENCE,
-                CurrencyCode.TRY,
-                sourceCustomer
-        );
-        Account destinationAccount = createAccount(
-                "98765432100123",
-                DESTINATION_LEDGER_REFERENCE,
-                CurrencyCode.USD,
-                destinationCustomer
-        );
-        sourceAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
-
-        TransferRequest request = createTransferRequest(
-                destinationAccount.getAccountNumber(),
-                new BigDecimal("500.00"),
-                CurrencyCode.TRY
-        );
-
-        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(
-                sourceAccount.getAccountNumber(),
-                sourceCustomer.getEmail()
-        )).willReturn(Optional.of(sourceAccount));
-        given(accountRepository.findByAccountNumber(destinationAccount.getAccountNumber()))
-                .willReturn(Optional.of(destinationAccount));
-
-        assertThatThrownBy(() -> transferService.transfer(
-                request,
-                sourceAccount.getAccountNumber(),
-                sourceCustomer.getEmail(),
-                idempotencyKey
-        )).isInstanceOf(InvalidTransferException.class)
-                .hasMessage("Source and destination accounts must be in the same currency as request");
-
-        assertThat(sourceAccount.getBalance()).isEqualByComparingTo("1000.00");
-        assertThat(destinationAccount.getBalance()).isEqualByComparingTo("0.00");
-        verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(
-                sourceAccount.getAccountNumber(),
-                sourceCustomer.getEmail()
-        );
-        verify(accountRepository).findByAccountNumber(destinationAccount.getAccountNumber());
-        verify(accountRepository, never()).save(any(Account.class));
-
-        verifyNoInteractions(bankTransactionRepository, referenceGenerator, idempotencyService);
-    }
-
-    @Test
-    void transferThrowsInvalidTransferExceptionWhenRequestCurrencyDiffersFromAccountCurrency() {
-        String idempotencyKey = "11111111111111111111111111111111";
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
-        Account sourceAccount = createAccount(
-                "12345678900987",
-                SOURCE_LEDGER_REFERENCE,
-                CurrencyCode.TRY,
-                sourceCustomer
-        );
-        Account destinationAccount = createAccount(
-                "98765432100123",
-                DESTINATION_LEDGER_REFERENCE,
-                CurrencyCode.TRY,
-                destinationCustomer
-        );
-        sourceAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
-
-        TransferRequest request = createTransferRequest(
-                destinationAccount.getAccountNumber(),
-                new BigDecimal("500.00"),
-                CurrencyCode.USD
-        );
-
-        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(
-                sourceAccount.getAccountNumber(),
-                sourceCustomer.getEmail()
-        )).willReturn(Optional.of(sourceAccount));
-        given(accountRepository.findByAccountNumber(destinationAccount.getAccountNumber()))
-                .willReturn(Optional.of(destinationAccount));
-
-        assertThatThrownBy(() -> transferService.transfer(
-                request,
-                sourceAccount.getAccountNumber(),
-                sourceCustomer.getEmail(),
-                idempotencyKey
-        )).isInstanceOf(InvalidTransferException.class)
-                .hasMessage("Source and destination accounts must be in the same currency as request");
-
-        assertThat(sourceAccount.getBalance()).isEqualByComparingTo("1000.00");
-        assertThat(destinationAccount.getBalance()).isEqualByComparingTo("0.00");
-        verify(accountRepository, never()).save(any(Account.class));
-
-        verifyNoInteractions(bankTransactionRepository, referenceGenerator, idempotencyService);
-    }
-
-    @Test
     void transferThrowsInsufficientFundsWhenSourceBalanceIsLessThanAmount() {
         String idempotencyKey = "11111111111111111111111111111111";
         Customer sourceCustomer = createCustomer("source@example.com");
@@ -487,19 +377,11 @@ class TransferServiceTest {
         TransferRequest request = createTransferRequest(
                 destinationAccount.getAccountNumber(),
                 new BigDecimal("500.00"),
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
-        String requestHash = requestHasher.hashRequest(String.join(
-                        "|",
-                        TransactionType.TRANSFER.name(),
-                        sourceAccount.getAccountNumber(),
-                        destinationAccount.getAccountNumber(),
-                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
-                        request.currency().name(),
-                        request.note().trim()
-                )
-        );
+        String requestHash = hash(sourceAccount, destinationAccount, request, null);
 
         given(idempotencyService.findAndValidateRecord(idempotencyKey, sourceCustomer.getEmail(), requestHash))
                 .willReturn(Optional.empty());
@@ -543,7 +425,8 @@ class TransferServiceTest {
         TransferRequest request = createTransferRequest(
                 "98765432100123",
                 new BigDecimal("500.00"),
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         assertThatThrownBy(() -> transferService.transfer(request, "12345678900321", email, idempotencyKey))
@@ -576,7 +459,8 @@ class TransferServiceTest {
         TransferRequest request = createTransferRequest(
                 destinationAccount.getAccountNumber(),
                 new BigDecimal("500.00"),
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(sourceAccount.getAccountNumber(), sourceCustomer.getEmail()))
@@ -585,19 +469,7 @@ class TransferServiceTest {
         given(accountRepository.findByAccountNumber(destinationAccount.getAccountNumber()))
                 .willReturn(Optional.of(destinationAccount));
 
-        String requestHash = requestHasher.hashRequest(
-                String.join(
-                        "|",
-                        TransactionType.TRANSFER.name(),
-                        sourceAccount.getAccountNumber(),
-                        destinationAccount.getAccountNumber(),
-                        request.amount()
-                                .setScale(2, RoundingMode.UNNECESSARY)
-                                .toPlainString(),
-                        request.currency().name(),
-                        request.note().trim()
-                )
-        );
+        String requestHash = hash(sourceAccount, destinationAccount, request, null);
 
         BankTransaction savedTransaction = BankTransaction.createNew(
                 request.amount(),
@@ -707,13 +579,31 @@ class TransferServiceTest {
     private TransferRequest createTransferRequest(
             String destinationAccountNumber,
             BigDecimal amount,
-            CurrencyCode currency
+            CurrencyCode currency,
+            String lockId
     ) {
         return new TransferRequest(
                 amount,
                 destinationAccountNumber,
                 "Test",
-                currency
+                currency,
+                lockId
+        );
+    }
+
+    private String hash(Account sourceAccount, Account destinationAccount, TransferRequest request, String lockId) {
+        return requestHasher.hashRequest(String.join(
+                        "|",
+                        TransactionType.TRANSFER.name(),
+                        sourceAccount.getAccountNumber(),
+                        destinationAccount.getAccountNumber(),
+                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                        request.currency().name(),
+                        sourceAccount.getCurrency().name(),
+                        destinationAccount.getCurrency().name(),
+                        lockId != null ? lockId : "",
+                        request.note().trim()
+                )
         );
     }
 }

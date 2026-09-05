@@ -54,7 +54,8 @@ class TransferControllerTest {
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
                 "Test",
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         TransferResponse response = new TransferResponse(
@@ -114,7 +115,8 @@ class TransferControllerTest {
                 new BigDecimal("1000.000"),
                 targetAccountNumber.repeat(2),
                 "Test".repeat(100),
-                null
+                null,
+                ""
         );
 
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
@@ -131,7 +133,9 @@ class TransferControllerTest {
                 .andExpect(jsonPath("$.errors.amount").value("Amount must be a valid decimal number"))
                 .andExpect(jsonPath("$.errors.destinationAccountNumber").value("Account number must be exactly 14 digits"))
                 .andExpect(jsonPath("$.errors.note").value("Note must not exceed 255 characters"))
-                .andExpect(jsonPath("$.errors.currency").value("Currency cannot be null"));
+                .andExpect(jsonPath("$.errors.currency").value("Currency cannot be null"))
+                .andExpect(jsonPath("$.errors.lockId").value("Lock ID must be a valid UUID format"));
+
 
         verifyNoInteractions(transferService);
     }
@@ -146,7 +150,8 @@ class TransferControllerTest {
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
                 "Test",
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
@@ -169,7 +174,8 @@ class TransferControllerTest {
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
                 "Test",
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
@@ -201,7 +207,8 @@ class TransferControllerTest {
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
                 "Test",
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
@@ -232,7 +239,8 @@ class TransferControllerTest {
                 new BigDecimal("1000.00"),
                 sourceAccountNumber,
                 "Test",
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
@@ -254,38 +262,6 @@ class TransferControllerTest {
     }
 
     @Test
-    void transferReturnsInvalidTransferExceptionWhenCurrencyMismatch() throws Exception {
-        String idempotencyKey = "11111111111111111111111111111111";
-        String email = "source@example.com";
-        String sourceAccountNumber = "98765432100123";
-        String targetAccountNumber = "12345678900987";
-
-        TransferRequest request = new TransferRequest(
-                new BigDecimal("1000.00"),
-                targetAccountNumber,
-                "Test",
-                CurrencyCode.TRY
-        );
-
-        given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
-                .willThrow(new InvalidTransferException("Source and destination accounts must be in the same currency as request"));
-
-        mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Invalid transfer"))
-                .andExpect(jsonPath("$.detail").value("Source and destination accounts must be in the same currency as request"))
-                .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
-                .andExpect(jsonPath("$.status").value(400));
-
-        verify(transferService).transfer(request, sourceAccountNumber, email, idempotencyKey);
-    }
-
-    @Test
     void transferReturnsAccountNotFoundExceptionWhenTargetDoesNotExist() throws Exception {
         String idempotencyKey = "11111111111111111111111111111111";
         String email = "source@example.com";
@@ -296,7 +272,8 @@ class TransferControllerTest {
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
                 "Test",
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
@@ -327,7 +304,8 @@ class TransferControllerTest {
                 new BigDecimal("1000.00"),
                 targetAccountNumber,
                 "Test",
-                CurrencyCode.TRY
+                CurrencyCode.TRY,
+                null
         );
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccountNumber)
