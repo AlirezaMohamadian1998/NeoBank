@@ -47,7 +47,7 @@ class WithdrawalTransactionSafetyIntegrationTest extends TransactionIntegrationT
 
         creditAndSave(account, new BigDecimal("1000.00"));
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("200.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("200.00"), "Test", CurrencyCode.TRY, null);
 
         IdempotencyService idempotencyServiceSpy = AopTestUtils.getUltimateTargetObject(idempotencyService);
 
@@ -97,7 +97,7 @@ class WithdrawalTransactionSafetyIntegrationTest extends TransactionIntegrationT
 
         creditAndSave(account, new BigDecimal("1000.00"));
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("200.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("200.00"), "Test", CurrencyCode.TRY, null);
 
         IdempotencyService idempotencyServiceSpy = AopTestUtils.getUltimateTargetObject(idempotencyService);
 
@@ -195,8 +195,8 @@ class WithdrawalTransactionSafetyIntegrationTest extends TransactionIntegrationT
 
         creditAndSave(account, new BigDecimal("1000.00"));
 
-        WithdrawalRequest request1 = new WithdrawalRequest(new BigDecimal("200.00"), "Test");
-        WithdrawalRequest request2 = new WithdrawalRequest(new BigDecimal("300.00"), "Test");
+        WithdrawalRequest request1 = new WithdrawalRequest(new BigDecimal("200.00"), "Test", CurrencyCode.TRY, null);
+        WithdrawalRequest request2 = new WithdrawalRequest(new BigDecimal("300.00"), "Test", CurrencyCode.TRY, null);
 
         IdempotencyService idempotencyServiceSpy = AopTestUtils.getUltimateTargetObject(idempotencyService);
 
@@ -301,8 +301,8 @@ class WithdrawalTransactionSafetyIntegrationTest extends TransactionIntegrationT
         BigDecimal initialBalance = new BigDecimal("1000.00");
         creditAndSave(account, initialBalance);
 
-        WithdrawalRequest request1 = new WithdrawalRequest(new BigDecimal("600.00"), "Test");
-        WithdrawalRequest request2 = new WithdrawalRequest(new BigDecimal("500.00"), "Test");
+        WithdrawalRequest request1 = new WithdrawalRequest(new BigDecimal("600.00"), "Test", CurrencyCode.TRY, null);
+        WithdrawalRequest request2 = new WithdrawalRequest(new BigDecimal("500.00"), "Test", CurrencyCode.TRY, null);
 
         IdempotencyService idempotencyServiceSpy = AopTestUtils.getUltimateTargetObject(idempotencyService);
 

@@ -43,6 +43,7 @@ import java.util.Map;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -475,7 +476,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
         void authenticatedCustomerCanWithdrawFromOwnedAccount() throws Exception {
             creditAndSave(account, new BigDecimal("1000.00"));
 
-            WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("500.00"), "Test");
+            WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("500.00"), "Test", CurrencyCode.TRY, null);
 
             MvcResult withdrawMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
@@ -594,7 +595,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
             );
             customerRepository.save(customer2);
 
-            WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+            WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
             mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
@@ -624,7 +625,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
         void customerCannotWithdrawMoreThanOnceWithSameIdempotencyKeyAndSameRequest() throws Exception {
             creditAndSave(account, new BigDecimal("1000.00"));
 
-            WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("500.00"), "Test");
+            WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("500.00"), "Test", CurrencyCode.TRY, null);
 
             String firstResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)
@@ -667,8 +668,8 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
         void customerCannotUseTheSameIdempotencyKeyForDifferentWithdrawalRequests() throws Exception {
             creditAndSave(account, new BigDecimal("1000.00"));
 
-            WithdrawalRequest request1 = new WithdrawalRequest(new BigDecimal("500.00"), "Test");
-            WithdrawalRequest request2 = new WithdrawalRequest(new BigDecimal("250.00"), "Test");
+            WithdrawalRequest request1 = new WithdrawalRequest(new BigDecimal("500.00"), "Test", CurrencyCode.TRY, null);
+            WithdrawalRequest request2 = new WithdrawalRequest(new BigDecimal("250.00"), "Test", CurrencyCode.TRY, null);
 
             mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
                             .contentType(MediaType.APPLICATION_JSON)

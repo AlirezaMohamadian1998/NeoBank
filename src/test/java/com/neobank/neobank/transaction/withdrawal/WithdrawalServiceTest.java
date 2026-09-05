@@ -5,6 +5,7 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
@@ -58,6 +59,9 @@ class WithdrawalServiceTest {
     @Mock
     private InternalAccountRepository internalAccountRepository;
 
+    @Mock
+    private FxRateService fxRateService;
+
     private final RequestHasher requestHasher = new RequestHasher();
 
     private WithdrawalService withdrawalService;
@@ -78,7 +82,8 @@ class WithdrawalServiceTest {
                 ledgerPostingService,
                 idempotencyService,
                 requestHasher,
-                internalAccountRepository
+                internalAccountRepository,
+                fxRateService
         );
     }
 
@@ -125,16 +130,9 @@ class WithdrawalServiceTest {
                 internalLedgerAccount
         );
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
-        String requestHash = requestHasher.hashRequest(String.join(
-                        "|",
-                        TransactionType.WITHDRAWAL.name(),
-                        accountNumber,
-                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
-                        request.note().trim()
-                )
-        );
+        String requestHash = hash(request, account, null);
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
@@ -269,16 +267,7 @@ class WithdrawalServiceTest {
                 .isSameAs(savedTransaction);
 
         assertThat(idempotencyRecord.getRequestHash())
-                .isEqualTo(
-                        requestHasher.hashRequest(String.join(
-                                        "|",
-                                        savedTransaction.getTransactionType().name(),
-                                        accountNumber,
-                                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
-                                        request.note().trim()
-                                )
-                        )
-                );
+                .isEqualTo(hash(request, account, null));
 
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
 
@@ -328,16 +317,9 @@ class WithdrawalServiceTest {
                 internalLedgerAccount
         );
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
-        String requestHash = requestHasher.hashRequest(String.join(
-                        "|",
-                        TransactionType.WITHDRAWAL.name(),
-                        accountNumber,
-                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
-                        request.note().trim()
-                )
-        );
+        String requestHash = hash(request, account, null);
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
@@ -378,7 +360,7 @@ class WithdrawalServiceTest {
         String accountNumber = "12345678900987";
         String idempotencyKey = "11111111111111111111111111111111";
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.empty());
@@ -400,7 +382,7 @@ class WithdrawalServiceTest {
         String accountNumber = "12345678900987";
         String idempotencyKey = "11111111111111!11111111111111111";
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
         assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
                 .isInstanceOf(InvalidIdempotencyKeyException.class)
@@ -447,18 +429,9 @@ class WithdrawalServiceTest {
 
         internalLedgerAccount.debit(new BigDecimal("10000.00"));
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
-        String requestHash = requestHasher
-                .hashRequest(String
-                        .join(
-                                "|",
-                                TransactionType.WITHDRAWAL.name(),
-                                accountNumber,
-                                request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
-                                request.note().trim()
-                        )
-                );
+        String requestHash = hash(request, account, null);
 
         BankTransaction transaction = BankTransaction.createNew(
                 request.amount(),
@@ -535,5 +508,18 @@ class WithdrawalServiceTest {
         verify(idempotencyService, never()).save(any());
 
         verifyNoInteractions(referenceGenerator, internalAccountRepository);
+    }
+
+    private String hash(WithdrawalRequest request, Account account, String lockId) {
+        return requestHasher.hashRequest(String.join(
+                "|",
+                TransactionType.WITHDRAWAL.name(),
+                account.getAccountNumber(),
+                request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                request.requestedCurrency().name(),
+                account.getCurrency().name(),
+                lockId == null ? "" : lockId,
+                request.note().trim()
+        ));
     }
 }
