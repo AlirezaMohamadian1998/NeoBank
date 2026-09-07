@@ -48,7 +48,9 @@ class DepositControllerTest {
         String email = "customer@example.com";
         DepositRequest request = new DepositRequest(
                 new BigDecimal("1000.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         DepositResponse response = new DepositResponse(
@@ -93,7 +95,9 @@ class DepositControllerTest {
 
         DepositRequest request = new DepositRequest(
                 new BigDecimal("1000.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         given(depositService.deposit(request, accountNumber, email, idempotencyKey))
@@ -122,7 +126,9 @@ class DepositControllerTest {
 
         DepositRequest request = new DepositRequest(
                 new BigDecimal("-1000.00"),
-                "Test".repeat(100)
+                "Test".repeat(100),
+                null,
+                ""
         );
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", accountNumber)
@@ -134,6 +140,8 @@ class DepositControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.errors.amount").value("Amount must be a positive number"))
                 .andExpect(jsonPath("$.errors.note").value("Note must not exceed 255 characters"))
+                .andExpect(jsonPath("$.errors.lockId").value("Lock ID must be a valid UUID format"))
+                .andExpect(jsonPath("$.errors.requestedCurrency").value("Currency cannot be null"))
                 .andExpect(jsonPath("$.title").value("Validation failed"))
                 .andExpect(jsonPath("$.detail").value("Validation failed for one or more fields."))
                 .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900321/deposits"))
@@ -149,7 +157,9 @@ class DepositControllerTest {
 
         DepositRequest request = new DepositRequest(
                 new BigDecimal("1000.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", accountNumber)
@@ -168,7 +178,9 @@ class DepositControllerTest {
 
         DepositRequest request = new DepositRequest(
                 new BigDecimal("1000.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", accountNumber)

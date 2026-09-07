@@ -45,7 +45,8 @@ public abstract class TransactionIntegrationTestSupport {
 
     protected Account account;
     protected Customer customer;
-    protected InternalAccount internalAccount;
+    protected InternalAccount internalAccountTRY;
+    protected InternalAccount internalAccountUSD;
 
     @BeforeEach
     protected void setUpTransactionIntegrationFixture() {
@@ -79,17 +80,30 @@ public abstract class TransactionIntegrationTestSupport {
                 )
         );
 
-        LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
+        LedgerAccount internalLedgerAccountTRY = LedgerAccount.createNew(
                 "9f3c8a21d9e64b5fa2c17e9084bd6a33",
                 LedgerAccountType.ASSET,
                 CurrencyCode.TRY
         );
 
-        internalLedgerAccount.debit(new BigDecimal("10000.00"));
+        internalLedgerAccountTRY.debit(new BigDecimal("10000.00"));
 
-        internalAccount = internalAccountRepository.save(InternalAccount.createNew(
+        internalAccountTRY = internalAccountRepository.save(InternalAccount.createNew(
                 InternalAccountPurpose.SETTLEMENT,
-                internalLedgerAccount
+                internalLedgerAccountTRY
+        ));
+
+        LedgerAccount internalLedgerAccountUSD = LedgerAccount.createNew(
+                "9c3c8a21d9e64b5fa2c17e9084bd6d33",
+                LedgerAccountType.ASSET,
+                CurrencyCode.USD
+        );
+
+        internalLedgerAccountUSD.debit(new BigDecimal("10000.00"));
+
+        internalAccountUSD = internalAccountRepository.save(InternalAccount.createNew(
+                InternalAccountPurpose.SETTLEMENT,
+                internalLedgerAccountUSD
         ));
     }
 

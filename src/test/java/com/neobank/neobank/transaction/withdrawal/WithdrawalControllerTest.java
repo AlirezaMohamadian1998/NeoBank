@@ -51,7 +51,9 @@ class WithdrawalControllerTest {
 
         WithdrawalRequest request = new WithdrawalRequest(
                 new BigDecimal("150.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         WithdrawalResponse response = new WithdrawalResponse(
@@ -104,7 +106,9 @@ class WithdrawalControllerTest {
 
         WithdrawalRequest request = new WithdrawalRequest(
                 new BigDecimal("-1000.00"),
-                "Test".repeat(100)
+                "Test".repeat(100),
+                null,
+                ""
         );
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", accountNumber)
@@ -119,6 +123,8 @@ class WithdrawalControllerTest {
                 .andExpect(jsonPath("$.title").value("Validation failed"))
                 .andExpect(jsonPath("$.detail").value("Validation failed for one or more fields."))
                 .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900987/withdrawals"))
+                .andExpect(jsonPath("$.errors.lockId").value("Lock ID must be a valid UUID format"))
+                .andExpect(jsonPath("$.errors.requestedCurrency").value("Currency must not be null"))
                 .andExpect(jsonPath("$.status").value(400));
 
         verifyNoInteractions(withdrawalService);
@@ -132,7 +138,9 @@ class WithdrawalControllerTest {
 
         WithdrawalRequest request = new WithdrawalRequest(
                 new BigDecimal("1000.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         given(withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
@@ -160,7 +168,9 @@ class WithdrawalControllerTest {
 
         WithdrawalRequest request = new WithdrawalRequest(
                 new BigDecimal("1000.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", accountNumber)
@@ -180,7 +190,9 @@ class WithdrawalControllerTest {
 
         WithdrawalRequest request = new WithdrawalRequest(
                 new BigDecimal("1000.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         given(withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
@@ -208,7 +220,9 @@ class WithdrawalControllerTest {
 
         WithdrawalRequest request = new WithdrawalRequest(
                 new BigDecimal("150.00"),
-                "Test"
+                "Test",
+                CurrencyCode.TRY,
+                null
         );
 
         mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", accountNumber)

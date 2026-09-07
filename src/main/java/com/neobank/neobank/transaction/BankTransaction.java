@@ -40,11 +40,15 @@ public class BankTransaction extends BaseEntity {
     @Column(nullable = false, unique = true, updatable = false, length = 32)
     private String reference;
 
-    @Column(updatable = false, length = 255)
+    @Column(updatable = false)
     private String note;
 
     @OneToMany(mappedBy = "bankTransaction", fetch = FetchType.LAZY, cascade = CascadeType.PERSIST)
     private List<LedgerEntry> entries;
+
+    @OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.PERSIST)
+    @JoinColumn(name = "fx_info_id", updatable = false, unique = true)
+    private FxInfo fxInfo;
 
     public List<LedgerEntry> getEntries() {
         return Collections.unmodifiableList(entries);
@@ -107,7 +111,8 @@ public class BankTransaction extends BaseEntity {
                 transactionType,
                 reference,
                 normalizedNote,
-                new ArrayList<>()
+                new ArrayList<>(),
+                null
         );
     }
 
@@ -135,6 +140,26 @@ public class BankTransaction extends BaseEntity {
 
     }
 
+    public void addFxInfo(FxInfo fxInfo) {
+        if(status != TransactionStatus.PENDING) {
+            throw new IllegalStateException("Transaction is not pending");
+        }
+
+        if(fxInfo == null) {
+            throw new IllegalArgumentException("Fx info must not be null");
+        }
+
+        if(this.fxInfo != null) {
+            throw new IllegalStateException("Fx info is already attached");
+        }
+
+        if(getFxRate(fxInfo, CurrencyContext.REQUEST).getCurrency() != requestedCurrency) {
+            throw new IllegalArgumentException("The currency of element with REQUEST currency context must match the requested currency");
+        }
+
+        this.fxInfo = fxInfo;
+    }
+
     public void complete() {
         if (status != TransactionStatus.PENDING) {
             throw new IllegalStateException("Transaction is not pending");
@@ -152,23 +177,66 @@ public class BankTransaction extends BaseEntity {
                         entry.getCurrency() != requestedCurrency
                 );
 
-        if (containsDifferentCurrency) {
-            throw new IllegalStateException("All entries must use the transaction currency");
+        if(!containsDifferentCurrency && fxInfo != null) {
+            throw new IllegalStateException("Fx info must be null when the currencies are same");
         }
 
-        BigDecimal totalAmount =
-                entries
-                        .stream()
-                        .map(entry ->
-                                entry.getDirection() == EntryDirection.CREDIT
-                                        ? entry.getAmount()
-                                        : entry.getAmount().negate())
-                        .reduce(BigDecimal.ZERO, (a, b) -> a.add(b));
+        LedgerEntry debitEntry = getEntry(EntryDirection.DEBIT);
+        LedgerEntry creditEntry = getEntry(EntryDirection.CREDIT);
 
-        if(totalAmount.compareTo(BigDecimal.ZERO) != 0) {
-            throw new IllegalStateException("Transaction debits and credits must balance");
+        if(containsDifferentCurrency) {
+            if(fxInfo == null) {
+                throw new IllegalStateException("Fx info must not be null when the currencies differ");
+            }
+
+            if(getFxRate(fxInfo, CurrencyContext.SOURCE).getCurrency() != debitEntry.getCurrency()) {
+                throw new IllegalStateException("Debit entry currency must match the SOURCE FX currency");
+            }
+
+            if(getFxRate(fxInfo, CurrencyContext.DESTINATION).getCurrency() != creditEntry.getCurrency()) {
+                throw new IllegalStateException("Credit entry currency must match the DESTINATION FX currency");
+            }
+        }
+
+        BigDecimal sourceRate = fxInfo != null
+                ? fxInfo.getRate(CurrencyContext.SOURCE)
+                : BigDecimal.ONE;
+
+        BigDecimal destinationRate = fxInfo != null
+                ? fxInfo.getRate(CurrencyContext.DESTINATION)
+                : BigDecimal.ONE;
+
+        BigDecimal expectedDebitAmount = requestedAmount
+                .multiply(sourceRate)
+                .setScale(2, RoundingMode.HALF_EVEN);
+
+        BigDecimal expectedCreditAmount = requestedAmount
+                .multiply(destinationRate)
+                .setScale(2, RoundingMode.HALF_EVEN);
+
+        if (debitEntry.getAmount().compareTo(expectedDebitAmount) != 0) {
+            throw new IllegalStateException("Debit entry amount does not match the expected amount");
+        }
+
+        if (creditEntry.getAmount().compareTo(expectedCreditAmount) != 0) {
+            throw new IllegalStateException("Credit entry amount does not match the expected amount");
         }
 
         status = TransactionStatus.COMPLETED;
+    }
+
+    private FxRate getFxRate(FxInfo fxInfo, CurrencyContext currencyContext) {
+        return fxInfo.getRates()
+                .stream()
+                .filter(fxRate -> fxRate.getCurrencyContext() == currencyContext)
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private LedgerEntry getEntry(EntryDirection direction) {
+        return entries.stream()
+                .filter(entry -> entry.getDirection() == direction)
+                .findFirst()
+                .orElseThrow();
     }
 }

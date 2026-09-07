@@ -5,6 +5,9 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.fx.FxRateLockUnavailableException;
+import com.neobank.neobank.fx.FxRateService;
+import com.neobank.neobank.fx.dto.FxRateLockResponse;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
@@ -32,10 +35,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
@@ -58,6 +63,9 @@ class WithdrawalServiceTest {
     @Mock
     private InternalAccountRepository internalAccountRepository;
 
+    @Mock
+    private FxRateService fxRateService;
+
     private final RequestHasher requestHasher = new RequestHasher();
 
     private WithdrawalService withdrawalService;
@@ -78,7 +86,8 @@ class WithdrawalServiceTest {
                 ledgerPostingService,
                 idempotencyService,
                 requestHasher,
-                internalAccountRepository
+                internalAccountRepository,
+                fxRateService
         );
     }
 
@@ -125,16 +134,9 @@ class WithdrawalServiceTest {
                 internalLedgerAccount
         );
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
-        String requestHash = requestHasher.hashRequest(String.join(
-                        "|",
-                        TransactionType.WITHDRAWAL.name(),
-                        accountNumber,
-                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
-                        request.note().trim()
-                )
-        );
+        String requestHash = hash(request, account, null);
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
@@ -269,16 +271,7 @@ class WithdrawalServiceTest {
                 .isSameAs(savedTransaction);
 
         assertThat(idempotencyRecord.getRequestHash())
-                .isEqualTo(
-                        requestHasher.hashRequest(String.join(
-                                        "|",
-                                        savedTransaction.getTransactionType().name(),
-                                        accountNumber,
-                                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
-                                        request.note().trim()
-                                )
-                        )
-                );
+                .isEqualTo(hash(request, account, null));
 
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
 
@@ -328,16 +321,9 @@ class WithdrawalServiceTest {
                 internalLedgerAccount
         );
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
-        String requestHash = requestHasher.hashRequest(String.join(
-                        "|",
-                        TransactionType.WITHDRAWAL.name(),
-                        accountNumber,
-                        request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
-                        request.note().trim()
-                )
-        );
+        String requestHash = hash(request, account, null);
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
@@ -378,7 +364,7 @@ class WithdrawalServiceTest {
         String accountNumber = "12345678900987";
         String idempotencyKey = "11111111111111111111111111111111";
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.empty());
@@ -400,7 +386,7 @@ class WithdrawalServiceTest {
         String accountNumber = "12345678900987";
         String idempotencyKey = "11111111111111!11111111111111111";
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
         assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
                 .isInstanceOf(InvalidIdempotencyKeyException.class)
@@ -447,18 +433,9 @@ class WithdrawalServiceTest {
 
         internalLedgerAccount.debit(new BigDecimal("10000.00"));
 
-        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test");
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
-        String requestHash = requestHasher
-                .hashRequest(String
-                        .join(
-                                "|",
-                                TransactionType.WITHDRAWAL.name(),
-                                accountNumber,
-                                request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
-                                request.note().trim()
-                        )
-                );
+        String requestHash = hash(request, account, null);
 
         BankTransaction transaction = BankTransaction.createNew(
                 request.amount(),
@@ -535,5 +512,562 @@ class WithdrawalServiceTest {
         verify(idempotencyService, never()).save(any());
 
         verifyNoInteractions(referenceGenerator, internalAccountRepository);
+    }
+
+
+    @Test
+    void crossCurrencyWithdrawalUsesRateLockAndPostsConvertedAmounts() {
+        String email = "customer@example.com";
+        String accountNumber = "12345678900987";
+        String idempotencyKey = "11111111111111111111111111111111";
+        String transactionReference = "6f3c8a21d9e64b5fa2c17e9084bd6a30";
+        String customerEntryReference = "9f3c8a21d9e64b5fa2c17e9084bd6a33";
+        String internalEntryReference = "5f3c8a21d9e64b5fa2c17e9084bd6a34";
+        String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
+
+        Customer customer = Customer.createNew(
+                email,
+                "{bcrypt}raw-password123",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+        ledgerAccount.credit(new BigDecimal("49000.00"));
+
+        Account account = Account.createNew(
+                accountNumber,
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                ledgerAccount
+        );
+
+        LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
+                "7f3c8a21d9e64b5fa2c17e9084bd6a31",
+                LedgerAccountType.ASSET,
+                CurrencyCode.USD
+        );
+
+        internalLedgerAccount.debit(new BigDecimal("10000.00"));
+
+        InternalAccount internalAccount = InternalAccount.createNew(
+                InternalAccountPurpose.SETTLEMENT,
+                internalLedgerAccount
+        );
+
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.USD, lockId);
+
+        FxRateLockResponse fxResponse = new FxRateLockResponse(
+                lockId,
+                Instant.parse("2026-09-05T12:00:00Z"),
+                request.requestedCurrency(),
+                Map.of(
+                        CurrencyCode.USD, BigDecimal.ONE,
+                        CurrencyCode.TRY, new BigDecimal("48.00"),
+                        CurrencyCode.GBP, new BigDecimal("0.75"),
+                        CurrencyCode.EUR, new BigDecimal("0.85")
+                )
+        );
+
+        String requestHash = hash(request, account, lockId);
+
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
+                .willReturn(Optional.empty());
+
+        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
+                .willReturn(Optional.of(account));
+
+        given(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.USD))
+                .willReturn(Optional.of(internalAccount));
+
+        given(fxRateService.getCachedRate(email, lockId))
+                .willReturn(fxResponse);
+
+        given(referenceGenerator.generate())
+                .willReturn(transactionReference, customerEntryReference, internalEntryReference);
+
+        given(bankTransactionRepository.save(any(BankTransaction.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        WithdrawalResponse response = withdrawalService.withdraw(request, accountNumber, email, idempotencyKey);
+
+        verify(bankTransactionRepository).save(bankTransactionCaptor.capture());
+
+        BankTransaction transaction = bankTransactionCaptor.getValue();
+
+        assertThat(transaction.getEntries())
+                .hasSize(2);
+
+        LedgerEntry customerEntry = transaction.getEntries()
+                .stream()
+                .filter(entry -> entry.getDirection() == EntryDirection.DEBIT)
+                .findFirst()
+                .orElseThrow();
+
+        LedgerEntry internalEntry = transaction.getEntries()
+                .stream()
+                .filter(entry -> entry.getDirection() == EntryDirection.CREDIT)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(response.transactionReference())
+                .isEqualTo(transaction.getReference());
+
+        assertThat(response.entryReference())
+                .isEqualTo(customerEntry.getReference());
+
+        assertThat(response.transactionType())
+                .isSameAs(transaction.getTransactionType());
+
+        assertThat(response.accountNumber())
+                .isEqualTo(account.getAccountNumber());
+
+        assertThat(response.amount())
+                .isEqualByComparingTo(customerEntry.getAmount());
+
+        assertThat(response.currency())
+                .isSameAs(customerEntry.getCurrency());
+
+        assertThat(response.balanceAfter())
+                .isEqualByComparingTo(customerEntry.getBalanceAfter());
+
+        assertThat(response.note())
+                .isEqualTo(transaction.getNote());
+
+        assertThat(transaction.getRequestedAmount())
+                .isEqualByComparingTo(request.amount());
+
+        assertThat(transaction.getRequestedCurrency())
+                .isSameAs(request.requestedCurrency());
+
+        assertThat(transaction.getStatus())
+                .isSameAs(TransactionStatus.COMPLETED);
+
+        assertThat(transaction.getTransactionType())
+                .isSameAs(TransactionType.WITHDRAWAL);
+
+        assertThat(transaction.getReference())
+                .isEqualTo(transactionReference);
+
+        assertThat(transaction.getNote())
+                .isEqualTo(request.note());
+
+        assertThat(transaction.getFxInfo().getLockId())
+                .isEqualTo(lockId);
+
+        assertThat(transaction.getFxInfo().getRates())
+                .extracting(FxRate::getCurrencyContext, FxRate::getCurrency, FxRate::getRate)
+                .containsExactlyInAnyOrder(
+                        tuple(CurrencyContext.REQUEST, request.requestedCurrency(), BigDecimal.ONE),
+                        tuple(CurrencyContext.DESTINATION, request.requestedCurrency(), BigDecimal.ONE),
+                        tuple(CurrencyContext.SOURCE, account.getCurrency(), new BigDecimal("48.00"))
+                );
+
+        assertThat(customerEntry.getReference())
+                .isEqualTo(customerEntryReference);
+
+        assertThat(customerEntry.getAmount())
+                .isEqualByComparingTo(request.amount()
+                        .multiply(fxResponse.rates().get(account.getCurrency()))
+                        .setScale(2, RoundingMode.HALF_EVEN)
+                );
+
+        assertThat(customerEntry.getBalanceAfter())
+                .isEqualByComparingTo(account.getBalance());
+
+        assertThat(customerEntry.getDirection())
+                .isSameAs(EntryDirection.DEBIT);
+
+        assertThat(customerEntry.getCurrency())
+                .isSameAs(account.getCurrency());
+
+        assertThat(customerEntry.getLedgerAccount())
+                .isSameAs(ledgerAccount);
+
+        assertThat(customerEntry.getBankTransaction())
+                .isSameAs(transaction);
+
+        assertThat(internalEntry.getReference())
+                .isEqualTo(internalEntryReference);
+
+        assertThat(internalEntry.getAmount())
+                .isEqualByComparingTo(request.amount());
+
+        assertThat(internalEntry.getBalanceAfter())
+                .isEqualByComparingTo(internalAccount.getBalance());
+
+        assertThat(internalEntry.getDirection())
+                .isSameAs(EntryDirection.CREDIT);
+
+        assertThat(internalEntry.getCurrency())
+                .isSameAs(request.requestedCurrency());
+
+        assertThat(internalEntry.getLedgerAccount())
+                .isSameAs(internalLedgerAccount);
+
+        assertThat(internalEntry.getBankTransaction())
+                .isSameAs(transaction);
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("1000.00"));
+
+        assertThat(internalAccount.getBalance())
+                .isEqualByComparingTo(new BigDecimal("9000.00"));
+
+        verify(idempotencyService).save(idempotencyRecordCaptor.capture());
+
+        IdempotencyRecord idempotencyRecord = idempotencyRecordCaptor.getValue();
+
+        assertThat(idempotencyRecord.getIdempotencyKey())
+                .isEqualTo(idempotencyKey);
+
+        assertThat(idempotencyRecord.getCustomer())
+                .isSameAs(customer);
+
+        assertThat(idempotencyRecord.getBankTransaction())
+                .isSameAs(transaction);
+
+        assertThat(idempotencyRecord.getRequestHash())
+                .isEqualTo(hash(request, account, lockId));
+
+        verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
+
+        verify(fxRateService).getCachedRate(email, lockId);
+
+        verify(referenceGenerator, times(3)).generate();
+
+        verify(accountRepository, never()).save(any(Account.class));
+
+        verify(internalAccountRepository, times(1)).findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.USD);
+    }
+
+    @Test
+    void crossCurrencyIdempotentReplayDoesNotReloadRateLock() {
+        String email = "customer@example.com";
+        String accountNumber = "12345678900987";
+        String idempotencyKey = "11111111111111111111111111111111";
+        String transactionReference = "6f3c8a21d9e64b5fa2c17e9084bd6a30";
+        String customerEntryReference = "9f3c8a21d9e64b5fa2c17e9084bd6a33";
+        String internalEntryReference = "5f3c8a21d9e64b5fa2c17e9084bd6a34";
+        String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
+
+        Customer customer = Customer.createNew(
+                email,
+                "{bcrypt}raw-password123",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+        ledgerAccount.credit(new BigDecimal("49000.00"));
+
+        Account account = Account.createNew(
+                accountNumber,
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                ledgerAccount
+        );
+
+        LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
+                "7f3c8a21d9e64b5fa2c17e9084bd6a31",
+                LedgerAccountType.ASSET,
+                CurrencyCode.USD
+        );
+
+        internalLedgerAccount.debit(new BigDecimal("10000.00"));
+
+        InternalAccount internalAccount = InternalAccount.createNew(
+                InternalAccountPurpose.SETTLEMENT,
+                internalLedgerAccount
+        );
+
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.USD, lockId);
+
+        String requestHash = hash(request, account, lockId);
+
+        FxInfo fxInfo = FxInfo.createNew(
+                lockId,
+                Set.of(
+                        FxRate.createNew(
+                                CurrencyContext.REQUEST,
+                                request.requestedCurrency(),
+                                BigDecimal.ONE
+                        ),
+                        FxRate.createNew(
+                                CurrencyContext.DESTINATION,
+                                request.requestedCurrency(),
+                                BigDecimal.ONE
+                        ),
+                        FxRate.createNew(
+                                CurrencyContext.SOURCE,
+                                account.getCurrency(),
+                                new BigDecimal("48.00")
+                        )
+                )
+        );
+
+        BankTransaction transaction = BankTransaction.createNew(
+                request.amount(),
+                request.requestedCurrency(),
+                TransactionType.WITHDRAWAL,
+                transactionReference,
+                request.note()
+        );
+
+        transaction.addFxInfo(fxInfo);
+
+        BigDecimal customerAccountBalanceAfter = ledgerAccount.debit(request.amount().multiply(fxInfo.getRate(CurrencyContext.SOURCE)).setScale(2, RoundingMode.HALF_EVEN));
+        BigDecimal internalAccountBalanceAfter = internalLedgerAccount.credit(request.amount());
+
+        transaction.addEntry(
+                customerEntryReference,
+                request.amount().multiply(fxInfo.getRate(CurrencyContext.SOURCE)).setScale(2, RoundingMode.HALF_EVEN),
+                customerAccountBalanceAfter,
+                EntryDirection.DEBIT,
+                ledgerAccount
+        );
+
+        transaction.addEntry(
+                internalEntryReference,
+                request.amount(),
+                internalAccountBalanceAfter,
+                EntryDirection.CREDIT,
+                internalLedgerAccount
+        );
+
+        transaction.complete();
+
+        IdempotencyRecord idempotencyRecord = IdempotencyRecord.createNew(
+                idempotencyKey,
+                requestHash,
+                customer,
+                transaction
+        );
+
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
+                .willReturn(Optional.of(idempotencyRecord));
+
+        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
+                .willReturn(Optional.of(account));
+
+        ReflectionTestUtils.setField(ledgerAccount, "id", 1L);
+
+        WithdrawalResponse response = withdrawalService.withdraw(request, accountNumber, email, idempotencyKey);
+
+        assertThat(account.getBalance())
+                .isEqualByComparingTo(new BigDecimal("1000.00"));
+
+        assertThat(internalAccount.getBalance())
+                .isEqualByComparingTo(new BigDecimal("9000.00"));
+
+        assertThat(response.balanceAfter())
+                .isEqualByComparingTo(account.getBalance());
+
+        assertThat(response.accountNumber())
+                .isEqualTo(account.getAccountNumber());
+
+        assertThat(response.transactionReference())
+                .isEqualTo(transactionReference);
+
+        assertThat(response.entryReference())
+                .isEqualTo(customerEntryReference);
+
+        assertThat(response.transactionType())
+                .isSameAs(TransactionType.WITHDRAWAL);
+
+        verify(bankTransactionRepository, never()).save(any());
+
+        verify(idempotencyService, never()).save(any());
+
+        verifyNoInteractions(referenceGenerator, internalAccountRepository, fxRateService);
+    }
+
+    @Test
+    void crossCurrencyWithdrawalWithoutLockIsRejected() {
+        String accountNumber = "12345678900321";
+        String email = "customer@example.com";
+        String idempotencyKey = "11111111111111111111111111111111";
+
+        WithdrawalRequest request = new WithdrawalRequest(
+                new BigDecimal("1000.00"),
+                "Test",
+                CurrencyCode.USD,
+                null
+        );
+
+        Customer customer = Customer.createNew(
+                email,
+                "{bcrypt}encoded-password",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        Account account = Account.createNew(
+                accountNumber,
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                ledgerAccount
+        );
+
+        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
+                .willReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
+                .isInstanceOf(FxRateLockUnavailableException.class)
+                .hasMessage("Lock ID is required for cross-currency operation.");
+
+        verifyNoInteractions(bankTransactionRepository, internalAccountRepository, referenceGenerator, fxRateService, idempotencyService);
+    }
+
+    @Test
+    void sameCurrencyWithdrawalWithLockIsRejected() {
+        String accountNumber = "12345678900321";
+        String email = "customer@example.com";
+        String idempotencyKey = "11111111111111111111111111111111";
+        String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
+
+        WithdrawalRequest request = new WithdrawalRequest(
+                new BigDecimal("1000.00"),
+                "Test",
+                CurrencyCode.TRY,
+                lockId
+        );
+
+        Customer customer = Customer.createNew(
+                email,
+                "{bcrypt}encoded-password",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        Account account = Account.createNew(
+                accountNumber,
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                ledgerAccount
+        );
+
+        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
+                .willReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Lock ID is not required for same currency operation.");
+
+        verifyNoInteractions(bankTransactionRepository, internalAccountRepository, referenceGenerator, fxRateService, idempotencyService);
+    }
+
+    @Test
+    void crossCurrencyWithdrawalRejectsLockWithDifferentBaseCurrency() {
+        String email = "customer@example.com";
+        String accountNumber = "12345678900987";
+        String idempotencyKey = "11111111111111111111111111111111";
+        String transactionReference = "6f3c8a21d9e64b5fa2c17e9084bd6a30";
+        String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
+
+        Customer customer = Customer.createNew(
+                email,
+                "{bcrypt}raw-password123",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+        ledgerAccount.credit(new BigDecimal("49000.00"));
+
+        Account account = Account.createNew(
+                accountNumber,
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                ledgerAccount
+        );
+
+        LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
+                "7f3c8a21d9e64b5fa2c17e9084bd6a31",
+                LedgerAccountType.ASSET,
+                CurrencyCode.USD
+        );
+
+        internalLedgerAccount.debit(new BigDecimal("10000.00"));
+
+        InternalAccount internalAccount = InternalAccount.createNew(
+                InternalAccountPurpose.SETTLEMENT,
+                internalLedgerAccount
+        );
+
+        WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.USD, lockId);
+
+        FxRateLockResponse fxResponse = new FxRateLockResponse(
+                lockId,
+                Instant.parse("2026-09-05T12:00:00Z"),
+                CurrencyCode.EUR,
+                Map.of(
+                        CurrencyCode.USD, BigDecimal.ONE,
+                        CurrencyCode.TRY, new BigDecimal("48.00"),
+                        CurrencyCode.GBP, new BigDecimal("0.75"),
+                        CurrencyCode.EUR, new BigDecimal("0.85")
+                )
+        );
+
+        String requestHash = hash(request, account, lockId);
+
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
+                .willReturn(Optional.empty());
+
+        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
+                .willReturn(Optional.of(account));
+
+        given(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.USD))
+                .willReturn(Optional.of(internalAccount));
+
+        given(fxRateService.getCachedRate(email, lockId))
+                .willReturn(fxResponse);
+
+        given(referenceGenerator.generate())
+                .willReturn(transactionReference);
+
+        assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
+                .isInstanceOf(FxRateLockUnavailableException.class)
+                .hasMessage("The base currency in the cached fx rate must be the same as the requested currency");
+
+        verifyNoInteractions(bankTransactionRepository);
+    }
+
+
+    private String hash(WithdrawalRequest request, Account account, String lockId) {
+        return requestHasher.hashRequest(String.join(
+                "|",
+                TransactionType.WITHDRAWAL.name(),
+                account.getAccountNumber(),
+                request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                request.requestedCurrency().name(),
+                account.getCurrency().name(),
+                lockId == null ? "" : lockId,
+                request.note().trim()
+        ));
     }
 }

@@ -1,9 +1,7 @@
 package com.neobank.neobank.transaction.deposit.dto;
 
-import jakarta.validation.constraints.Digits;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.Size;
+import com.neobank.neobank.shared.money.CurrencyCode;
+import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
 
@@ -15,6 +13,14 @@ public record DepositRequest(
         BigDecimal amount,
 
         @Size(max = 255, message = "Note must not exceed 255 characters")
-        String note
+        String note,
+
+        @NotNull(message = "Currency cannot be null")
+        CurrencyCode requestedCurrency,
+
+        @Pattern(regexp = "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                message = "Lock ID must be a valid UUID format"
+        )
+        String lockId
 ) {
 }

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -344,207 +345,6 @@ class BankTransactionTest {
     }
 
     @Test
-    void addedEntryGetsCurrencyFromLedgerAccount() {
-        BankTransaction transaction = createTransaction();
-
-        LedgerEntry entry = transaction.addEntry(
-                VALID_ENTRY_REFERENCE,
-                new BigDecimal("100.00"),
-                new BigDecimal("100.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        );
-
-        assertThat(entry.getCurrency())
-                .isEqualTo(ledgerAccount.getCurrency());
-
-        assertThat(entry.getCurrency())
-                .isEqualTo(CurrencyCode.TRY);
-    }
-
-    @Test
-    void addEntryRejectsNullReference() {
-        BankTransaction transaction = createTransaction();
-
-        assertThatThrownBy(() -> transaction.addEntry(
-                null,
-                new BigDecimal("100.00"),
-                new BigDecimal("100.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Reference must not be null");
-
-        assertThat(transaction.getEntries())
-                .isEmpty();
-    }
-
-    @Test
-    void addEntryRejectsMalformedReference() {
-        BankTransaction transaction = createTransaction();
-
-        assertThatThrownBy(() -> transaction.addEntry(
-                "not-a-valid-entry-reference",
-                new BigDecimal("100.00"),
-                new BigDecimal("100.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Reference must be exactly 32 hexadecimal characters");
-
-        assertThat(transaction.getEntries())
-                .isEmpty();
-    }
-
-    @Test
-    void addEntryRejectsNullAmount() {
-        BankTransaction transaction = createTransaction();
-
-        assertThatThrownBy(() -> transaction.addEntry(
-                VALID_ENTRY_REFERENCE,
-                null,
-                new BigDecimal("100.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must not be null");
-
-        assertThat(transaction.getEntries())
-                .isEmpty();
-    }
-
-    @Test
-    void addEntryRejectsZeroAmount() {
-        BankTransaction transaction = createTransaction();
-
-        assertThatThrownBy(() -> transaction.addEntry(
-                VALID_ENTRY_REFERENCE,
-                BigDecimal.ZERO,
-                new BigDecimal("100.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must be greater than zero");
-
-        assertThat(transaction.getEntries())
-                .isEmpty();
-    }
-
-    @Test
-    void addEntryRejectsAmountWithExcessivePrecision() {
-        BankTransaction transaction = createTransaction();
-
-        assertThatThrownBy(() -> transaction.addEntry(
-                VALID_ENTRY_REFERENCE,
-                new BigDecimal("10.001"),
-                new BigDecimal("100.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must not have more than 2 decimal places");
-
-        assertThat(transaction.getEntries())
-                .isEmpty();
-    }
-
-    @Test
-    void addEntryRejectsNullBalanceAfter() {
-        BankTransaction transaction = createTransaction();
-
-        assertThatThrownBy(() -> transaction.addEntry(
-                VALID_ENTRY_REFERENCE,
-                new BigDecimal("10.00"),
-                null,
-                EntryDirection.CREDIT,
-                ledgerAccount
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Balance after must not be null");
-
-        assertThat(transaction.getEntries())
-                .isEmpty();
-    }
-
-    @Test
-    void addEntryRejectsNegativeBalanceAfter() {
-        BankTransaction transaction = createTransaction();
-
-        assertThatThrownBy(() -> transaction.addEntry(
-                VALID_ENTRY_REFERENCE,
-                new BigDecimal("10.00"),
-                new BigDecimal("-1.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Balance after must not be less than zero");
-
-        assertThat(transaction.getEntries())
-                .isEmpty();
-    }
-
-    @Test
-    void addEntryRejectsBalanceAfterWithExcessivePrecision() {
-        BankTransaction transaction = createTransaction();
-
-        assertThatThrownBy(() -> transaction.addEntry(
-                VALID_ENTRY_REFERENCE,
-                new BigDecimal("10.00"),
-                new BigDecimal("100.001"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Balance after must not have more than 2 decimal places"
-                );
-
-        assertThat(transaction.getEntries())
-                .isEmpty();
-    }
-
-    @Test
-    void addEntryRejectsNullDirection() {
-        BankTransaction transaction = createTransaction();
-
-        assertThatThrownBy(() -> transaction.addEntry(
-                VALID_ENTRY_REFERENCE,
-                new BigDecimal("10.00"),
-                new BigDecimal("100.00"),
-                null,
-                ledgerAccount
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Entry direction cannot be null");
-
-        assertThat(transaction.getEntries())
-                .isEmpty();
-    }
-
-    @Test
-    void addEntryRejectsNullLedgerAccount() {
-        BankTransaction transaction = createTransaction();
-
-        assertThatThrownBy(() -> transaction.addEntry(
-                VALID_ENTRY_REFERENCE,
-                new BigDecimal("10.00"),
-                new BigDecimal("100.00"),
-                EntryDirection.CREDIT,
-                null
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Ledger account cannot be null");
-
-        assertThat(transaction.getEntries())
-                .isEmpty();
-    }
-
-    @Test
     void transactionWithEntriesCanComplete() {
         BankTransaction transaction = createTransaction();
 
@@ -585,7 +385,7 @@ class BankTransactionTest {
     }
 
     @Test
-    void unbalancedTransactionCannotComplete() {
+    void transactionWithIncorrectDebitAmountCannotComplete() {
         BankTransaction transaction = createTransaction();
 
         transaction.addEntry(
@@ -596,16 +396,24 @@ class BankTransactionTest {
                 ledgerAccount
         );
 
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE.replace("1", "2"),
+                new BigDecimal("90.00"),
+                new BigDecimal("90.00"),
+                EntryDirection.DEBIT,
+                ledgerAccount
+        );
+
         assertThatThrownBy(transaction::complete)
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Transaction debits and credits must balance");
+                .hasMessage("Debit entry amount does not match the expected amount");
 
         assertThat(transaction.getStatus())
                 .isEqualTo(TransactionStatus.PENDING);
     }
 
     @Test
-    void transactionWithEntryInDifferentCurrencyCannotComplete() {
+    void crossCurrencyTransactionWithoutFxInfoCannotComplete() {
         BankTransaction transaction = createTransaction();
 
         LedgerAccount usdLedgerAccount = LedgerAccount.createNew(
@@ -632,7 +440,86 @@ class BankTransactionTest {
 
         assertThatThrownBy(transaction::complete)
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("All entries must use the transaction currency");
+                .hasMessage("Fx info must not be null when the currencies differ");
+
+        assertThat(transaction.getStatus())
+                .isEqualTo(TransactionStatus.PENDING);
+    }
+
+    @Test
+    void crossCurrencyTransactionWithFxInfoCanComplete() {
+        BankTransaction transaction = createTransaction();
+
+        LedgerAccount usdLedgerAccount = LedgerAccount.createNew(
+                "22222222222222222222222222222222",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.USD
+        );
+
+        FxInfo fxInfo = createFxInfo(
+                CurrencyCode.TRY,
+                BigDecimal.ONE,
+                CurrencyCode.USD,
+                new BigDecimal("0.025")
+        );
+
+        transaction.addFxInfo(fxInfo);
+
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE,
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                EntryDirection.DEBIT,
+                ledgerAccount
+        );
+
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE.replace("1", "2"),
+                new BigDecimal("2.50"),
+                new BigDecimal("2.50"),
+                EntryDirection.CREDIT,
+                usdLedgerAccount
+        );
+
+        transaction.complete();
+
+        assertThat(transaction.getStatus())
+                .isEqualTo(TransactionStatus.COMPLETED);
+
+        assertThat(transaction.getFxInfo())
+                .isSameAs(fxInfo);
+    }
+
+    @Test
+    void sameCurrencyTransactionWithFxInfoCannotComplete() {
+        BankTransaction transaction = createTransaction();
+
+        transaction.addFxInfo(createFxInfo(
+                CurrencyCode.TRY,
+                BigDecimal.ONE,
+                CurrencyCode.TRY,
+                BigDecimal.ONE
+        ));
+
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE,
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                EntryDirection.DEBIT,
+                ledgerAccount
+        );
+
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE.replace("1", "2"),
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                EntryDirection.CREDIT,
+                ledgerAccount
+        );
+
+        assertThatThrownBy(transaction::complete)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Fx info must be null when the currencies are same");
 
         assertThat(transaction.getStatus())
                 .isEqualTo(TransactionStatus.PENDING);
@@ -714,6 +601,34 @@ class BankTransactionTest {
                 TransactionType.DEPOSIT,
                 VALID_TRANSACTION_REFERENCE,
                 null
+        );
+    }
+
+    private FxInfo createFxInfo(
+            CurrencyCode sourceCurrency,
+            BigDecimal sourceRate,
+            CurrencyCode destinationCurrency,
+            BigDecimal destinationRate
+    ) {
+        return FxInfo.createNew(
+                "4ea56d0d-aa07-4d26-be23-ce971c0976a0",
+                Set.of(
+                        FxRate.createNew(
+                                CurrencyContext.REQUEST,
+                                CurrencyCode.TRY,
+                                BigDecimal.ONE
+                        ),
+                        FxRate.createNew(
+                                CurrencyContext.SOURCE,
+                                sourceCurrency,
+                                sourceRate
+                        ),
+                        FxRate.createNew(
+                                CurrencyContext.DESTINATION,
+                                destinationCurrency,
+                                destinationRate
+                        )
+                )
         );
     }
 

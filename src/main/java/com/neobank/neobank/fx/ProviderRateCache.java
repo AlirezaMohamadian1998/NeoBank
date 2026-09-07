@@ -59,7 +59,7 @@ public class ProviderRateCache {
         return cache.get(CACHE_KEY);
     }
 
-    public Instant getExpiration(@NonNull FxProviderRates rates) {
+    private Instant getExpiration(@NonNull FxProviderRates rates) {
         return rates.providerTimestamp()
                 .plus(PROVIDER_UPDATE_INTERVAL);
     }
