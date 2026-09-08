@@ -9,6 +9,7 @@ import com.neobank.neobank.idempotency.IdempotencyConflictException;
 import com.neobank.neobank.idempotency.IdempotencyKeyRaceException;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.ledger.InsufficientFundsException;
+import com.neobank.neobank.transaction.history.InvalidHistorySortException;
 import com.neobank.neobank.transaction.transfer.InvalidTransferException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.Nullable;
@@ -207,5 +208,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problemDetail.setTitle("Fx rate lock unavailable");
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidHistorySortException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidHistorySortException(
+            InvalidHistorySortException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Invalid history sort");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
     }
 }
