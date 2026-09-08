@@ -17,4 +17,7 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
     @EntityGraph(attributePaths = "ledgerAccount")
     Optional<Account> findByAccountNumber(String accountNumber);
+
+    @EntityGraph(attributePaths = "ledgerAccount")
+    List<Account> findAllByCustomer_Email(String email);
 }
