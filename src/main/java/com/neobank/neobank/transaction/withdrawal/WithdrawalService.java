@@ -61,7 +61,7 @@ public class WithdrawalService {
         }
 
         var account = accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, customerEmail)
-                .orElseThrow(() -> new AccountNotFoundException());
+                .orElseThrow(AccountNotFoundException::new);
 
         boolean isCrossCurrency = account.getCurrency() != request.requestedCurrency();
 
@@ -94,7 +94,8 @@ public class WithdrawalService {
         var existingIdempotencyRecord = idempotencyService.findAndValidateRecord(idempotencyKey, customerEmail, requestHash);
 
         if(existingIdempotencyRecord.isPresent()) {
-            var existingTransaction = existingIdempotencyRecord.get().getBankTransaction();
+            var existingTransaction = bankTransactionRepository.findByReference(existingIdempotencyRecord.get().getResultReference())
+                    .orElseThrow(() -> new IdempotencyResultNotFoundException("Idempotency result not found"));
 
             var existingEntry = existingTransaction
                     .getEntries()
@@ -180,7 +181,7 @@ public class WithdrawalService {
                         idempotencyKey,
                         requestHash,
                         account.getCustomer(),
-                        savedTransaction
+                        savedTransaction.getReference()
                 )
         );
 

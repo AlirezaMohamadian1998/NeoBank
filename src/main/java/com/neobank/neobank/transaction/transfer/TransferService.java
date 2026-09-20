@@ -58,7 +58,7 @@ public class TransferService {
         }
 
         Account sourceAccount = accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(sourceAccountNumber, senderEmail)
-                .orElseThrow(() -> new AccountNotFoundException());
+                .orElseThrow(AccountNotFoundException::new);
 
         if(sourceAccountNumber.equals(request.destinationAccountNumber())) {
             throw new InvalidTransferException("Source and destination accounts cannot be the same");
@@ -100,7 +100,8 @@ public class TransferService {
         var existingIdempotencyRecord = idempotencyService.findAndValidateRecord(idempotencyKey, senderEmail, requestHash);
 
         if(existingIdempotencyRecord.isPresent()) {
-            var existingTransaction = existingIdempotencyRecord.get().getBankTransaction();
+            var existingTransaction = bankTransactionRepository.findByReference(existingIdempotencyRecord.get().getResultReference())
+                    .orElseThrow(() -> new IdempotencyResultNotFoundException("Idempotency result not found"));
 
             var existingSourceEntry = existingTransaction
                     .getEntries()
@@ -187,7 +188,7 @@ public class TransferService {
                         idempotencyKey,
                         requestHash,
                         sourceAccount.getCustomer(),
-                        savedTransaction
+                        savedTransaction.getReference()
                 )
         );
 
