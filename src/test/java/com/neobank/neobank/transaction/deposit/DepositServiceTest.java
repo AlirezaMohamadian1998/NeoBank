@@ -9,6 +9,7 @@ import com.neobank.neobank.fx.FxRateLockUnavailableException;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.fx.dto.FxRateLockResponse;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
+import com.neobank.neobank.idempotency.IdempotencyResultNotFoundException;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.idempotency.RequestHasher;
@@ -284,8 +285,8 @@ class DepositServiceTest {
         assertThat(idempotencyRecord.getCustomer())
                 .isSameAs(customer);
 
-        assertThat(idempotencyRecord.getBankTransaction())
-                .isSameAs(savedTransaction);
+        assertThat(idempotencyRecord.getResultReference())
+                .isEqualTo(savedTransaction.getReference());
 
         assertThat(idempotencyRecord.getRequestHash())
                 .isEqualTo(
@@ -443,7 +444,7 @@ class DepositServiceTest {
                 idempotencyKey,
                 requestHash,
                 customer,
-                bankTransaction
+                bankTransaction.getReference()
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
@@ -451,6 +452,9 @@ class DepositServiceTest {
 
         given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
                 .willReturn(Optional.of(idempotencyRecord));
+
+        given(bankTransactionRepository.findByReference(idempotencyRecord.getResultReference()))
+                .willReturn(Optional.of(bankTransaction));
 
         ReflectionTestUtils.setField(ledgerAccount, "id", 1L);
 
@@ -699,8 +703,8 @@ class DepositServiceTest {
         assertThat(idempotencyRecord.getCustomer())
                 .isSameAs(customer);
 
-        assertThat(idempotencyRecord.getBankTransaction())
-                .isSameAs(savedTransaction);
+        assertThat(idempotencyRecord.getResultReference())
+                .isEqualTo(savedTransaction.getReference());
 
         assertThat(idempotencyRecord.getRequestHash())
                 .isEqualTo(
@@ -841,7 +845,7 @@ class DepositServiceTest {
                 idempotencyKey,
                 requestHash,
                 customer,
-                bankTransaction
+                bankTransaction.getReference()
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
@@ -849,6 +853,9 @@ class DepositServiceTest {
 
         given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
                 .willReturn(Optional.of(idempotencyRecord));
+
+        given(bankTransactionRepository.findByReference(idempotencyRecord.getResultReference()))
+                .willReturn(Optional.of(bankTransaction));
 
         ReflectionTestUtils.setField(ledgerAccount, "id", 1L);
 
@@ -1053,5 +1060,78 @@ class DepositServiceTest {
                 .hasMessage("The base currency in the cached fx rate must be the same as the requested currency");
 
         verifyNoInteractions(bankTransactionRepository);
+    }
+
+    @Test
+    void depositThrowsIdempotencyResultNotFoundExceptionWhenResultDoesNotExist() {
+        String accountNumber = "12345678900321";
+        String email = "customer@example.com";
+        String idempotencyKey = "11111111111111111111111111111111";
+        String transactionReference = "7f3c8a21d9e64b5fa2c17e9084bd6a31";
+
+        DepositRequest request = new DepositRequest(
+                new BigDecimal("1000.00"),
+                "Test",
+                CurrencyCode.TRY,
+                null
+        );
+
+        Customer customer = Customer.createNew(
+                email,
+                "{bcrypt}encoded-password",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        Account account = Account.createNew(
+                accountNumber,
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                ledgerAccount
+        );
+
+        String requestHash = requestHasher
+                .hashRequest(String
+                        .join(
+                                "|",
+                                TransactionType.DEPOSIT.name(),
+                                accountNumber,
+                                request.amount().setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
+                                request.requestedCurrency().name(),
+                                account.getCurrency().name(),
+                                "",
+                                request.note().trim()
+                        )
+                );
+
+        IdempotencyRecord idempotencyRecord = IdempotencyRecord.createNew(
+                idempotencyKey,
+                requestHash,
+                customer,
+                transactionReference
+        );
+
+        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
+                .willReturn(Optional.of(account));
+
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
+                .willReturn(Optional.of(idempotencyRecord));
+
+        given(bankTransactionRepository.findByReference(transactionReference))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> depositService.deposit(request, accountNumber, email, idempotencyKey))
+                .isInstanceOf(IdempotencyResultNotFoundException.class)
+                .hasMessage("Idempotency result not found");
+
+        verify(bankTransactionRepository, never()).save(any());
+        verify(idempotencyService, never()).save(any());
+        verifyNoInteractions(referenceGenerator, internalAccountRepository, fxRateService);
     }
 }

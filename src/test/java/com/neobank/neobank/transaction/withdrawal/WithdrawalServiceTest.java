@@ -9,6 +9,7 @@ import com.neobank.neobank.fx.FxRateLockUnavailableException;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.fx.dto.FxRateLockResponse;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
+import com.neobank.neobank.idempotency.IdempotencyResultNotFoundException;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.idempotency.RequestHasher;
@@ -267,8 +268,8 @@ class WithdrawalServiceTest {
         assertThat(idempotencyRecord.getCustomer())
                 .isSameAs(customer);
 
-        assertThat(idempotencyRecord.getBankTransaction())
-                .isSameAs(savedTransaction);
+        assertThat(idempotencyRecord.getResultReference())
+                .isEqualTo(savedTransaction.getReference());
 
         assertThat(idempotencyRecord.getRequestHash())
                 .isEqualTo(hash(request, account, null));
@@ -472,7 +473,7 @@ class WithdrawalServiceTest {
                 idempotencyKey,
                 requestHash,
                 customer,
-                transaction
+                transaction.getReference()
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
@@ -480,6 +481,9 @@ class WithdrawalServiceTest {
 
         given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
                 .willReturn(Optional.of(idempotencyRecord));
+
+        given(bankTransactionRepository.findByReference(idempotencyRecord.getResultReference()))
+                .willReturn(Optional.of(transaction));
 
         WithdrawalResponse response = withdrawalService.withdraw(request, accountNumber, email, idempotencyKey);
 
@@ -728,8 +732,8 @@ class WithdrawalServiceTest {
         assertThat(idempotencyRecord.getCustomer())
                 .isSameAs(customer);
 
-        assertThat(idempotencyRecord.getBankTransaction())
-                .isSameAs(transaction);
+        assertThat(idempotencyRecord.getResultReference())
+                .isEqualTo(transaction.getReference());
 
         assertThat(idempotencyRecord.getRequestHash())
                 .isEqualTo(hash(request, account, lockId));
@@ -849,7 +853,7 @@ class WithdrawalServiceTest {
                 idempotencyKey,
                 requestHash,
                 customer,
-                transaction
+                transaction.getReference()
         );
 
         given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
@@ -857,6 +861,9 @@ class WithdrawalServiceTest {
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
+
+        given(bankTransactionRepository.findByReference(idempotencyRecord.getResultReference()))
+                .willReturn(Optional.of(transaction));
 
         ReflectionTestUtils.setField(ledgerAccount, "id", 1L);
 
@@ -1057,6 +1064,66 @@ class WithdrawalServiceTest {
         verifyNoInteractions(bankTransactionRepository);
     }
 
+    @Test
+    void withdrawalThrowsIdempotencyResultNotFoundExceptionWhenResultDoesNotExist() {
+        String email = "customer@example.com";
+        String accountNumber = "12345678900987";
+        String idempotencyKey = "11111111111111111111111111111111";
+        String transactionReference = "6f3c8a21d9e64b5fa2c17e9084bd6a30";
+
+        Customer customer = Customer.createNew(
+                email,
+                "{bcrypt}raw-password123",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        Account account = Account.createNew(
+                accountNumber,
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                ledgerAccount
+        );
+
+        WithdrawalRequest request = new WithdrawalRequest(
+                new BigDecimal("1000.00"),
+                "Test",
+                CurrencyCode.TRY,
+                null
+        );
+
+        String requestHash = hash(request, account, null);
+
+        IdempotencyRecord idempotencyRecord = IdempotencyRecord.createNew(
+                idempotencyKey,
+                requestHash,
+                customer,
+                transactionReference
+        );
+
+        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
+                .willReturn(Optional.of(account));
+
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
+                .willReturn(Optional.of(idempotencyRecord));
+
+        given(bankTransactionRepository.findByReference(transactionReference))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
+                .isInstanceOf(IdempotencyResultNotFoundException.class)
+                .hasMessage("Idempotency result not found");
+
+        verify(bankTransactionRepository, never()).save(any());
+        verify(idempotencyService, never()).save(any());
+        verifyNoInteractions(referenceGenerator, internalAccountRepository, fxRateService);
+    }
 
     private String hash(WithdrawalRequest request, Account account, String lockId) {
         return requestHasher.hashRequest(String.join(

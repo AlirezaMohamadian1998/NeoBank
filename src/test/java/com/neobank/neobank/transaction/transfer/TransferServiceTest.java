@@ -9,6 +9,7 @@ import com.neobank.neobank.fx.FxRateLockUnavailableException;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.fx.dto.FxRateLockResponse;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
+import com.neobank.neobank.idempotency.IdempotencyResultNotFoundException;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.idempotency.RequestHasher;
@@ -228,8 +229,8 @@ class TransferServiceTest {
                 .isEqualTo(idempotencyKey);
         assertThat(idempotencyRecord.getCustomer())
                 .isSameAs(sourceCustomer);
-        assertThat(idempotencyRecord.getBankTransaction())
-                .isSameAs(savedTransaction);
+        assertThat(idempotencyRecord.getResultReference())
+                .isEqualTo(savedTransaction.getReference());
         assertThat(idempotencyRecord.getRequestHash())
                 .isEqualTo(hash(sourceAccount, destinationAccount, request, null));
 
@@ -511,11 +512,14 @@ class TransferServiceTest {
                 idempotencyKey,
                 requestHash,
                 sourceCustomer,
-                savedTransaction
+                savedTransaction.getReference()
         );
 
         given(idempotencyService.findAndValidateRecord(idempotencyKey, sourceCustomer.getEmail(), requestHash))
                 .willReturn(Optional.of(idempotencyRecord));
+
+        given(bankTransactionRepository.findByReference(idempotencyRecord.getResultReference()))
+                .willReturn(Optional.of(savedTransaction));
 
         TransferResponse response = transferService.transfer(request, sourceAccount.getAccountNumber(), sourceCustomer.getEmail(), idempotencyKey);
 
@@ -760,8 +764,8 @@ class TransferServiceTest {
         assertThat(idempotencyRecord.getCustomer())
                 .isSameAs(sourceCustomer);
 
-        assertThat(idempotencyRecord.getBankTransaction())
-                .isSameAs(transaction);
+        assertThat(idempotencyRecord.getResultReference())
+                .isEqualTo(transaction.getReference());
 
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(
                 sourceAccount.getAccountNumber(),
@@ -978,8 +982,8 @@ class TransferServiceTest {
         assertThat(idempotencyRecord.getCustomer())
                 .isSameAs(sourceCustomer);
 
-        assertThat(idempotencyRecord.getBankTransaction())
-                .isSameAs(transaction);
+        assertThat(idempotencyRecord.getResultReference())
+                .isEqualTo(transaction.getReference());
 
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(
                 sourceAccount.getAccountNumber(),
@@ -1088,7 +1092,7 @@ class TransferServiceTest {
                 idempotencyKey,
                 requestHash,
                 sourceCustomer,
-                transaction
+                transaction.getReference()
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(sourceAccount.getAccountNumber(), sourceCustomer.getEmail()))
@@ -1099,6 +1103,9 @@ class TransferServiceTest {
 
         given(idempotencyService.findAndValidateRecord(idempotencyKey, sourceCustomer.getEmail(), requestHash))
                 .willReturn(Optional.of(idempotencyRecord));
+
+        given(bankTransactionRepository.findByReference(idempotencyRecord.getResultReference()))
+                .willReturn(Optional.of(transaction));
 
         TransferResponse response = transferService.transfer(request, sourceAccount.getAccountNumber(), sourceCustomer.getEmail(), idempotencyKey);
 
@@ -1131,7 +1138,7 @@ class TransferServiceTest {
 
         verify(idempotencyService, never()).save(any(IdempotencyRecord.class));
 
-        verifyNoInteractions(fxRateService, referenceGenerator, bankTransactionRepository);
+        verifyNoInteractions(fxRateService, referenceGenerator);
     }
 
     @Test
@@ -1296,6 +1303,69 @@ class TransferServiceTest {
                 .hasMessage("The base currency in the cached fx rate must be the same as the requested currency");
 
         verifyNoInteractions(bankTransactionRepository);
+    }
+
+    @Test
+    void transferThrowsIdempotencyResultNotFoundExceptionWhenResultDoesNotExist() {
+        Customer sourceCustomer = createCustomer("source@example.com");
+        Customer destinationCustomer = createCustomer("target@example.com");
+        String idempotencyKey = "11111111111111111111111111111111";
+
+        Account sourceAccount = createAccount(
+                "12345678900987",
+                SOURCE_LEDGER_REFERENCE,
+                CurrencyCode.TRY,
+                sourceCustomer
+        );
+
+        Account destinationAccount = createAccount(
+                "98765432100123",
+                DESTINATION_LEDGER_REFERENCE,
+                CurrencyCode.TRY,
+                destinationCustomer
+        );
+
+        TransferRequest request = createTransferRequest(
+                destinationAccount.getAccountNumber(),
+                new BigDecimal("500.00"),
+                CurrencyCode.TRY,
+                null
+        );
+
+        String requestHash = hash(sourceAccount, destinationAccount, request, null);
+
+        IdempotencyRecord idempotencyRecord = IdempotencyRecord.createNew(
+                idempotencyKey,
+                requestHash,
+                sourceCustomer,
+                TRANSACTION_REFERENCE
+        );
+
+        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(
+                sourceAccount.getAccountNumber(),
+                sourceCustomer.getEmail()
+        )).willReturn(Optional.of(sourceAccount));
+
+        given(accountRepository.findByAccountNumber(destinationAccount.getAccountNumber()))
+                .willReturn(Optional.of(destinationAccount));
+
+        given(idempotencyService.findAndValidateRecord(idempotencyKey, sourceCustomer.getEmail(), requestHash))
+                .willReturn(Optional.of(idempotencyRecord));
+
+        given(bankTransactionRepository.findByReference(TRANSACTION_REFERENCE))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> transferService.transfer(
+                request,
+                sourceAccount.getAccountNumber(),
+                sourceCustomer.getEmail(),
+                idempotencyKey
+        )).isInstanceOf(IdempotencyResultNotFoundException.class)
+                .hasMessage("Idempotency result not found");
+
+        verify(bankTransactionRepository, never()).save(any());
+        verify(idempotencyService, never()).save(any());
+        verifyNoInteractions(referenceGenerator, fxRateService);
     }
 
     private Customer createCustomer(String email) {

@@ -7,6 +7,7 @@ import com.neobank.neobank.fx.FxProviderUnavailableException;
 import com.neobank.neobank.fx.FxRateLockUnavailableException;
 import com.neobank.neobank.idempotency.IdempotencyConflictException;
 import com.neobank.neobank.idempotency.IdempotencyKeyRaceException;
+import com.neobank.neobank.idempotency.IdempotencyResultNotFoundException;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.transaction.history.InvalidHistorySortException;
@@ -220,5 +221,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problemDetail.setTitle("Invalid history sort");
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(IdempotencyResultNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleIdempotencyResultNotFoundException(
+            IdempotencyResultNotFoundException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Idempotency result not found");
+
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problemDetail);
     }
 }

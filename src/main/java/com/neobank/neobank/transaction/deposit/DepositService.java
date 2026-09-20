@@ -104,7 +104,8 @@ public class DepositService {
         );
 
         if(existingIdempotencyRecord.isPresent()) {
-            var existingTransaction = existingIdempotencyRecord.get().getBankTransaction();
+            var existingTransaction = bankTransactionRepository.findByReference(existingIdempotencyRecord.get().getResultReference())
+                    .orElseThrow(() -> new IdempotencyResultNotFoundException("Idempotency result not found"));
 
             var existingEntry = existingTransaction
                     .getEntries()
@@ -198,7 +199,7 @@ public class DepositService {
                         idempotencyKey,
                         requestHash,
                         account.getCustomer(),
-                        savedTransaction
+                        savedTransaction.getReference()
                 )
         );
 
