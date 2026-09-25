@@ -4,12 +4,15 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
+import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.issuing.DebitCardIssuer;
 import com.neobank.neobank.card.issuing.IssuedDebitCard;
 import com.neobank.neobank.idempotency.*;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -97,5 +100,26 @@ public class DebitCardService {
         idempotencyService.save(idempotencyRecord);
 
         return DebitCardMapper.toIssueDebitCardResponse(debitCard, fundingAccount.getAccountNumber());
+    }
+
+    @Transactional(readOnly = true)
+    public DebitCardRetrieveResponse getDebitCard(String cardReference, String email) {
+
+        DebitCard debitCard =
+                debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, email)
+                        .orElseThrow(() -> new DebitCardNotFoundException("Debit card not found"));
+
+        return DebitCardMapper.toRetrieveDebitCardResponse(debitCard, debitCard.getFundingAccount().getAccountNumber());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<DebitCardRetrieveResponse> getDebitCards(String email, Pageable pageable) {
+
+        Page<DebitCard> debitCards =
+                debitCardRepository.findAllByFundingAccount_Customer_EmailIgnoreCaseOrderByCreatedAtDescIdDesc(email, pageable);
+
+        return debitCards.map(debitCard ->
+            DebitCardMapper.toRetrieveDebitCardResponse(debitCard, debitCard.getFundingAccount().getAccountNumber())
+        );
     }
 }
