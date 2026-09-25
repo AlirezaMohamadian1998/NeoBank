@@ -14,6 +14,8 @@ import java.util.Optional;
 @Transactional(propagation = Propagation.MANDATORY)
 public class IdempotencyService {
 
+    private static final String IDEMPOTENCY_KEY_CONSTRAINT = "uk_idempotency_records_customer_key";
+
     private final IdempotencyRecordRepository idempotencyRepository;
 
     public Optional<IdempotencyRecord> findAndValidateRecord(String key, String email,  String requestHash) {
@@ -43,9 +45,16 @@ public class IdempotencyService {
 
         while (current != null) {
             if (current instanceof ConstraintViolationException violation) {
-                return "uk_idempotency_records_customer_key".equalsIgnoreCase(
-                        violation.getConstraintName()
-                );
+                String constraintName = violation.getConstraintName();
+
+                if (constraintName == null) {
+                    return false;
+                }
+
+                int lastDot = constraintName.lastIndexOf('.');
+                String unqualifiedName = constraintName.substring(lastDot + 1);
+
+                return IDEMPOTENCY_KEY_CONSTRAINT.equalsIgnoreCase(unqualifiedName);
             }
 
             current = current.getCause();

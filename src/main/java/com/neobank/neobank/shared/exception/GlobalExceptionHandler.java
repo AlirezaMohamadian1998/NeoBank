@@ -1,6 +1,7 @@
 package com.neobank.neobank.shared.exception;
 
 import com.neobank.neobank.account.AccountNotFoundException;
+import com.neobank.neobank.card.CardExpiredException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
 import com.neobank.neobank.fx.FxProviderUnavailableException;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import java.net.URI;
@@ -48,6 +50,31 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         });
 
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, "Validation failed for one or more fields.");
+        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
+        problemDetail.setTitle("Validation failed");
+        problemDetail.setProperty("errors", validationErrors);
+
+        return new ResponseEntity<>(problemDetail, status);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleHandlerMethodValidationException(
+            HandlerMethodValidationException ex,
+            HttpHeaders headers,
+            HttpStatusCode status,
+            WebRequest request
+    ) {
+        Map<String, String> validationErrors = new HashMap<>();
+
+        ex.getParameterValidationResults().forEach(result -> {
+            String parameterName = result.getMethodParameter().getParameterName();
+
+            result.getResolvableErrors().stream()
+                    .findFirst()
+                    .ifPresent(error -> validationErrors.put(parameterName, error.getDefaultMessage()));
+        });
+
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, "Validation failed for one or more parameters");
         problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
         problemDetail.setTitle("Validation failed");
         problemDetail.setProperty("errors", validationErrors);
@@ -234,4 +261,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problemDetail);
     }
+
+    @ExceptionHandler(CardExpiredException.class)
+    public ResponseEntity<ProblemDetail> handleCardExpiredException(
+            CardExpiredException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Card expired");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
 }
