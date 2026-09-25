@@ -3,6 +3,7 @@ package com.neobank.neobank.transaction;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
+import com.neobank.neobank.card.DebitCardRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerRepository;
 import com.neobank.neobank.idempotency.IdempotencyRecordRepository;
@@ -43,6 +44,9 @@ public abstract class TransactionIntegrationTestSupport {
     @Autowired
     protected InternalAccountRepository internalAccountRepository;
 
+    @Autowired
+    protected DebitCardRepository debitCardRepository;
+
     protected Account account;
     protected Customer customer;
     protected InternalAccount internalAccountTRY;
@@ -51,6 +55,7 @@ public abstract class TransactionIntegrationTestSupport {
     @BeforeEach
     protected void setUpTransactionIntegrationFixture() {
         idempotencyRecordRepository.deleteAll();
+        debitCardRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
         bankTransactionRepository.deleteAll();
         accountRepository.deleteAll();
