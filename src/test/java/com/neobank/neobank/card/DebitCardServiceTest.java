@@ -5,6 +5,7 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
+import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.issuing.DebitCardIssuer;
 import com.neobank.neobank.card.issuing.IssuedDebitCard;
 import com.neobank.neobank.customer.Customer;
@@ -19,10 +20,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.YearMonth;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -339,4 +344,191 @@ class DebitCardServiceTest {
         verify(debitCardRepository, never()).save(any());
         verify(idempotencyService, never()).save(any());
     }
+
+    @Test
+    void getDebitCardReturnsMappedOwnedDebitCard() {
+        YearMonth now = YearMonth.now(clock);
+
+        Customer customer = Customer.createNew(
+                "customer@example.com",
+                "{bcrypt}encoded-password",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        Account account = Account.createNew(
+                "12345678900321",
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                ledgerAccount
+        );
+
+        DebitCard debitCard = DebitCard.createNew(
+                "1".repeat(32),
+                "1234",
+                now.plusYears(5),
+                now,
+                account
+        );
+
+        debitCard.activateCard(now);
+
+        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), customer.getEmail()))
+                .willReturn(Optional.of(debitCard));
+
+        DebitCardRetrieveResponse response = debitCardService.getDebitCard(debitCard.getCardReference(), customer.getEmail());
+
+        assertThat(response.cardReference())
+                .isEqualTo(debitCard.getCardReference());
+
+        assertThat(response.lastFourDigits())
+                .isEqualTo(debitCard.getLastFourDigits());
+
+        assertThat(response.status())
+                .isSameAs(CardStatus.ACTIVE);
+
+        assertThat(response.expirationYearMonth())
+                .isEqualTo(debitCard.getExpirationYearMonth());
+
+        assertThat(response.fundingAccountNumber())
+                .isEqualTo(debitCard.getFundingAccount().getAccountNumber());
+
+        verify(debitCardRepository, never()).save(any());
+        verify(debitCardRepository, times(1)).findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), customer.getEmail());
+    }
+
+    @Test
+    void getDebitCardThrowsDebitCardNotFoundExceptionWhenOwnedLookupReturnsEmpty() {
+        String cardReference = "1".repeat(32);
+
+        Customer customer = Customer.createNew(
+                "customer@example.com",
+                "{bcrypt}encoded-password",
+                "Ada Lovelace"
+        );
+
+        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, customer.getEmail()))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> debitCardService.getDebitCard(cardReference, customer.getEmail()))
+                .isInstanceOf(DebitCardNotFoundException.class)
+                .hasMessage("Debit card not found");
+
+        verify(debitCardRepository, never()).save(any());
+        verify(debitCardRepository, times(1)).findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, customer.getEmail());
+    }
+
+    @Test
+    void getDebitCardsMapsContentAndPreservesPageMetadata() {
+        YearMonth now = YearMonth.now(clock);
+
+        Customer customer = Customer.createNew(
+                "customer@example.com",
+                "{bcrypt}encoded-password",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount firstLedgerAccount = LedgerAccount.createNew(
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        Account firstAccount = Account.createNew(
+                "12345678900321",
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                firstLedgerAccount
+        );
+
+        LedgerAccount secondLedgerAccount = LedgerAccount.createNew(
+                "9f3c8a21d9e64b5fa2c17e9084bd6a33",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        Account secondAccount = Account.createNew(
+                "12300123456789",
+                "Private Account NO 2",
+                AccountType.CURRENT,
+                customer,
+                secondLedgerAccount
+        );
+
+        DebitCard firstDebitCard = DebitCard.createNew(
+                "1".repeat(32),
+                "1234",
+                now.plusYears(5),
+                now,
+                firstAccount
+        );
+
+        firstDebitCard.activateCard(now);
+
+        DebitCard secondDebitCard = DebitCard.createNew(
+                "2".repeat(32),
+                "4321",
+                now.plusYears(5),
+                now,
+                secondAccount
+        );
+
+        secondDebitCard.activateCard(now);
+        secondDebitCard.freezeCard(now);
+
+        Page<DebitCard> debitCardPage = new PageImpl<>(
+                List.of(firstDebitCard, secondDebitCard),
+                PageRequest.of(0, 10),
+                2
+        );
+
+        given(debitCardRepository.findAllByFundingAccount_Customer_EmailIgnoreCaseOrderByCreatedAtDescIdDesc(customer.getEmail(), debitCardPage.getPageable()))
+                .willReturn(debitCardPage);
+
+        Page<DebitCardRetrieveResponse> response = debitCardService.getDebitCards(customer.getEmail(), debitCardPage.getPageable());
+
+        assertThat(response.getPageable())
+                .isEqualTo(debitCardPage.getPageable());
+
+        assertThat(response.getTotalElements())
+                .isEqualTo(2);
+
+        assertThat(response.getTotalPages())
+                .isEqualTo(1);
+
+        assertThat(response.getNumber())
+                .isZero();
+
+        assertThat(response.getSize())
+                .isEqualTo(10);
+
+        assertThat(response.getContent())
+                .containsExactly(
+                        new DebitCardRetrieveResponse(
+                                firstDebitCard.getCardReference(),
+                                firstDebitCard.getLastFourDigits(),
+                                CardStatus.ACTIVE,
+                                firstDebitCard.getExpirationYearMonth(),
+                                firstAccount.getAccountNumber()
+                        ),
+                        new DebitCardRetrieveResponse(
+                                secondDebitCard.getCardReference(),
+                                secondDebitCard.getLastFourDigits(),
+                                CardStatus.FROZEN,
+                                secondDebitCard.getExpirationYearMonth(),
+                                secondAccount.getAccountNumber()
+                        )
+                );
+
+        verify(debitCardRepository, times(1))
+                .findAllByFundingAccount_Customer_EmailIgnoreCaseOrderByCreatedAtDescIdDesc(customer.getEmail(), debitCardPage.getPageable());
+    }
+
 }
