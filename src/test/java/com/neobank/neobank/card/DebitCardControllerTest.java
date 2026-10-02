@@ -4,6 +4,7 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.auth.SecurityConfig;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
+import com.neobank.neobank.card.exception.DebitCardNotFoundException;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

@@ -1,8 +1,8 @@
 package com.neobank.neobank.shared.exception;
 
 import com.neobank.neobank.account.AccountNotFoundException;
-import com.neobank.neobank.card.CardExpiredException;
-import com.neobank.neobank.card.DebitCardNotFoundException;
+import com.neobank.neobank.card.exception.CardExpiredException;
+import com.neobank.neobank.card.exception.DebitCardNotFoundException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
 import com.neobank.neobank.fx.FxProviderUnavailableException;

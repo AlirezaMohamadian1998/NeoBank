@@ -1,5 +1,6 @@
 package com.neobank.neobank.card;
 
+import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.shared.persistence.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
