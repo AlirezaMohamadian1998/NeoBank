@@ -6,7 +6,10 @@ import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
+import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
+import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
+import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
 import com.neobank.neobank.card.issuing.DebitCardIssuer;
 import com.neobank.neobank.card.issuing.IssuedDebitCard;
 import com.neobank.neobank.customer.Customer;
@@ -18,6 +21,9 @@ import com.neobank.neobank.shared.reference.ReferenceGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -30,6 +36,7 @@ import java.time.Instant;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -241,7 +248,6 @@ class DebitCardServiceTest {
         String requestHash = "a".repeat(64);
 
         YearMonth now = YearMonth.now(clock);
-
         DebitCard debitCard = DebitCard.createNew(
                 "2".repeat(32),
                 "1234",
@@ -349,34 +355,8 @@ class DebitCardServiceTest {
     @Test
     void getDebitCardReturnsMappedOwnedDebitCard() {
         YearMonth now = YearMonth.now(clock);
-
-        Customer customer = Customer.createNew(
-                "customer@example.com",
-                "{bcrypt}encoded-password",
-                "Ada Lovelace"
-        );
-
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
-        Account account = Account.createNew(
-                "12345678900321",
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                ledgerAccount
-        );
-
-        DebitCard debitCard = DebitCard.createNew(
-                "1".repeat(32),
-                "1234",
-                now.plusYears(5),
-                now,
-                account
-        );
+        DebitCard debitCard = createDebitCard(now, now.plusYears(5));
+        Customer customer = debitCard.getFundingAccount().getCustomer();
 
         debitCard.activateCard(now);
 
@@ -530,6 +510,249 @@ class DebitCardServiceTest {
 
         verify(debitCardRepository, times(1))
                 .findAllByFundingAccount_Customer_EmailIgnoreCaseOrderByCreatedAtDescIdDesc(customer.getEmail(), debitCardPage.getPageable());
+    }
+
+    @Test
+    void changeCardStatusActivatesInactiveCardAndReturnsUpdatedResponse() {
+        YearMonth now = YearMonth.now(clock);
+        DebitCard debitCard = createDebitCard(now, now.plusYears(5));
+        String email = debitCard.getFundingAccount().getCustomer().getEmail();
+
+        given(debitCardRepository
+                .findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), email))
+                .willReturn(Optional.of(debitCard));
+
+        given(debitCardRepository.save(debitCard))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        DebitCardRetrieveResponse response =
+                debitCardService.changeCardStatus(debitCard.getCardReference(), email, CardStatus.ACTIVE);
+
+        assertThat(response.cardReference())
+                .isEqualTo(debitCard.getCardReference());
+
+        assertThat(response.lastFourDigits())
+                .isEqualTo(debitCard.getLastFourDigits());
+
+        assertThat(response.fundingAccountNumber())
+                .isEqualTo(debitCard.getFundingAccount().getAccountNumber());
+
+        assertThat(response.expirationYearMonth())
+                .isEqualTo(debitCard.getExpirationYearMonth());
+
+        assertThat(response.status())
+                .isSameAs(CardStatus.ACTIVE);
+
+        assertThat(debitCard.getStatus())
+                .isSameAs(CardStatus.ACTIVE);
+
+        verify(debitCardRepository).save(same(debitCard));
+    }
+
+    @Test
+    void changeCardStatusUnfreezesFrozenCardAndReturnsUpdatedResponse() {
+        YearMonth now = YearMonth.now(clock);
+        DebitCard debitCard = createDebitCard(now, now.plusYears(5));
+        String email = debitCard.getFundingAccount().getCustomer().getEmail();
+
+        debitCard.activateCard(now);
+        debitCard.freezeCard(now);
+
+        given(debitCardRepository
+                .findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), email))
+                .willReturn(Optional.of(debitCard));
+
+        given(debitCardRepository.save(debitCard))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        DebitCardRetrieveResponse response =
+                debitCardService.changeCardStatus(debitCard.getCardReference(), email, CardStatus.ACTIVE);
+
+        assertThat(response.cardReference())
+                .isEqualTo(debitCard.getCardReference());
+
+        assertThat(response.lastFourDigits())
+                .isEqualTo(debitCard.getLastFourDigits());
+
+        assertThat(response.fundingAccountNumber())
+                .isEqualTo(debitCard.getFundingAccount().getAccountNumber());
+
+        assertThat(response.expirationYearMonth())
+                .isEqualTo(debitCard.getExpirationYearMonth());
+
+        assertThat(response.status())
+                .isSameAs(CardStatus.ACTIVE);
+
+        assertThat(debitCard.getStatus())
+                .isSameAs(CardStatus.ACTIVE);
+
+        verify(debitCardRepository).save(same(debitCard));
+    }
+
+    @ParameterizedTest
+    @MethodSource("validTransitionSource")
+    void changeCardStatusAppliesOtherValidTransitions(CardStatus status) {
+        YearMonth now = YearMonth.now(clock);
+        DebitCard debitCard = createDebitCard(now, now.plusYears(5));
+        String email = debitCard.getFundingAccount().getCustomer().getEmail();
+
+        debitCard.activateCard(now);
+
+        given(debitCardRepository
+                .findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), email))
+                .willReturn(Optional.of(debitCard));
+
+        given(debitCardRepository.save(debitCard))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        DebitCardRetrieveResponse response =
+                debitCardService.changeCardStatus(debitCard.getCardReference(), email, status);
+
+        assertThat(response.cardReference())
+                .isEqualTo(debitCard.getCardReference());
+
+        assertThat(response.lastFourDigits())
+                .isEqualTo(debitCard.getLastFourDigits());
+
+        assertThat(response.fundingAccountNumber())
+                .isEqualTo(debitCard.getFundingAccount().getAccountNumber());
+
+        assertThat(response.expirationYearMonth())
+                .isEqualTo(debitCard.getExpirationYearMonth());
+
+        assertThat(response.status())
+                .isSameAs(status);
+
+        assertThat(debitCard.getStatus())
+                .isSameAs(status);
+
+        verify(debitCardRepository).save(same(debitCard));
+    }
+
+    @Test
+    void changeCardStatusThrowsNotFoundWhenOwnedLookupReturnsEmpty() {
+        String cardReference = "1".repeat(32);
+
+        Customer customer = Customer.createNew(
+                "customer@example.com",
+                "{bcrypt}encoded-password",
+                "Ada Lovelace"
+        );
+
+        given(debitCardRepository
+                .findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, customer.getEmail()))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                debitCardService.changeCardStatus(cardReference, customer.getEmail(), CardStatus.ACTIVE))
+                .isInstanceOf(DebitCardNotFoundException.class)
+                .hasMessage("Debit card not found");
+
+        verify(debitCardRepository)
+                .findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, customer.getEmail());
+
+        verify(debitCardRepository, never()).save(any());
+    }
+
+    @Test
+    void changeCardStatusRejectsInactiveTargetWithoutSaving() {
+        YearMonth now = YearMonth.now(clock);
+        DebitCard debitCard = createDebitCard(now, now.plusYears(5));
+        String email = debitCard.getFundingAccount().getCustomer().getEmail();
+
+        given(debitCardRepository
+                .findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), email))
+                .willReturn(Optional.of(debitCard));
+
+        assertThatThrownBy(() ->
+                debitCardService.changeCardStatus(debitCard.getCardReference(), email, CardStatus.INACTIVE))
+                .isInstanceOf(UnsupportedCardStatusException.class)
+                .hasMessage("Cards cannot be changed back to inactive");
+
+        assertThat(debitCard.getStatus())
+                .isSameAs(CardStatus.INACTIVE);
+
+        verify(debitCardRepository, never()).save(any());
+    }
+
+    @Test
+    void changeCardStatusRejectsInvalidTransitionWithoutSaving() {
+        YearMonth now = YearMonth.now(clock);
+        DebitCard debitCard = createDebitCard(now, now.plusYears(5));
+        String email = debitCard.getFundingAccount().getCustomer().getEmail();
+
+        given(debitCardRepository
+                .findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), email))
+                .willReturn(Optional.of(debitCard));
+
+        assertThatThrownBy(() ->
+                debitCardService.changeCardStatus(debitCard.getCardReference(), email, CardStatus.FROZEN))
+                .isInstanceOf(InvalidCardStatusTransitionException.class)
+                .hasMessage("Only active cards can be frozen");
+
+        assertThat(debitCard.getStatus())
+                .isSameAs(CardStatus.INACTIVE);
+
+        verify(debitCardRepository, never()).save(any());
+    }
+
+    @Test
+    void changeCardStatusRejectsExpiredCardsWithoutSaving() {
+        YearMonth expirationYearMonth = YearMonth.now(clock).minusMonths(1);
+        DebitCard debitCard = createDebitCard(expirationYearMonth, expirationYearMonth);
+        String email = debitCard.getFundingAccount().getCustomer().getEmail();
+
+        given(debitCardRepository
+                .findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), email))
+                .willReturn(Optional.of(debitCard));
+
+        assertThatThrownBy(() ->
+                debitCardService.changeCardStatus(debitCard.getCardReference(), email, CardStatus.ACTIVE))
+                .isInstanceOf(CardExpiredException.class)
+                .hasMessage("Expired cards cannot be activated");
+
+        assertThat(debitCard.getStatus())
+                .isSameAs(CardStatus.INACTIVE);
+
+        verify(debitCardRepository, never()).save(any());
+    }
+
+    static Stream<Arguments> validTransitionSource() {
+        return Stream.of(
+                Arguments.of(CardStatus.FROZEN),
+                Arguments.of(CardStatus.BLOCKED),
+                Arguments.of(CardStatus.CLOSED)
+        );
+    }
+
+    private DebitCard createDebitCard(YearMonth creationYearMonth, YearMonth expirationYearMonth) {
+        Customer customer = Customer.createNew(
+                "customer@example.com",
+                "{bcrypt}encoded-password",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        Account account = Account.createNew(
+                "12345678900321",
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                ledgerAccount
+        );
+
+        return DebitCard.createNew(
+                "1".repeat(32),
+                "1234",
+                expirationYearMonth,
+                creationYearMonth,
+                account
+        );
     }
 
 }
