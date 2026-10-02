@@ -1,6 +1,7 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.exception.CardExpiredException;
+import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -125,35 +126,35 @@ class CardTest {
         Card inactiveCard = createValidCard(currentYearMonth);
 
         assertThatThrownBy(() -> inactiveCard.freezeCard(currentYearMonth))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(InvalidCardStatusTransitionException.class)
                 .hasMessage("Only active cards can be frozen");
 
         assertThatThrownBy(() -> inactiveCard.unfreezeCard(currentYearMonth))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(InvalidCardStatusTransitionException.class)
                 .hasMessage("Only frozen cards can be unfrozen");
 
         inactiveCard.activateCard(currentYearMonth);
 
         assertThatThrownBy(() -> inactiveCard.activateCard(currentYearMonth))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(InvalidCardStatusTransitionException.class)
                 .hasMessage("Only inactive cards can be activated");
 
         Card blockedCard = createValidCard(currentYearMonth);
         blockedCard.blockCard(currentYearMonth);
 
         assertThatThrownBy(() -> blockedCard.blockCard(currentYearMonth))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(InvalidCardStatusTransitionException.class)
                 .hasMessage("Card is already blocked");
 
         Card closedCard = createValidCard(currentYearMonth);
         closedCard.closeCard();
 
         assertThatThrownBy(() -> closedCard.closeCard())
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(InvalidCardStatusTransitionException.class)
                 .hasMessage("Card is already closed");
 
         assertThatThrownBy(() -> closedCard.blockCard(currentYearMonth))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(InvalidCardStatusTransitionException.class)
                 .hasMessage("Closed cards cannot be blocked");
     }
 

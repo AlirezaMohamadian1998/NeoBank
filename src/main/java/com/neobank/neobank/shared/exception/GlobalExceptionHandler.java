@@ -3,6 +3,8 @@ package com.neobank.neobank.shared.exception;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
+import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
+import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
 import com.neobank.neobank.fx.FxProviderUnavailableException;
@@ -285,5 +287,29 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problemDetail.setTitle("Debit card not found");
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidCardStatusTransitionException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidCardStatusTransitionException(
+            InvalidCardStatusTransitionException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Invalid card status transition");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
+    @ExceptionHandler(UnsupportedCardStatusException.class)
+    public ResponseEntity<ProblemDetail> handleUnsupportedCardStatusException(
+            UnsupportedCardStatusException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Unsupported card status");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
     }
 }

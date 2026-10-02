@@ -6,6 +6,7 @@ import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
+import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
 import com.neobank.neobank.card.issuing.DebitCardIssuer;
 import com.neobank.neobank.card.issuing.IssuedDebitCard;
 import com.neobank.neobank.idempotency.*;
@@ -121,6 +122,33 @@ public class DebitCardService {
 
         return debitCards.map(debitCard ->
             DebitCardMapper.toRetrieveDebitCardResponse(debitCard, debitCard.getFundingAccount().getAccountNumber())
+        );
+    }
+
+    @Transactional
+    public DebitCardRetrieveResponse changeCardStatus(String cardReference, String email, CardStatus targetStatus) {
+        DebitCard debitCard =
+                debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, email)
+                        .orElseThrow(() -> new DebitCardNotFoundException("Debit card not found"));
+
+        YearMonth now = YearMonth.now(clock);
+
+        switch(targetStatus) {
+            case ACTIVE -> {
+                if(debitCard.getStatus() == CardStatus.FROZEN) {
+                    debitCard.unfreezeCard(now);
+                } else {
+                    debitCard.activateCard(now);
+                }
+            }
+            case FROZEN -> debitCard.freezeCard(now);
+            case BLOCKED -> debitCard.blockCard(now);
+            case CLOSED -> debitCard.closeCard();
+            case INACTIVE -> throw new UnsupportedCardStatusException("Cards cannot be changed back to inactive");
+        }
+
+        return DebitCardMapper.toRetrieveDebitCardResponse(
+                debitCardRepository.save(debitCard), debitCard.getFundingAccount().getAccountNumber()
         );
     }
 }
