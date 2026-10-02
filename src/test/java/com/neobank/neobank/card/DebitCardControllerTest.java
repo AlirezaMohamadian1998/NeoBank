@@ -4,9 +4,15 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.auth.SecurityConfig;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
+import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
+import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
+import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -22,17 +28,16 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.YearMonth;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(DebitCardController.class)
@@ -346,5 +351,139 @@ class DebitCardControllerTest {
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(debitCardService);
+    }
+
+    @Test
+    void changeCardStatusReturnsUpdatedCardForAuthenticatedCustomer() throws Exception {
+        String email = "customer@example.com";
+
+        DebitCardRetrieveResponse response = new DebitCardRetrieveResponse(
+                "11111111111111111111111111111111",
+                "1234",
+                CardStatus.ACTIVE,
+                YearMonth.of(2031, 9),
+                "12345678900321"
+        );
+
+        given(debitCardService.changeCardStatus(response.cardReference(), email, CardStatus.ACTIVE))
+                .willReturn(response);
+
+        mockMvc.perform(patch("/api/debit-cards/{cardReference}/status/{status}", response.cardReference(), CardStatus.ACTIVE)
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.cardReference").value(response.cardReference()))
+                .andExpect(jsonPath("$.lastFourDigits").value(response.lastFourDigits()))
+                .andExpect(jsonPath("$.status").value(response.status().name()))
+                .andExpect(jsonPath("$.expirationYearMonth").value(response.expirationYearMonth().toString()))
+                .andExpect(jsonPath("$.fundingAccountNumber").value(response.fundingAccountNumber()))
+                .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.fundingAccount").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.customer").doesNotHaveJsonPath());
+
+        verify(debitCardService).changeCardStatus(response.cardReference(), email, CardStatus.ACTIVE);
+    }
+
+    @Test
+    void changeCardStatusRejectsInvalidCardReference() throws Exception {
+        String email = "customer@example.com";
+        String invalidCardReference = "11zzz1111yy11xx1kkk111ggg11zzz11";
+
+        mockMvc.perform(patch("/api/debit-cards/{cardReference}/status/{status}", invalidCardReference, CardStatus.ACTIVE)
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value("Validation failed for one or more parameters"))
+                .andExpect(jsonPath("$.title").value("Validation failed"))
+                .andExpect(jsonPath("$.instance")
+                        .value("/api/debit-cards/%s/status/%s".formatted(invalidCardReference, CardStatus.ACTIVE.name())))
+                .andExpect(jsonPath("$.errors.cardReference").value("Card reference must be 32 hexadecimal characters"))
+                .andExpect(jsonPath("$.status").value("400"));
+
+        verifyNoMoreInteractions(debitCardService);
+    }
+
+    @Test
+    void changeCardStatusReturnsBadRequestForUnknownStatus() throws Exception {
+        String email = "customer@example.com";
+        String cardReference = "11111111111111111111111111111111";
+        String unknownStatus = "OPENED";
+
+        mockMvc.perform(patch("/api/debit-cards/{cardReference}/status/{status}", cardReference, unknownStatus)
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        verifyNoMoreInteractions(debitCardService);
+    }
+
+    @Test
+    void changeCardStatusReturnsUnauthorizedWithoutAuthentication() throws Exception {
+        String cardReference = "11111111111111111111111111111111";
+
+        mockMvc.perform(patch("/api/debit-cards/{cardReference}/status/{status}", cardReference, CardStatus.ACTIVE.name()))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoMoreInteractions(debitCardService);
+    }
+
+    @ParameterizedTest
+    @MethodSource("changeCardStatusServiceExceptionSource")
+    void changeCardStatusReturnsExpectedProblemForServiceException(
+            CardStatus status,
+            RuntimeException ex,
+            String title,
+            int httpStatusCode
+    ) throws Exception {
+        String email = "customer@example.com";
+        String cardReference = "11111111111111111111111111111111";
+
+        given(debitCardService.changeCardStatus(cardReference, email, status))
+                .willThrow(ex);
+
+        mockMvc.perform(patch("/api/debit-cards/{cardReference}/status/{status}", cardReference, status.name())
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().is(httpStatusCode))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value(ex.getMessage()))
+                .andExpect(jsonPath("$.title").value(title))
+                .andExpect(jsonPath("$.instance")
+                        .value("/api/debit-cards/%s/status/%s".formatted(cardReference, status.name())))
+                .andExpect(jsonPath("$.status").value(httpStatusCode));
+
+        verify(debitCardService).changeCardStatus(cardReference, email, status);
+    }
+
+    static Stream<Arguments> changeCardStatusServiceExceptionSource() {
+        return Stream.of(
+                Arguments.argumentSet(
+                        "changeCardStatusReturnsNotFoundProblem",
+                        CardStatus.ACTIVE,
+                        new DebitCardNotFoundException("Debit card not found"),
+                        "Debit card not found",
+                        404
+                ),
+                Arguments.argumentSet(
+                        "changeCardStatusReturnsBadRequestForUnsupportedStatus",
+                        CardStatus.INACTIVE,
+                        new UnsupportedCardStatusException("The entered status is not supported"),
+                        "Unsupported card status",
+                        400
+                ),
+                Arguments.argumentSet(
+                        "changeCardStatusReturnsConflictForInvalidTransition",
+                        CardStatus.FROZEN,
+                        new InvalidCardStatusTransitionException("Only an active card can be frozen"),
+                        "Invalid card status transition",
+                        409
+                ),
+                Arguments.argumentSet(
+                        "changeCardStatusReturnsConflictForExpiredCard",
+                        CardStatus.ACTIVE,
+                        new CardExpiredException("Expired cards cannot be activated"),
+                        "Card expired",
+                        409
+                )
+        );
     }
 }
