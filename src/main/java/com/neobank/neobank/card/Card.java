@@ -1,5 +1,7 @@
 package com.neobank.neobank.card;
 
+import com.neobank.neobank.card.exception.CardExpiredException;
+import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
 import com.neobank.neobank.shared.persistence.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -75,7 +77,7 @@ public abstract class Card extends BaseEntity {
         }
 
         if(this.status != CardStatus.INACTIVE) {
-            throw new IllegalStateException("Only inactive cards can be activated");
+            throw new InvalidCardStatusTransitionException("Only inactive cards can be activated");
         }
 
         this.status = CardStatus.ACTIVE;
@@ -87,7 +89,7 @@ public abstract class Card extends BaseEntity {
         }
 
         if(this.status != CardStatus.ACTIVE) {
-            throw new IllegalStateException("Only active cards can be frozen");
+            throw new InvalidCardStatusTransitionException("Only active cards can be frozen");
         }
 
         this.status = CardStatus.FROZEN;
@@ -95,7 +97,7 @@ public abstract class Card extends BaseEntity {
 
     public void closeCard() {
         if(this.status == CardStatus.CLOSED) {
-            throw new IllegalStateException("Card is already closed");
+            throw new InvalidCardStatusTransitionException("Card is already closed");
         }
 
         this.status = CardStatus.CLOSED;
@@ -107,7 +109,7 @@ public abstract class Card extends BaseEntity {
         }
 
         if(this.status != CardStatus.FROZEN) {
-            throw new IllegalStateException("Only frozen cards can be unfrozen");
+            throw new InvalidCardStatusTransitionException("Only frozen cards can be unfrozen");
         }
 
         this.status = CardStatus.ACTIVE;
@@ -119,11 +121,11 @@ public abstract class Card extends BaseEntity {
         }
 
         if(this.status == CardStatus.BLOCKED) {
-            throw new IllegalStateException("Card is already blocked");
+            throw new InvalidCardStatusTransitionException("Card is already blocked");
         }
 
         if(this.status == CardStatus.CLOSED) {
-            throw new IllegalStateException("Closed cards cannot be blocked");
+            throw new InvalidCardStatusTransitionException("Closed cards cannot be blocked");
         }
 
         this.status = CardStatus.BLOCKED;

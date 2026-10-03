@@ -1,30 +1,14 @@
 package com.neobank.neobank.card;
 
-import com.neobank.neobank.account.Account;
-import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
-import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.customer.CustomerRepository;
+import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
-import com.neobank.neobank.idempotency.IdempotencyRecordRepository;
 import com.neobank.neobank.idempotency.IdempotencyService;
-import com.neobank.neobank.internalaccount.InternalAccountRepository;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountRepository;
-import com.neobank.neobank.ledger.LedgerAccountType;
-import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
-import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.SimulatedFailureException;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.AopTestUtils;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Optional;
 import java.util.concurrent.*;
@@ -35,74 +19,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.doAnswer;
 
-@SpringBootTest
-@ActiveProfiles("integration")
-@Import(MySqlTestContainerConfiguration.class)
-class DebitCardIssuanceSafetyIntegrationTest {
+class DebitCardIssuanceSafetyIntegrationTest extends DebitCardIntegrationTestSupport {
 
     private static final long CONCURRENCY_TIMEOUT_SECONDS = 20;
-
-    @Autowired
-    private AccountRepository accountRepository;
-
-    @Autowired
-    private CustomerRepository customerRepository;
-
-    @Autowired
-    private DebitCardRepository debitCardRepository;
-
-    @Autowired
-    private LedgerAccountRepository ledgerAccountRepository;
-
-    @Autowired
-    private IdempotencyRecordRepository idempotencyRecordRepository;
-
-    @Autowired
-    private InternalAccountRepository internalAccountRepository;
-
-    @Autowired
-    private TransactionTemplate transactionTemplate;
 
     @Autowired
     private DebitCardService debitCardService;
 
     @MockitoSpyBean
     private IdempotencyService idempotencyService;
-
-    private Customer customer;
-    private Account account;
-
-    @BeforeEach
-    void setup() {
-        idempotencyRecordRepository.deleteAll();
-        debitCardRepository.deleteAll();
-        accountRepository.deleteAll();
-        internalAccountRepository.deleteAll();
-        ledgerAccountRepository.deleteAll();
-        customerRepository.deleteAll();
-
-        customer = customerRepository.save(
-                Customer.createNew(
-                        "customer@example.com",
-                        "{bcrypt}password-hash",
-                        "Ada Lovelace"
-                )
-        );
-
-        account = accountRepository.save(
-                Account.createNew(
-                        "12345678998745",
-                        "test",
-                        AccountType.CURRENT,
-                        customer,
-                        LedgerAccount.createNew(
-                                "1".repeat(32),
-                                LedgerAccountType.LIABILITY,
-                                CurrencyCode.TRY
-                        )
-                )
-        );
-    }
 
     @Test
     void concurrentIssuanceRequestsWithSameKeyCreateExactlyOneDebitCard() throws ExecutionException, InterruptedException, TimeoutException {

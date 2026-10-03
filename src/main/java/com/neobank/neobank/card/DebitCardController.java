@@ -53,4 +53,17 @@ public class DebitCardController {
 
         return ResponseEntity.ok(new PagedModel<>(page));
     }
+
+    @PatchMapping("/{cardReference}/status/{status}")
+    public ResponseEntity<DebitCardRetrieveResponse> changeCardStatus(
+            @PathVariable
+            @Pattern(regexp = "[a-f0-9]{32}", message = "Card reference must be 32 hexadecimal characters")
+            String cardReference,
+
+            @PathVariable CardStatus status,
+            @AuthenticationPrincipal Jwt jwt
+
+    ) {
+        return ResponseEntity.ok(debitCardService.changeCardStatus(cardReference, jwt.getSubject(), status));
+    }
 }
