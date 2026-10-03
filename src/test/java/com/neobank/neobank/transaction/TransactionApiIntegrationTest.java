@@ -43,6 +43,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
@@ -74,7 +75,202 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
     private TransactionTemplate transactionTemplate;
 
     @Nested
+    class FxInfoTests {
+        @Test
+        void transactionCanPersistFxSnapshotWithoutLockId() {
+            BankTransaction transaction = BankTransaction.createNew(
+                    new BigDecimal("100.00"),
+                    CurrencyCode.USD,
+                    TransactionType.DEPOSIT,
+                    "1".repeat(32),
+                    "Automatic FX"
+            );
+
+            transaction.addFxInfo(FxInfo.createNew(
+                    null,
+                    Set.of(
+                            FxRate.createNew(
+                                    CurrencyContext.REQUEST,
+                                    CurrencyCode.USD,
+                                    BigDecimal.ONE
+                            ),
+                            FxRate.createNew(
+                                    CurrencyContext.SOURCE,
+                                    CurrencyCode.USD,
+                                    BigDecimal.ONE
+                            ),
+                            FxRate.createNew(
+                                    CurrencyContext.DESTINATION,
+                                    CurrencyCode.TRY,
+                                    new BigDecimal("40.00")
+                            )
+                    )
+            ));
+
+            transaction.addEntry(
+                    "2".repeat(32),
+                    new BigDecimal("100.00"),
+                    new BigDecimal("10100.00"),
+                    EntryDirection.DEBIT,
+                    internalAccountUSD.getLedgerAccount()
+            );
+
+            transaction.addEntry(
+                    "3".repeat(32),
+                    new BigDecimal("4000.00"),
+                    new BigDecimal("4000.00"),
+                    EntryDirection.CREDIT,
+                    account.getLedgerAccount()
+            );
+
+            transaction.complete();
+            BankTransaction savedTransaction = bankTransactionRepository.saveAndFlush(transaction);
+
+            assertThat(bankTransactionRepository.count())
+                    .isOne();
+
+            transactionTemplate.executeWithoutResult(status -> {
+                BankTransaction reloadedTransaction = bankTransactionRepository.findById(savedTransaction.getId())
+                        .orElseThrow();
+
+                FxInfo savedFxInfo = reloadedTransaction.getFxInfo();
+
+                assertThat(reloadedTransaction.getStatus())
+                        .isSameAs(TransactionStatus.COMPLETED);
+
+                assertThat(savedFxInfo.getId())
+                        .isNotNull();
+
+                assertThat(savedFxInfo.getLockId())
+                        .isNull();
+
+                assertThat(savedFxInfo.getRates().size())
+                        .isEqualTo(3);
+
+                assertThat(savedFxInfo.getRate(CurrencyContext.REQUEST))
+                        .isEqualByComparingTo(BigDecimal.ONE);
+
+                assertThat(savedFxInfo.getRate(CurrencyContext.SOURCE))
+                        .isEqualByComparingTo(BigDecimal.ONE);
+
+                assertThat(savedFxInfo.getRate(CurrencyContext.DESTINATION))
+                        .isEqualByComparingTo(new BigDecimal("40.00"));
+            });
+        }
+    }
+
+    @Nested
     class DepositTests {
+        @Test
+        void customerCanReuseFxLockForDistinctDeposits() throws Exception {
+            FxProviderRates providerRates = new FxProviderRates(
+                    "test-provider",
+                    CurrencyCode.USD,
+                    Map.of(
+                            CurrencyCode.USD, BigDecimal.ONE,
+                            CurrencyCode.EUR, new BigDecimal("0.85"),
+                            CurrencyCode.GBP, new BigDecimal("0.75"),
+                            CurrencyCode.TRY, new BigDecimal("40.00")
+                    ),
+                    Instant.now()
+            );
+
+            given(providerRateCache.getLatestRates())
+                    .willReturn(providerRates);
+
+            FxRateLockResponse fxRateResponse = fxRateService.createRateLock(CurrencyCode.USD, customer.getEmail());
+
+            DepositRequest firstRequest = new DepositRequest(
+                    new BigDecimal("100.00"),
+                    "First deposit",
+                    CurrencyCode.USD,
+                    fxRateResponse.lockId()
+            );
+
+            DepositRequest secondRequest = new DepositRequest(
+                    new BigDecimal("200.00"),
+                    "Second deposit",
+                    CurrencyCode.USD,
+                    fxRateResponse.lockId()
+            );
+
+            MvcResult firstMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(firstRequest))
+                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.amount").value(4000.00))
+                    .andReturn();
+
+            MvcResult secondMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(secondRequest))
+                            .header("Idempotency-Key", "2".repeat(32))
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.amount").value(8000.00))
+                    .andReturn();
+
+            DepositResponse firstResponse = objectMapper.readValue(firstMvcResult.getResponse().getContentAsString(), DepositResponse.class);
+            DepositResponse secondResponse = objectMapper.readValue(secondMvcResult.getResponse().getContentAsString(), DepositResponse.class);
+
+            assertThat(firstResponse.transactionReference())
+                    .isNotEqualTo(secondResponse.transactionReference());
+
+            assertThat(bankTransactionRepository.count())
+                    .isEqualTo(2);
+
+            assertThat(ledgerEntryRepository.count())
+                    .isEqualTo(4);
+
+            assertThat(idempotencyRecordRepository.count())
+                    .isEqualTo(2);
+
+            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
+                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.balance").value(12000.00));
+
+            transactionTemplate.executeWithoutResult(status -> {
+                BankTransaction firstTransaction = bankTransactionRepository.findByReference(firstResponse.transactionReference())
+                        .orElseThrow();
+
+                BankTransaction secondTransaction = bankTransactionRepository.findByReference(secondResponse.transactionReference())
+                        .orElseThrow();
+
+                FxInfo firstFxInfo = firstTransaction.getFxInfo();
+                FxInfo secondFxInfo = secondTransaction.getFxInfo();
+
+                assertThat(firstTransaction.getStatus())
+                        .isSameAs(TransactionStatus.COMPLETED);
+
+                assertThat(secondTransaction.getStatus())
+                        .isSameAs(TransactionStatus.COMPLETED);
+
+                assertThat(firstFxInfo.getId())
+                        .isNotNull()
+                        .isNotEqualTo(secondFxInfo.getId());
+
+                assertThat(secondFxInfo.getId())
+                        .isNotNull();
+
+                assertThat(firstFxInfo.getLockId())
+                        .isEqualTo(fxRateResponse.lockId());
+
+                assertThat(secondFxInfo.getLockId())
+                        .isEqualTo(fxRateResponse.lockId());
+
+                assertThat(firstFxInfo.getRate(CurrencyContext.DESTINATION))
+                        .isEqualByComparingTo(new BigDecimal("40.00"));
+
+                assertThat(secondFxInfo.getRate(CurrencyContext.DESTINATION))
+                        .isEqualByComparingTo(new BigDecimal("40.00"));
+            });
+        }
+
         @Test
         void authenticatedCustomerCanDepositIntoOwnedAccount() throws Exception {
             DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
