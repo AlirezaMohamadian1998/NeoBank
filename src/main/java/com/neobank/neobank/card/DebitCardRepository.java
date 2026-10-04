@@ -12,7 +12,7 @@ import java.util.Optional;
 public interface DebitCardRepository extends JpaRepository<DebitCard, Long> {
     Optional<DebitCard> findByCardReference(String cardReference);
 
-    @EntityGraph(attributePaths = "fundingAccount")
+    @EntityGraph(attributePaths = {"fundingAccount", "fundingAccount.ledgerAccount", "fundingAccount.customer"})
     Optional<DebitCard> findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(String cardReference, String email);
 
     @EntityGraph(attributePaths = "fundingAccount")
