@@ -4,6 +4,7 @@ import com.neobank.neobank.account.dto.AccountResponse;
 import com.neobank.neobank.account.dto.CreateAccountRequest;
 import com.neobank.neobank.auth.dto.LoginRequest;
 import com.neobank.neobank.auth.dto.LoginResponse;
+import com.neobank.neobank.card.CardPurchaseDetailsRepository;
 import com.neobank.neobank.card.DebitCardRepository;
 import com.neobank.neobank.customer.CustomerRepository;
 import com.neobank.neobank.customer.dto.RegisterCustomerRequest;
@@ -70,8 +71,12 @@ class AccountIntegrationTest {
     @Autowired
     private DebitCardRepository debitCardRepository;
 
+    @Autowired
+    private CardPurchaseDetailsRepository cardPurchaseDetailsRepository;
+
     @BeforeEach
     void setUp() {
+        cardPurchaseDetailsRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
         bankTransactionRepository.deleteAll();
         debitCardRepository.deleteAll();
