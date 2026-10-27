@@ -19,6 +19,8 @@ import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.http.*;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.method.ParameterErrors;
+import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -65,16 +67,29 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             WebRequest request
     ) {
         Map<String, String> validationErrors = new HashMap<>();
+        boolean hasFieldErrors = false;
 
-        ex.getParameterValidationResults().forEach(result -> {
+        for (ParameterValidationResult result : ex.getParameterValidationResults()) {
+            if (result instanceof ParameterErrors parameterErrors) {
+                List<FieldError> errors = parameterErrors.getFieldErrors();
+                hasFieldErrors |= !errors.isEmpty();
+
+                errors.forEach(error -> validationErrors.put(error.getField(), error.getDefaultMessage()));
+                continue;
+            }
+
             String parameterName = result.getMethodParameter().getParameterName();
 
             result.getResolvableErrors().stream()
                     .findFirst()
                     .ifPresent(error -> validationErrors.put(parameterName, error.getDefaultMessage()));
-        });
+        }
 
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, "Validation failed for one or more parameters");
+        String detail = hasFieldErrors
+                ? "Validation failed for one or more fields."
+                : "Validation failed for one or more parameters";
+
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, detail);
         problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
         problemDetail.setTitle("Validation failed");
         problemDetail.setProperty("errors", validationErrors);
