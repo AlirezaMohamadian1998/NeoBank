@@ -59,8 +59,8 @@ public abstract class TransactionIntegrationTestSupport {
     @BeforeEach
     protected void setUpTransactionIntegrationFixture() {
         idempotencyRecordRepository.deleteAll();
-        debitCardRepository.deleteAll();
         cardPurchaseDetailsRepository.deleteAll();
+        debitCardRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
         bankTransactionRepository.deleteAll();
         accountRepository.deleteAll();

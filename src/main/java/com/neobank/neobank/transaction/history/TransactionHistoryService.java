@@ -3,11 +3,13 @@ package com.neobank.neobank.transaction.history;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
+import com.neobank.neobank.card.CardPurchaseDetails;
+import com.neobank.neobank.card.CardPurchaseDetailsRepository;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.LedgerEntryRepository;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryFilter;
-import com.neobank.neobank.transaction.history.dto.TransactionHistoryResponse;
+import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,8 +30,10 @@ public class TransactionHistoryService {
 
     private final AccountRepository accountRepository;
 
+    private final CardPurchaseDetailsRepository cardPurchaseDetailsRepository;
+
     @Transactional(readOnly = true)
-    public Page<TransactionHistoryResponse> getHistoryByAccount(
+    public Page<TransactionHistoryItem> getHistoryByAccount(
             TransactionHistoryFilter filter,
             String customerEmail,
             Pageable pageable
@@ -58,8 +64,24 @@ public class TransactionHistoryService {
                         .and(LedgerEntrySpecifications.amountIsGreaterThanOrEqual(filter.appliedMin()))
                         .and(LedgerEntrySpecifications.amountIsLessThanOrEqual(filter.appliedMax()));
 
-        return ledgerEntryRepository
-                .findAll(spec, historyPageable)
+        Page<LedgerEntry> entries = ledgerEntryRepository.findAll(spec, historyPageable);
+
+        List<Long> cardPurchaseTransactionIds = entries.stream()
+                .filter(TransactionHistoryMapper::isCardPurchasePayerEntry)
+                .map(entry -> entry.getBankTransaction().getId())
+                .toList();
+
+        Map<Long, CardPurchaseDetails> cardPurchaseDetailsByTransactionId =
+                cardPurchaseTransactionIds.isEmpty()
+                        ? Map.of()
+                        : cardPurchaseDetailsRepository.findAllByBankTransaction_IdIn(cardPurchaseTransactionIds)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                details -> details.getBankTransaction().getId(),
+                                details -> details
+                        ));
+
+        return entries
                 .map(entry ->
                         TransactionHistoryMapper.toResponse(
                                 entry,
@@ -72,8 +94,8 @@ public class TransactionHistoryService {
                                         )
                                         .map(Account::getAccountNumber)
                                         .findFirst()
-                                        .orElseThrow()
-
+                                        .orElseThrow(),
+                                cardPurchaseDetailsByTransactionId
                         )
                 );
     }

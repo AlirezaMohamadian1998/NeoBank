@@ -32,10 +32,19 @@ public class CardPurchaseDetails extends BaseEntity {
     )
     private String cardReference;
 
+    @Column(
+            nullable = false,
+            updatable = false,
+            length = 4,
+            check = @CheckConstraint(constraint = "REGEXP_LIKE(card_last_four_digits, '^[0-9]{4}$', 'c')")
+    )
+    private String cardLastFourDigits;
+
     public static CardPurchaseDetails createNew(
             BankTransaction bankTransaction,
             String merchantName,
-            String cardReference
+            String cardReference,
+            String cardLastFourDigits
     ) {
         if(bankTransaction == null) {
             throw new IllegalArgumentException("Bank transaction must not be null");
@@ -69,10 +78,19 @@ public class CardPurchaseDetails extends BaseEntity {
             throw new IllegalArgumentException("Card reference must be exactly 32 hexadecimal characters");
         }
 
+        if(cardLastFourDigits == null) {
+            throw new IllegalArgumentException("Card last four digits must not be null");
+        }
+
+        if(!cardLastFourDigits.matches("[0-9]{4}")) {
+            throw new IllegalArgumentException("Card last four digits must be exactly 4 digits");
+        }
+
         return new CardPurchaseDetails(
                 bankTransaction,
                 merchantName,
-                cardReference
+                cardReference,
+                cardLastFourDigits
         );
     }
 }

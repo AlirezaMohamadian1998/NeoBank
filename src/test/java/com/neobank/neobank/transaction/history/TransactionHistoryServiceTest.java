@@ -4,12 +4,16 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
+import com.neobank.neobank.card.CardPurchaseDetails;
+import com.neobank.neobank.card.CardPurchaseDetailsRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.*;
+import com.neobank.neobank.transaction.history.dto.CardPurchaseHistoryResponse;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryFilter;
+import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +27,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +46,9 @@ class TransactionHistoryServiceTest {
 
     @Mock
     private LedgerEntryRepository ledgerEntryRepository;
+
+    @Mock
+    private CardPurchaseDetailsRepository cardPurchaseDetailsRepository;
 
     @InjectMocks
     private TransactionHistoryService transactionHistoryService;
@@ -109,14 +118,14 @@ class TransactionHistoryServiceTest {
         given(ledgerEntryRepository.findAll(ArgumentMatchers.<Specification<LedgerEntry>>any(), any(Pageable.class)))
                 .willReturn(page);
 
-        Page<TransactionHistoryResponse> response =
+        Page<TransactionHistoryItem> response =
                 transactionHistoryService.getHistoryByAccount(filter, customer.getEmail(), pageRequest);
 
         assertThat(response.getPageable())
                 .isEqualTo(page.getPageable());
 
         assertThat(response.getContent())
-                .isEqualTo(List.of(TransactionHistoryMapper.toResponse(ledgerEntry, account.getAccountNumber())));
+                .isEqualTo(List.of(TransactionHistoryMapper.toResponse(ledgerEntry, account.getAccountNumber(), Map.of())));
     }
 
     @Test
@@ -240,7 +249,7 @@ class TransactionHistoryServiceTest {
         given(ledgerEntryRepository.findAll(ArgumentMatchers.<Specification<LedgerEntry>>any(), any(Pageable.class)))
                 .willReturn(page);
 
-        Page<TransactionHistoryResponse> response =
+        Page<TransactionHistoryItem> response =
                 transactionHistoryService.getHistoryByAccount(filter, customer.getEmail(), pageRequest);
 
         assertThat(response.getPageable())
@@ -248,8 +257,8 @@ class TransactionHistoryServiceTest {
 
         assertThat(response.getContent())
                 .containsExactly(
-                        TransactionHistoryMapper.toResponse(ledgerEntry2, account2.getAccountNumber()),
-                        TransactionHistoryMapper.toResponse(ledgerEntry1, account1.getAccountNumber())
+                        TransactionHistoryMapper.toResponse(ledgerEntry2, account2.getAccountNumber(), Map.of()),
+                        TransactionHistoryMapper.toResponse(ledgerEntry1, account1.getAccountNumber(), Map.of())
                 );
     }
 
@@ -319,7 +328,7 @@ class TransactionHistoryServiceTest {
         given(ledgerEntryRepository.findAll(ArgumentMatchers.<Specification<LedgerEntry>>any(), eq(normalizedPageRequest)))
                 .willReturn(page);
 
-        Page<TransactionHistoryResponse> response =
+        Page<TransactionHistoryItem> response =
                 transactionHistoryService.getHistoryByAccount(filter, customer.getEmail(), pageRequest);
 
         assertThat(response.getPageable())
@@ -361,10 +370,234 @@ class TransactionHistoryServiceTest {
         given(ledgerEntryRepository.findAll(ArgumentMatchers.<Specification<LedgerEntry>>any(), any(Pageable.class)))
                 .willReturn(Page.empty());
 
-        Page<TransactionHistoryResponse> response =
+        Page<TransactionHistoryItem> response =
                 transactionHistoryService.getHistoryByAccount(filter, customer.getEmail(), pageRequest);
 
         assertThat(response.getContent())
                 .isEmpty();
+    }
+
+    @Test
+    void historyLoadsCardPurchaseDetailsInOneQueryForPayerPurchaseEntries() {
+        Customer customer = Customer.createNew(
+                "customer@example.com",
+                "{bcrypt}password-hash",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount fundingLedgerAccount = LedgerAccount.createNew(
+                "1".repeat(32),
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        LedgerAccount merchantLedgerAccount = LedgerAccount.createNew(
+                "2".repeat(32),
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        ReflectionTestUtils.setField(fundingLedgerAccount, "id", 1L);
+        ReflectionTestUtils.setField(merchantLedgerAccount, "id", 2L);
+
+        Account account = Account.createNew(
+                "12".repeat(7),
+                "test",
+                AccountType.CURRENT,
+                customer,
+                fundingLedgerAccount
+        );
+
+        TransactionHistoryFilter filter = new TransactionHistoryFilter(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        PageRequest pageRequest = PageRequest.of(0, 10, Sort.by(Sort.Order.desc("createdAt")));
+
+        BankTransaction purchaseTransaction = BankTransaction.createNew(
+                new BigDecimal("250.00"),
+                CurrencyCode.TRY,
+                TransactionType.DEBIT_CARD_PURCHASE,
+                "3".repeat(32),
+                null
+        );
+
+        ReflectionTestUtils.setField(purchaseTransaction, "id", 10L);
+
+        LedgerEntry payerEntry = purchaseTransaction.addEntry(
+                "4".repeat(32),
+                new BigDecimal("250.00"),
+                new BigDecimal("750.00"),
+                EntryDirection.DEBIT,
+                fundingLedgerAccount
+        );
+
+        purchaseTransaction.addEntry(
+                "5".repeat(32),
+                new BigDecimal("250.00"),
+                new BigDecimal("250.00"),
+                EntryDirection.CREDIT,
+                merchantLedgerAccount
+        );
+
+        purchaseTransaction.complete();
+
+        BankTransaction depositTransaction = BankTransaction.createNew(
+                new BigDecimal("1000.00"),
+                CurrencyCode.TRY,
+                TransactionType.DEPOSIT,
+                "6".repeat(32),
+                null
+        );
+
+        ReflectionTestUtils.setField(depositTransaction, "id", 20L);
+
+        LedgerEntry depositEntry = depositTransaction.addEntry(
+                "7".repeat(32),
+                new BigDecimal("1000.00"),
+                new BigDecimal("1000.00"),
+                EntryDirection.CREDIT,
+                fundingLedgerAccount
+        );
+
+        CardPurchaseDetails cardPurchaseDetails = CardPurchaseDetails.createNew(
+                purchaseTransaction,
+                "Test merchant",
+                "8".repeat(32),
+                "1234"
+        );
+
+        Page<LedgerEntry> page = new PageImpl<>(
+                List.of(payerEntry, depositEntry),
+                PageRequest.of(0, 10, Sort.by(Sort.Order.desc("createdAt"))),
+                2
+        );
+
+        given(accountRepository.findAllByCustomer_Email(customer.getEmail()))
+                .willReturn(List.of(account));
+
+        given(ledgerEntryRepository.findAll(ArgumentMatchers.<Specification<LedgerEntry>>any(), any(Pageable.class)))
+                .willReturn(page);
+
+        given(cardPurchaseDetailsRepository.findAllByBankTransaction_IdIn(List.of(10L)))
+                .willReturn(List.of(cardPurchaseDetails));
+
+        Page<TransactionHistoryItem> response =
+                transactionHistoryService.getHistoryByAccount(filter, customer.getEmail(), pageRequest);
+
+        assertThat(response.getContent())
+                .containsExactly(
+                        TransactionHistoryMapper.toResponse(payerEntry, account.getAccountNumber(), Map.of(10L, cardPurchaseDetails)),
+                        TransactionHistoryMapper.toResponse(depositEntry, account.getAccountNumber(), Map.of())
+                );
+
+        assertThat(response.getContent().get(0))
+                .isInstanceOf(CardPurchaseHistoryResponse.class);
+
+        assertThat(response.getContent().get(1))
+                .isInstanceOf(TransactionHistoryResponse.class);
+
+        verify(cardPurchaseDetailsRepository).findAllByBankTransaction_IdIn(List.of(10L));
+    }
+
+    @Test
+    void historySkipsCardPurchaseDetailsLookupWhenPageHasNoPayerPurchaseEntries() {
+        Customer customer = Customer.createNew(
+                "merchant@example.com",
+                "{bcrypt}password-hash",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount payerLedgerAccount = LedgerAccount.createNew(
+                "1".repeat(32),
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        LedgerAccount merchantLedgerAccount = LedgerAccount.createNew(
+                "2".repeat(32),
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        ReflectionTestUtils.setField(payerLedgerAccount, "id", 1L);
+        ReflectionTestUtils.setField(merchantLedgerAccount, "id", 2L);
+
+        Account merchantAccount = Account.createNew(
+                "98".repeat(7),
+                "merchant",
+                AccountType.CURRENT,
+                customer,
+                merchantLedgerAccount
+        );
+
+        TransactionHistoryFilter filter = new TransactionHistoryFilter(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        PageRequest pageRequest = PageRequest.of(0, 10, Sort.by(Sort.Order.desc("createdAt")));
+
+        BankTransaction purchaseTransaction = BankTransaction.createNew(
+                new BigDecimal("250.00"),
+                CurrencyCode.TRY,
+                TransactionType.DEBIT_CARD_PURCHASE,
+                "3".repeat(32),
+                null
+        );
+
+        ReflectionTestUtils.setField(purchaseTransaction, "id", 10L);
+
+        purchaseTransaction.addEntry(
+                "4".repeat(32),
+                new BigDecimal("250.00"),
+                new BigDecimal("750.00"),
+                EntryDirection.DEBIT,
+                payerLedgerAccount
+        );
+
+        LedgerEntry merchantEntry = purchaseTransaction.addEntry(
+                "5".repeat(32),
+                new BigDecimal("250.00"),
+                new BigDecimal("250.00"),
+                EntryDirection.CREDIT,
+                merchantLedgerAccount
+        );
+
+        Page<LedgerEntry> page = new PageImpl<>(
+                List.of(merchantEntry),
+                PageRequest.of(0, 10, Sort.by(Sort.Order.desc("createdAt"))),
+                1
+        );
+
+        given(accountRepository.findAllByCustomer_Email(customer.getEmail()))
+                .willReturn(List.of(merchantAccount));
+
+        given(ledgerEntryRepository.findAll(ArgumentMatchers.<Specification<LedgerEntry>>any(), any(Pageable.class)))
+                .willReturn(page);
+
+        Page<TransactionHistoryItem> response =
+                transactionHistoryService.getHistoryByAccount(filter, customer.getEmail(), pageRequest);
+
+        assertThat(response.getContent())
+                .containsExactly(
+                        TransactionHistoryMapper.toResponse(merchantEntry, merchantAccount.getAccountNumber(), Map.of())
+                );
+
+        assertThat(response.getContent().get(0))
+                .isInstanceOf(TransactionHistoryResponse.class);
+
+        verifyNoInteractions(cardPurchaseDetailsRepository);
     }
 }

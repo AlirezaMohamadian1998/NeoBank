@@ -209,7 +209,8 @@ public class CardPaymentService {
                         CardPurchaseDetails.createNew(
                                 bankTransaction,
                                 request.merchantName(),
-                                cardReference
+                                cardReference,
+                                debitCard.getLastFourDigits()
                         )
                 );
 

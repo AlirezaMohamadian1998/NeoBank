@@ -1,7 +1,7 @@
 package com.neobank.neobank.transaction.history;
 
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryFilter;
-import com.neobank.neobank.transaction.history.dto.TransactionHistoryResponse;
+import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -25,7 +25,7 @@ public class TransactionHistoryController {
     private final TransactionHistoryService transactionHistoryService;
 
     @GetMapping
-    public ResponseEntity<PagedModel<TransactionHistoryResponse>> getHistory(
+    public ResponseEntity<PagedModel<TransactionHistoryItem>> getHistory(
             @Valid @ModelAttribute TransactionHistoryFilter filter,
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(
@@ -34,7 +34,7 @@ public class TransactionHistoryController {
             )
             Pageable pageable
     ) {
-        Page<TransactionHistoryResponse> page = transactionHistoryService.getHistoryByAccount(
+        Page<TransactionHistoryItem> page = transactionHistoryService.getHistoryByAccount(
                 filter,
                 jwt.getSubject(),
                 pageable

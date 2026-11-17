@@ -28,7 +28,8 @@ class CardPurchaseDetailsTest {
         CardPurchaseDetails details = CardPurchaseDetails.createNew(
                 transaction,
                 "Test merchant",
-                "6".repeat(32)
+                "6".repeat(32),
+                "1234"
         );
 
         assertThat(details.getBankTransaction())
@@ -39,6 +40,9 @@ class CardPurchaseDetailsTest {
 
         assertThat(details.getCardReference())
                 .isEqualTo("6".repeat(32));
+
+        assertThat(details.getCardLastFourDigits())
+                .isEqualTo("1234");
     }
 
     @Test
@@ -46,7 +50,8 @@ class CardPurchaseDetailsTest {
         assertThatThrownBy(() -> CardPurchaseDetails.createNew(
                 null,
                 "Test merchant",
-                "6".repeat(32)
+                "6".repeat(32),
+                "1234"
         )).isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Bank transaction must not be null");
     }
@@ -60,7 +65,8 @@ class CardPurchaseDetailsTest {
         assertThatThrownBy(() -> CardPurchaseDetails.createNew(
                 transaction,
                 "Test merchant",
-                "6".repeat(32)
+                "6".repeat(32),
+                "1234"
         )).isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("The transaction type is not correct");
     }
@@ -72,7 +78,8 @@ class CardPurchaseDetailsTest {
         assertThatThrownBy(() -> CardPurchaseDetails.createNew(
                 transaction,
                 "Test merchant",
-                "6".repeat(32)
+                "6".repeat(32),
+                "1234"
         )).isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Transaction must be completed");
     }
@@ -86,7 +93,8 @@ class CardPurchaseDetailsTest {
         assertThatThrownBy(() -> CardPurchaseDetails.createNew(
                 transaction,
                 merchantName,
-                "6".repeat(32)
+                "6".repeat(32),
+                "1234"
         )).isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(expectedExceptionMessage);
     }
@@ -100,7 +108,23 @@ class CardPurchaseDetailsTest {
         assertThatThrownBy(() -> CardPurchaseDetails.createNew(
                 transaction,
                 "Test merchant",
-                cardReference
+                cardReference,
+                "1234"
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(expectedExceptionMessage);
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidCardLastFourDigits")
+    void createNewRejectsInvalidCardLastFourDigits(String cardLastFourDigits, String expectedExceptionMessage) {
+        BankTransaction transaction = createTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+        transaction.complete();
+
+        assertThatThrownBy(() -> CardPurchaseDetails.createNew(
+                transaction,
+                "Test merchant",
+                "6".repeat(32),
+                cardLastFourDigits
         )).isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(expectedExceptionMessage);
     }
@@ -121,6 +145,16 @@ class CardPurchaseDetailsTest {
                 Arguments.of("1".repeat(20), "Card reference must be exactly 32 hexadecimal characters"),
                 Arguments.of("qq1z2x3m4y5u6s7g8h9j0p23afccwwdd", "Card reference must be exactly 32 hexadecimal characters"),
                 Arguments.of(null, "Card reference must not be null")
+        );
+    }
+
+    static Stream<Arguments> invalidCardLastFourDigits() {
+        return Stream.of(
+                Arguments.of("", "Card last four digits must be exactly 4 digits"),
+                Arguments.of("123", "Card last four digits must be exactly 4 digits"),
+                Arguments.of("12345", "Card last four digits must be exactly 4 digits"),
+                Arguments.of("12a4", "Card last four digits must be exactly 4 digits"),
+                Arguments.of(null, "Card last four digits must not be null")
         );
     }
 
