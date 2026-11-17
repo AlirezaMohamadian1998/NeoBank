@@ -28,5 +28,5 @@ public record TransactionHistoryResponse(
         BigDecimal balanceAfter,
 
         Instant createdAt
-) {
+) implements TransactionHistoryItem {
 }
