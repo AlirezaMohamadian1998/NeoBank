@@ -172,6 +172,9 @@ class CardPaymentServiceTest {
         assertThat(savedDetails.getCardReference())
                 .isEqualTo("2".repeat(32));
 
+        assertThat(savedDetails.getCardLastFourDigits())
+                .isEqualTo(debitCard.getLastFourDigits());
+
         assertThat(savedTransaction.getReference())
                 .isEqualTo("6".repeat(32));
 
@@ -1364,7 +1367,8 @@ class CardPaymentServiceTest {
         return CardPurchaseDetails.createNew(
                 transaction,
                 request.merchantName(),
-                "2".repeat(32)
+                "2".repeat(32),
+                "1234"
         );
     }
 

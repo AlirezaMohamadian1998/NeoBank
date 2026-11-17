@@ -185,6 +185,9 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
             assertThat(savedDetails.getCardReference())
                     .isEqualTo("2".repeat(32));
 
+            assertThat(savedDetails.getCardLastFourDigits())
+                    .isEqualTo(debitCard.getLastFourDigits());
+
             assertThat(savedDetails.getBankTransaction().getId())
                     .isEqualTo(savedTransaction.getId());
 
