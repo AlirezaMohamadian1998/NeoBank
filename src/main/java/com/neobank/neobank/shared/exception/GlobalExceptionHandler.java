@@ -1,10 +1,7 @@
 package com.neobank.neobank.shared.exception;
 
 import com.neobank.neobank.account.AccountNotFoundException;
-import com.neobank.neobank.card.exception.CardExpiredException;
-import com.neobank.neobank.card.exception.DebitCardNotFoundException;
-import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
-import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
+import com.neobank.neobank.card.exception.*;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
 import com.neobank.neobank.fx.FxProviderUnavailableException;
@@ -22,6 +19,8 @@ import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.http.*;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.method.ParameterErrors;
+import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -68,16 +67,29 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             WebRequest request
     ) {
         Map<String, String> validationErrors = new HashMap<>();
+        boolean hasFieldErrors = false;
 
-        ex.getParameterValidationResults().forEach(result -> {
+        for (ParameterValidationResult result : ex.getParameterValidationResults()) {
+            if (result instanceof ParameterErrors parameterErrors) {
+                List<FieldError> errors = parameterErrors.getFieldErrors();
+                hasFieldErrors |= !errors.isEmpty();
+
+                errors.forEach(error -> validationErrors.put(error.getField(), error.getDefaultMessage()));
+                continue;
+            }
+
             String parameterName = result.getMethodParameter().getParameterName();
 
             result.getResolvableErrors().stream()
                     .findFirst()
                     .ifPresent(error -> validationErrors.put(parameterName, error.getDefaultMessage()));
-        });
+        }
 
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, "Validation failed for one or more parameters");
+        String detail = hasFieldErrors
+                ? "Validation failed for one or more fields."
+                : "Validation failed for one or more parameters";
+
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, detail);
         problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
         problemDetail.setTitle("Validation failed");
         problemDetail.setProperty("errors", validationErrors);
@@ -309,6 +321,30 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problemDetail.setInstance(URI.create(request.getRequestURI()));
         problemDetail.setTitle("Unsupported card status");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(CardNotActiveException.class)
+    public ResponseEntity<ProblemDetail> handleCardNotActiveException(
+            CardNotActiveException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Card not active");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidCardPaymentException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidCardPaymentException(
+            InvalidCardPaymentException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Invalid card payment");
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
     }

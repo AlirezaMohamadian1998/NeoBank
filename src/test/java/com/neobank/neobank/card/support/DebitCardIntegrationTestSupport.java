@@ -3,6 +3,7 @@ package com.neobank.neobank.card.support;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
+import com.neobank.neobank.card.CardPurchaseDetailsRepository;
 import com.neobank.neobank.card.DebitCardRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerRepository;
@@ -13,6 +14,8 @@ import com.neobank.neobank.ledger.LedgerAccountRepository;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
 import com.neobank.neobank.shared.money.CurrencyCode;
+import com.neobank.neobank.transaction.BankTransactionRepository;
+import com.neobank.neobank.transaction.LedgerEntryRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -47,13 +50,22 @@ public abstract class DebitCardIntegrationTestSupport {
     protected DebitCardRepository debitCardRepository;
 
     @Autowired
-    private LedgerAccountRepository ledgerAccountRepository;
+    protected LedgerAccountRepository ledgerAccountRepository;
 
     @Autowired
     protected IdempotencyRecordRepository idempotencyRecordRepository;
 
     @Autowired
-    private InternalAccountRepository internalAccountRepository;
+    protected InternalAccountRepository internalAccountRepository;
+
+    @Autowired
+    protected CardPurchaseDetailsRepository cardPurchaseDetailsRepository;
+
+    @Autowired
+    protected LedgerEntryRepository ledgerEntryRepository;
+
+    @Autowired
+    protected BankTransactionRepository bankTransactionRepository;
 
     @Autowired
     protected TransactionTemplate transactionTemplate;
@@ -67,7 +79,10 @@ public abstract class DebitCardIntegrationTestSupport {
     @BeforeEach
     protected void setUpDebitCardIntegrationFixture() {
         idempotencyRecordRepository.deleteAll();
+        cardPurchaseDetailsRepository.deleteAll();
         debitCardRepository.deleteAll();
+        ledgerEntryRepository.deleteAll();
+        bankTransactionRepository.deleteAll();
         accountRepository.deleteAll();
         internalAccountRepository.deleteAll();
         ledgerAccountRepository.deleteAll();

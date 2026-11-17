@@ -26,42 +26,19 @@ public class FxRateService {
     private final FxRateLockProperties properties;
 
     public FxRateLockResponse createRateLock(CurrencyCode baseCurrency, String customerEmail) {
-        FxProviderRates providerRates = providerRateCache.getLatestRates();
+        Map<CurrencyCode, BigDecimal> rates = getRates(baseCurrency);
 
         String id = UUID.randomUUID().toString();
 
         Instant expiresAt = Instant.now(clock).plus(properties.duration());
 
-        FxRateLockResponse response;
+        FxRateLockResponse response = new FxRateLockResponse(
+                id,
+                expiresAt,
+                baseCurrency,
+                rates
+        );
 
-        if(baseCurrency == providerRates.baseCurrency()) {
-            response = new FxRateLockResponse(
-                    id,
-                    expiresAt,
-                    baseCurrency,
-                    providerRates.rates()
-            );
-        } else {
-
-            BigDecimal requestedBaseCurrencyRate = providerRates.rates().get(baseCurrency);
-
-            Map<CurrencyCode, BigDecimal> normalizedRates = new HashMap<>();
-
-            normalizedRates.put(baseCurrency, BigDecimal.ONE);
-            providerRates.rates().forEach((currency, rate) -> {
-                        if(currency != baseCurrency) {
-                            normalizedRates.put(currency, rate.divide(requestedBaseCurrencyRate, 8, RoundingMode.HALF_EVEN));
-                        }
-                    }
-            );
-
-            response = new FxRateLockResponse(
-                    id,
-                    expiresAt,
-                    baseCurrency,
-                    Map.copyOf(normalizedRates)
-            );
-        }
 
         fxRateLockCache.put(customerEmail, response);
         return response;
@@ -70,5 +47,26 @@ public class FxRateService {
     public FxRateLockResponse getCachedRate(String customerEmail, String lockId) {
         return fxRateLockCache.get(customerEmail, lockId)
                 .orElseThrow(() -> new FxRateLockUnavailableException("Invalid or expired FX rate lock"));
+    }
+
+    public Map<CurrencyCode, BigDecimal> getRates(CurrencyCode baseCurrency) {
+        FxProviderRates providerRates = providerRateCache.getLatestRates();
+
+        if(baseCurrency == providerRates.baseCurrency()) {
+            return Map.copyOf(providerRates.rates());
+        }
+
+        BigDecimal requestedBaseCurrencyRate = providerRates.rates().get(baseCurrency);
+        Map<CurrencyCode, BigDecimal> normalizedRates = new HashMap<>();
+
+        normalizedRates.put(baseCurrency, BigDecimal.ONE);
+        providerRates.rates().forEach((currency, rate) -> {
+                    if(currency != baseCurrency) {
+                        normalizedRates.put(currency, rate.divide(requestedBaseCurrencyRate, 8, RoundingMode.HALF_EVEN));
+                    }
+                }
+        );
+
+        return Map.copyOf(normalizedRates);
     }
 }

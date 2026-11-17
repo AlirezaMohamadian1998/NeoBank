@@ -18,7 +18,7 @@ import java.util.Set;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class FxInfo extends BaseEntity {
 
-    @Column(nullable = false, updatable = false, unique = true, length = 36)
+    @Column(updatable = false, length = 36)
     private String lockId;
 
     @ElementCollection
@@ -39,11 +39,7 @@ public class FxInfo extends BaseEntity {
             String lockId,
             Set<FxRate> rates
     ) {
-        if(lockId == null) {
-            throw new IllegalArgumentException("Lock ID must not be null");
-        }
-
-        if(lockId.isBlank()) {
+        if(lockId != null && lockId.isBlank()) {
             throw new IllegalArgumentException("Lock ID cannot be blank.");
         }
 

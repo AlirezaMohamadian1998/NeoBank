@@ -5,10 +5,13 @@ import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class FxRateServiceTest {
@@ -165,5 +169,35 @@ class FxRateServiceTest {
         assertThatThrownBy(() -> fxRateService.getCachedRate(email, lockId))
                 .isInstanceOf(FxRateLockUnavailableException.class)
                 .hasMessage("Invalid or expired FX rate lock");
+    }
+
+    @ParameterizedTest
+    @EnumSource(CurrencyCode.class)
+    void getRatesReturnsNormalizedImmutableRatesWithoutCreatingLock(CurrencyCode baseCurrency) {
+        given(rateCache.getLatestRates())
+                .willReturn(providerRates);
+
+        Map<CurrencyCode, BigDecimal> rates = fxRateService.getRates(baseCurrency);
+
+        assertThat(rates.keySet())
+                .isEqualTo(providerRates.rates().keySet());
+
+        assertThat(rates.get(baseCurrency))
+                .isEqualByComparingTo(BigDecimal.ONE);
+
+        BigDecimal baseRate = providerRates.rates().get(baseCurrency);
+
+        providerRates.rates().forEach((currency, rate) ->
+                assertThat(rates.get(currency))
+                        .isEqualByComparingTo(rate.divide(baseRate, 8, RoundingMode.HALF_EVEN))
+        );
+
+        assertThatThrownBy(() -> rates.put(baseCurrency, BigDecimal.TEN))
+                .isInstanceOf(UnsupportedOperationException.class);
+
+        verify(rateCache, times(1))
+                .getLatestRates();
+
+        verifyNoInteractions(rateLockCache, properties);
     }
 }
