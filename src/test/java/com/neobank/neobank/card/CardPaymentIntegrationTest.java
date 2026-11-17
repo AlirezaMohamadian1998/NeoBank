@@ -596,6 +596,71 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 .isZero();
     }
 
+    @Test
+    void purchaseAppearsWithCardDetailsOnlyInPayerHistory() throws Exception {
+        Customer merchantCustomer = customerRepository.save(
+                Customer.createNew(
+                        "merchant@example.com",
+                        "{bcrypt}password-hash",
+                        "Merchant Owner"
+                )
+        );
+
+        Account merchantAccount = accountRepository.save(
+                Account.createNew(
+                        "98".repeat(7),
+                        "merchant",
+                        AccountType.CURRENT,
+                        merchantCustomer,
+                        LedgerAccount.createNew(
+                                "3".repeat(32),
+                                LedgerAccountType.LIABILITY,
+                                CurrencyCode.TRY
+                        )
+                )
+        );
+
+        CardPurchaseRequest request = new CardPurchaseRequest(
+                merchantAccount.getAccountNumber(),
+                CurrencyCode.TRY,
+                new BigDecimal("250.00"),
+                "Coffee",
+                "Test merchant"
+        );
+
+        mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", "1".repeat(32))
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/transactions")
+                        .param("type", "DEBIT_CARD_PURCHASE")
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].accountNumber").value(account.getAccountNumber()))
+                .andExpect(jsonPath("$.content[0].transactionType").value("DEBIT_CARD_PURCHASE"))
+                .andExpect(jsonPath("$.content[0].direction").value("DEBIT"))
+                .andExpect(jsonPath("$.content[0].appliedAmount").value(250.00))
+                .andExpect(jsonPath("$.content[0].merchantName").value("Test merchant"))
+                .andExpect(jsonPath("$.content[0].cardReference").value("2".repeat(32)))
+                .andExpect(jsonPath("$.content[0].cardLastFourDigits").value(debitCard.getLastFourDigits()));
+
+        mockMvc.perform(get("/api/transactions")
+                        .param("type", "DEBIT_CARD_PURCHASE")
+                        .with(jwt().jwt(jwt -> jwt.subject(merchantCustomer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].accountNumber").value(merchantAccount.getAccountNumber()))
+                .andExpect(jsonPath("$.content[0].direction").value("CREDIT"))
+                .andExpect(jsonPath("$.content[0].requestedAmount").value(250.00))
+                .andExpect(jsonPath("$.content[0].merchantName").doesNotExist())
+                .andExpect(jsonPath("$.content[0].cardReference").doesNotExist())
+                .andExpect(jsonPath("$.content[0].cardLastFourDigits").doesNotExist());
+    }
+
     private InternalAccount createSettlementAccount(String ledgerReference, CurrencyCode currency) {
         LedgerAccount ledgerAccount = LedgerAccount.createNew(
                 ledgerReference,

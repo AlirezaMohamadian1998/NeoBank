@@ -4,7 +4,9 @@ import com.neobank.neobank.auth.SecurityConfig;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.EntryDirection;
 import com.neobank.neobank.transaction.TransactionType;
+import com.neobank.neobank.transaction.history.dto.CardPurchaseHistoryResponse;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryFilter;
+import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -56,7 +58,7 @@ class TransactionHistoryControllerTest {
 
     @Test
     void historyReturnsPagedResponseForAuthenticatedCustomer() throws Exception {
-        Page<TransactionHistoryResponse> page = new PageImpl<>(
+        Page<TransactionHistoryItem> page = new PageImpl<>(
                 List.of(new TransactionHistoryResponse(
                         "12345678900987",
                         "8f3c8a21d9e64b5fa2c17e9084bd6a32",
@@ -76,13 +78,65 @@ class TransactionHistoryControllerTest {
         given(transactionHistoryService.getHistoryByAccount(any(), eq("customer@example.com"), any()))
                 .willReturn(page);
 
-        PagedModel<TransactionHistoryResponse> expected = new PagedModel<>(page);
+        PagedModel<TransactionHistoryItem> expected = new PagedModel<>(page);
 
         mockMvc.perform(get("/api/transactions")
                         .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(content().json(objectMapper.writeValueAsString(expected)));
+    }
+
+    @Test
+    void historySerializesCardPurchaseRowsWithPurchaseFields() throws Exception {
+        Page<TransactionHistoryItem> page = new PageImpl<>(
+                List.of(
+                        new CardPurchaseHistoryResponse(
+                                "12".repeat(7),
+                                "1".repeat(32),
+                                TransactionType.DEBIT_CARD_PURCHASE,
+                                EntryDirection.DEBIT,
+                                new BigDecimal("250.00"),
+                                CurrencyCode.TRY,
+                                new BigDecimal("250.00"),
+                                CurrencyCode.TRY,
+                                new BigDecimal("750.00"),
+                                Instant.parse("2026-09-02T12:00:00Z"),
+                                "Test merchant",
+                                "2".repeat(32),
+                                "1234"
+                        ),
+                        new TransactionHistoryResponse(
+                                "12".repeat(7),
+                                "3".repeat(32),
+                                TransactionType.DEPOSIT,
+                                EntryDirection.CREDIT,
+                                new BigDecimal("1000.00"),
+                                CurrencyCode.TRY,
+                                new BigDecimal("1000.00"),
+                                CurrencyCode.TRY,
+                                new BigDecimal("1000.00"),
+                                Instant.parse("2026-09-01T12:00:00Z")
+                        )
+                ),
+                PageRequest.of(0, 10, Sort.by(Sort.Order.desc("createdAt"))),
+                2
+        );
+
+        given(transactionHistoryService.getHistoryByAccount(any(), eq("customer@example.com"), any()))
+                .willReturn(page);
+
+        mockMvc.perform(get("/api/transactions")
+                        .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].transactionType").value("DEBIT_CARD_PURCHASE"))
+                .andExpect(jsonPath("$.content[0].merchantName").value("Test merchant"))
+                .andExpect(jsonPath("$.content[0].cardReference").value("2".repeat(32)))
+                .andExpect(jsonPath("$.content[0].cardLastFourDigits").value("1234"))
+                .andExpect(jsonPath("$.content[1].transactionType").value("DEPOSIT"))
+                .andExpect(jsonPath("$.content[1].merchantName").doesNotExist())
+                .andExpect(jsonPath("$.content[1].cardReference").doesNotExist())
+                .andExpect(jsonPath("$.content[1].cardLastFourDigits").doesNotExist());
     }
 
     @Test
