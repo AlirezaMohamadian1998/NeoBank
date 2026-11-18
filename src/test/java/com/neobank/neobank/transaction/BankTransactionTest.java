@@ -594,14 +594,89 @@ class BankTransactionTest {
                 .isEqualTo(TransactionStatus.COMPLETED);
     }
 
+    @Test
+    void completedCardPurchaseCanBeMarkedRefunded() {
+        BankTransaction transaction = createCompletedTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+
+        transaction.markRefunded();
+
+        assertThat(transaction.getStatus())
+                .isEqualTo(TransactionStatus.REFUNDED);
+    }
+
+    @Test
+    void refundedCardPurchaseCannotBeMarkedRefundedAgain() {
+        BankTransaction transaction = createCompletedTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+        transaction.markRefunded();
+
+        assertThatThrownBy(transaction::markRefunded)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only completed transactions can be refunded");
+
+        assertThat(transaction.getStatus())
+                .isEqualTo(TransactionStatus.REFUNDED);
+    }
+
+    @Test
+    void pendingCardPurchaseCannotBeMarkedRefunded() {
+        BankTransaction transaction = createTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+
+        assertThatThrownBy(transaction::markRefunded)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only completed transactions can be refunded");
+
+        assertThat(transaction.getStatus())
+                .isEqualTo(TransactionStatus.PENDING);
+    }
+
+    @Test
+    void nonCardPurchaseCannotBeMarkedRefunded() {
+        BankTransaction transaction = createCompletedTransaction(TransactionType.TRANSFER);
+
+        assertThatThrownBy(transaction::markRefunded)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Only debit card purchases can be refunded");
+
+        assertThat(transaction.getStatus())
+                .isEqualTo(TransactionStatus.COMPLETED);
+    }
+
     private BankTransaction createTransaction() {
+        return createTransaction(TransactionType.DEPOSIT);
+    }
+
+    private BankTransaction createTransaction(TransactionType transactionType) {
         return BankTransaction.createNew(
                 new BigDecimal("100.00"),
                 CurrencyCode.TRY,
-                TransactionType.DEPOSIT,
+                transactionType,
                 VALID_TRANSACTION_REFERENCE,
                 null
         );
+    }
+
+    private BankTransaction createCompletedTransaction(TransactionType transactionType) {
+        BankTransaction transaction = createTransaction(transactionType);
+
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE,
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                EntryDirection.CREDIT,
+                ledgerAccount
+        );
+
+        transaction.addEntry(
+                VALID_ENTRY_REFERENCE.replace("1", "2"),
+                new BigDecimal("100.00"),
+                new BigDecimal("100.00"),
+                EntryDirection.DEBIT,
+                ledgerAccount
+        );
+
+        transaction.complete();
+
+        return transaction;
     }
 
     private FxInfo createFxInfo(
