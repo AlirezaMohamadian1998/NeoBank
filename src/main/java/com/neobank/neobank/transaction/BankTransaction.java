@@ -225,6 +225,18 @@ public class BankTransaction extends BaseEntity {
         status = TransactionStatus.COMPLETED;
     }
 
+    public void markRefunded() {
+        if (transactionType != TransactionType.DEBIT_CARD_PURCHASE) {
+            throw new IllegalStateException("Only debit card purchases can be refunded");
+        }
+
+        if (status != TransactionStatus.COMPLETED) {
+            throw new IllegalStateException("Only completed transactions can be refunded");
+        }
+
+        status = TransactionStatus.REFUNDED;
+    }
+
     private FxRate getFxRate(FxInfo fxInfo, CurrencyContext currencyContext) {
         return fxInfo.getRates()
                 .stream()
