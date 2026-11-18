@@ -4,6 +4,7 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.CardPurchaseDetailsRepository;
+import com.neobank.neobank.card.CardRefundDetailsRepository;
 import com.neobank.neobank.card.DebitCardRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerRepository;
@@ -62,6 +63,9 @@ public abstract class DebitCardIntegrationTestSupport {
     protected CardPurchaseDetailsRepository cardPurchaseDetailsRepository;
 
     @Autowired
+    protected CardRefundDetailsRepository cardRefundDetailsRepository;
+
+    @Autowired
     protected LedgerEntryRepository ledgerEntryRepository;
 
     @Autowired
@@ -79,6 +83,7 @@ public abstract class DebitCardIntegrationTestSupport {
     @BeforeEach
     protected void setUpDebitCardIntegrationFixture() {
         idempotencyRecordRepository.deleteAll();
+        cardRefundDetailsRepository.deleteAll();
         cardPurchaseDetailsRepository.deleteAll();
         debitCardRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
