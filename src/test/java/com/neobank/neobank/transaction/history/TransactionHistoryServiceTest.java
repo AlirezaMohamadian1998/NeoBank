@@ -6,12 +6,15 @@ import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.CardPurchaseDetails;
 import com.neobank.neobank.card.CardPurchaseDetailsRepository;
+import com.neobank.neobank.card.CardRefundDetails;
+import com.neobank.neobank.card.CardRefundDetailsRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.*;
 import com.neobank.neobank.transaction.history.dto.CardPurchaseHistoryResponse;
+import com.neobank.neobank.transaction.history.dto.CardRefundHistoryResponse;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryFilter;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryResponse;
@@ -49,6 +52,9 @@ class TransactionHistoryServiceTest {
 
     @Mock
     private CardPurchaseDetailsRepository cardPurchaseDetailsRepository;
+
+    @Mock
+    private CardRefundDetailsRepository cardRefundDetailsRepository;
 
     @InjectMocks
     private TransactionHistoryService transactionHistoryService;
@@ -125,7 +131,7 @@ class TransactionHistoryServiceTest {
                 .isEqualTo(page.getPageable());
 
         assertThat(response.getContent())
-                .isEqualTo(List.of(TransactionHistoryMapper.toResponse(ledgerEntry, account.getAccountNumber(), Map.of())));
+                .isEqualTo(List.of(TransactionHistoryMapper.toResponse(ledgerEntry, account.getAccountNumber(), Map.of(), Map.of())));
     }
 
     @Test
@@ -257,8 +263,8 @@ class TransactionHistoryServiceTest {
 
         assertThat(response.getContent())
                 .containsExactly(
-                        TransactionHistoryMapper.toResponse(ledgerEntry2, account2.getAccountNumber(), Map.of()),
-                        TransactionHistoryMapper.toResponse(ledgerEntry1, account1.getAccountNumber(), Map.of())
+                        TransactionHistoryMapper.toResponse(ledgerEntry2, account2.getAccountNumber(), Map.of(), Map.of()),
+                        TransactionHistoryMapper.toResponse(ledgerEntry1, account1.getAccountNumber(), Map.of(), Map.of())
                 );
     }
 
@@ -493,8 +499,8 @@ class TransactionHistoryServiceTest {
 
         assertThat(response.getContent())
                 .containsExactly(
-                        TransactionHistoryMapper.toResponse(payerEntry, account.getAccountNumber(), Map.of(10L, cardPurchaseDetails)),
-                        TransactionHistoryMapper.toResponse(depositEntry, account.getAccountNumber(), Map.of())
+                        TransactionHistoryMapper.toResponse(payerEntry, account.getAccountNumber(), Map.of(10L, cardPurchaseDetails), Map.of()),
+                        TransactionHistoryMapper.toResponse(depositEntry, account.getAccountNumber(), Map.of(), Map.of())
                 );
 
         assertThat(response.getContent().get(0))
@@ -592,12 +598,99 @@ class TransactionHistoryServiceTest {
 
         assertThat(response.getContent())
                 .containsExactly(
-                        TransactionHistoryMapper.toResponse(merchantEntry, merchantAccount.getAccountNumber(), Map.of())
+                        TransactionHistoryMapper.toResponse(merchantEntry, merchantAccount.getAccountNumber(), Map.of(), Map.of())
                 );
 
         assertThat(response.getContent().get(0))
                 .isInstanceOf(TransactionHistoryResponse.class);
 
-        verifyNoInteractions(cardPurchaseDetailsRepository);
+        verifyNoInteractions(cardPurchaseDetailsRepository, cardRefundDetailsRepository);
+    }
+
+    @Test
+    void historyLoadsCardRefundDetailsInOneQueryForCardholderRefundEntries() {
+        Customer customer = Customer.createNew(
+                "customer@example.com",
+                "{bcrypt}password-hash",
+                "Ada Lovelace"
+        );
+
+        LedgerAccount fundingLedgerAccount = LedgerAccount.createNew("1".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY);
+        LedgerAccount merchantLedgerAccount = LedgerAccount.createNew("2".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY);
+
+        ReflectionTestUtils.setField(fundingLedgerAccount, "id", 1L);
+        ReflectionTestUtils.setField(merchantLedgerAccount, "id", 2L);
+
+        Account account = Account.createNew("12".repeat(7), "test", AccountType.CURRENT, customer, fundingLedgerAccount);
+
+        TransactionHistoryFilter filter = new TransactionHistoryFilter(null, null, null, null, null, null, null);
+        PageRequest pageRequest = PageRequest.of(0, 10, Sort.by(Sort.Order.desc("createdAt")));
+
+        BankTransaction purchaseTransaction = BankTransaction.createNew(
+                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.DEBIT_CARD_PURCHASE, "3".repeat(32), null
+        );
+        ReflectionTestUtils.setField(purchaseTransaction, "id", 10L);
+
+        LedgerEntry purchaseDebit = purchaseTransaction.addEntry(
+                "4".repeat(32), new BigDecimal("250.00"), new BigDecimal("750.00"), EntryDirection.DEBIT, fundingLedgerAccount
+        );
+        purchaseTransaction.addEntry(
+                "5".repeat(32), new BigDecimal("250.00"), new BigDecimal("250.00"), EntryDirection.CREDIT, merchantLedgerAccount
+        );
+        purchaseTransaction.complete();
+
+        CardPurchaseDetails cardPurchaseDetails = CardPurchaseDetails.createNew(
+                purchaseTransaction, "Test merchant", "9".repeat(32), "1234"
+        );
+        purchaseTransaction.markRefunded();
+
+        BankTransaction refundTransaction = BankTransaction.createNew(
+                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.DEBIT_CARD_REFUND, "6".repeat(32), null
+        );
+        ReflectionTestUtils.setField(refundTransaction, "id", 20L);
+
+        refundTransaction.addEntry(
+                "7".repeat(32), new BigDecimal("250.00"), new BigDecimal("0.00"), EntryDirection.DEBIT, merchantLedgerAccount
+        );
+        LedgerEntry refundCredit = refundTransaction.addEntry(
+                "8".repeat(32), new BigDecimal("250.00"), new BigDecimal("1000.00"), EntryDirection.CREDIT, fundingLedgerAccount
+        );
+        refundTransaction.complete();
+
+        CardRefundDetails cardRefundDetails = CardRefundDetails.createNew(refundTransaction, cardPurchaseDetails);
+
+        Page<LedgerEntry> page = new PageImpl<>(List.of(refundCredit, purchaseDebit), pageRequest, 2);
+
+        given(accountRepository.findAllByCustomer_Email(customer.getEmail()))
+                .willReturn(List.of(account));
+
+        given(ledgerEntryRepository.findAll(ArgumentMatchers.<Specification<LedgerEntry>>any(), any(Pageable.class)))
+                .willReturn(page);
+
+        given(cardPurchaseDetailsRepository.findAllByBankTransaction_IdIn(List.of(10L)))
+                .willReturn(List.of(cardPurchaseDetails));
+
+        given(cardRefundDetailsRepository.findAllByBankTransaction_IdIn(List.of(20L)))
+                .willReturn(List.of(cardRefundDetails));
+
+        Page<TransactionHistoryItem> response =
+                transactionHistoryService.getHistoryByAccount(filter, customer.getEmail(), pageRequest);
+
+        assertThat(response.getContent())
+                .hasSize(2);
+
+        assertThat(response.getContent().get(0))
+                .isInstanceOf(CardRefundHistoryResponse.class);
+
+        assertThat(response.getContent().get(1))
+                .isInstanceOf(CardPurchaseHistoryResponse.class);
+
+        CardRefundHistoryResponse refundRow = (CardRefundHistoryResponse) response.getContent().get(0);
+        CardPurchaseHistoryResponse purchaseRow = (CardPurchaseHistoryResponse) response.getContent().get(1);
+
+        assertThat(refundRow.purchaseReference())
+                .isEqualTo(purchaseRow.transactionReference());
+
+        verify(cardRefundDetailsRepository).findAllByBankTransaction_IdIn(List.of(20L));
     }
 }
