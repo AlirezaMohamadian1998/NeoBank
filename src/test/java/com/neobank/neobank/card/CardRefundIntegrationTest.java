@@ -31,6 +31,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -206,6 +207,63 @@ class CardRefundIntegrationTest extends DebitCardIntegrationTestSupport {
         refund(MERCHANT_ACCOUNT_NUMBER, "f".repeat(32), "a".repeat(32), MERCHANT_EMAIL)
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Card purchase not found"));
+    }
+
+    @Test
+    void historyLetsMerchantFindPurchaseReferenceAndLinksRefundToPurchaseForCardholder() throws Exception {
+        String purchaseReference = purchase(MERCHANT_ACCOUNT_NUMBER, "250.00", CurrencyCode.TRY);
+
+        // The merchant finds the reference to refund in their own history.
+        mockMvc.perform(get("/api/transactions")
+                        .param("type", "DEBIT_CARD_PURCHASE")
+                        .with(jwt().jwt(jwt -> jwt.subject(MERCHANT_EMAIL))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].accountNumber").value(MERCHANT_ACCOUNT_NUMBER))
+                .andExpect(jsonPath("$.content[0].direction").value("CREDIT"))
+                .andExpect(jsonPath("$.content[0].transactionReference").value(purchaseReference));
+
+        CardRefundResponse refund = readRefund(
+                refund(MERCHANT_ACCOUNT_NUMBER, purchaseReference, "a".repeat(32), MERCHANT_EMAIL)
+                        .andExpect(status().isCreated())
+        );
+
+        // Cardholder: the purchase row and the refund row share the purchase reference.
+        mockMvc.perform(get("/api/transactions")
+                        .param("type", "DEBIT_CARD_PURCHASE")
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].transactionReference").value(purchaseReference));
+
+        mockMvc.perform(get("/api/transactions")
+                        .param("type", "DEBIT_CARD_REFUND")
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].accountNumber").value(account.getAccountNumber()))
+                .andExpect(jsonPath("$.content[0].transactionReference").value(refund.refundReference()))
+                .andExpect(jsonPath("$.content[0].transactionType").value("DEBIT_CARD_REFUND"))
+                .andExpect(jsonPath("$.content[0].direction").value("CREDIT"))
+                .andExpect(jsonPath("$.content[0].appliedAmount").value(250.00))
+                .andExpect(jsonPath("$.content[0].balanceAfter").value(1000.00))
+                .andExpect(jsonPath("$.content[0].merchantName").value("Test merchant"))
+                .andExpect(jsonPath("$.content[0].cardReference").value(CARD_REFERENCE))
+                .andExpect(jsonPath("$.content[0].cardLastFourDigits").value("1234"))
+                .andExpect(jsonPath("$.content[0].purchaseReference").value(purchaseReference));
+
+        // Merchant: the refund is a plain debit row, mirroring how the purchase credit is shown.
+        mockMvc.perform(get("/api/transactions")
+                        .param("type", "DEBIT_CARD_REFUND")
+                        .with(jwt().jwt(jwt -> jwt.subject(MERCHANT_EMAIL))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].accountNumber").value(MERCHANT_ACCOUNT_NUMBER))
+                .andExpect(jsonPath("$.content[0].transactionReference").value(refund.refundReference()))
+                .andExpect(jsonPath("$.content[0].direction").value("DEBIT"))
+                .andExpect(jsonPath("$.content[0].appliedAmount").value(250.00))
+                .andExpect(jsonPath("$.content[0].cardReference").doesNotExist())
+                .andExpect(jsonPath("$.content[0].purchaseReference").doesNotExist());
     }
 
     @Test
