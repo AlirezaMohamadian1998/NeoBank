@@ -10,10 +10,11 @@ NeoBank is a work-in-progress banking backend built as a personal portfolio proj
 - Short-lived, customer-scoped FX rate locks for cross-currency money movement
 - Debit card issuance, retrieval, and lifecycle management (activate, freeze, block, close)
 - Debit card purchases at internal merchants and external merchants through settlement accounts
+- Full refunds of card purchases by the merchant account's owner, at current FX rates for cross-currency purchases
 - Paginated and filterable transaction history
 - Double-entry ledger postings with internal settlement accounts
 - Idempotent money-movement and card requests
-- Optimistic concurrency control with automatic retries and transactional rollback guarantees
+- Optimistic concurrency control with automatic retries and transactional rollback guarantees, plus a pessimistic lock so a purchase can be refunded only once
 - Database versioning with Flyway
 - Open Exchange Rates integration behind a provider abstraction, with cached and normalized rates
 
@@ -21,13 +22,14 @@ NeoBank is a work-in-progress banking backend built as a personal portfolio proj
 
 NeoBank is a Spring Boot monolith organized by feature.
 
-- Operation-specific services coordinate deposits, withdrawals, transfers, and card purchases.
+- Operation-specific services coordinate deposits, withdrawals, transfers, card purchases, and card refunds.
 - `LedgerPostingService` is the central boundary for balance changes and ledger-entry creation.
 - A `BankTransaction` groups its ledger entries and can complete only when its postings are balanced.
 - Internal settlement accounts provide the bank side of deposits, withdrawals, and external card purchases.
 - Idempotency records store a hash of a canonical request and a reference to the original result, so retries replay instead of repeating.
 - Ledger accounts use `@Version`, and conflicting writes are retried with Spring's `@Retryable`.
 - Cross-currency transactions store an FX snapshot of the rates used.
+- A refund is a new transaction with its own ledger entries; the original purchase keeps its entries and only moves from `COMPLETED` to `REFUNDED`.
 - FX provider responses are validated, cached with Caffeine, and normalized to the requested base currency.
 
 ## Technology stack
@@ -85,12 +87,20 @@ On Windows, use `mvnw.cmd` instead of `bash mvnw`.
 | Debit cards | `POST /api/debit-cards/{accountNumber}`, `GET /api/debit-cards`, `GET /api/debit-cards/{cardReference}` |
 | Card lifecycle | `PATCH /api/debit-cards/{cardReference}/status/{status}` |
 | Card purchases | `POST /api/debit-cards/{cardReference}/payments` |
+| Card refunds | `POST /api/accounts/{merchantAccountNumber}/card-refunds/{purchaseReference}` |
 
-Protected endpoints require a bearer token. Money-movement, card issuance, and card purchase requests require an `Idempotency-Key` header. Cross-currency deposits, withdrawals, and transfers can reference an FX rate lock, which expires after five minutes.
+Protected endpoints require a bearer token. Money-movement, card issuance, card purchase, and card refund requests require an `Idempotency-Key` header. Cross-currency deposits, withdrawals, and transfers can reference an FX rate lock, which expires after five minutes.
+
+Every transaction-history row includes the `transactionReference` of the movement it belongs to. Merchants use it as the `purchaseReference` when refunding, and a cardholder's refund row carries the `purchaseReference` of the purchase it reverses.
+
+## Known limitations
+
+- Only purchases paid to a merchant account inside NeoBank can be refunded through the API. In real card networks, refunds of purchases at outside merchants reach the issuing bank through the network (for example Visa or Mastercard), not from the merchant; that path is not simulated.
+- Refunds are full refunds only.
 
 ## Tests
 
-The test suite includes domain and service tests, controller tests, REST-client tests, and MySQL integration tests for rollback, idempotency, and concurrent money movement and card purchases.
+The test suite includes domain and service tests, controller tests, REST-client tests, and MySQL integration tests for rollback, idempotency, and concurrent money movement, card purchases, and card refunds.
 
 ```bash
 bash mvnw test
