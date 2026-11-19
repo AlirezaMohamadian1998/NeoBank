@@ -5,6 +5,8 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.card.CardPurchaseDetails;
 import com.neobank.neobank.card.CardPurchaseDetailsRepository;
+import com.neobank.neobank.card.CardRefundDetails;
+import com.neobank.neobank.card.CardRefundDetailsRepository;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.LedgerEntryRepository;
@@ -31,6 +33,8 @@ public class TransactionHistoryService {
     private final AccountRepository accountRepository;
 
     private final CardPurchaseDetailsRepository cardPurchaseDetailsRepository;
+
+    private final CardRefundDetailsRepository cardRefundDetailsRepository;
 
     @Transactional(readOnly = true)
     public Page<TransactionHistoryItem> getHistoryByAccount(
@@ -81,6 +85,21 @@ public class TransactionHistoryService {
                                 details -> details
                         ));
 
+        List<Long> cardRefundTransactionIds = entries.stream()
+                .filter(TransactionHistoryMapper::isCardRefundReceiverEntry)
+                .map(entry -> entry.getBankTransaction().getId())
+                .toList();
+
+        Map<Long, CardRefundDetails> cardRefundDetailsByTransactionId =
+                cardRefundTransactionIds.isEmpty()
+                        ? Map.of()
+                        : cardRefundDetailsRepository.findAllByBankTransaction_IdIn(cardRefundTransactionIds)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                details -> details.getBankTransaction().getId(),
+                                details -> details
+                        ));
+
         return entries
                 .map(entry ->
                         TransactionHistoryMapper.toResponse(
@@ -95,7 +114,8 @@ public class TransactionHistoryService {
                                         .map(Account::getAccountNumber)
                                         .findFirst()
                                         .orElseThrow(),
-                                cardPurchaseDetailsByTransactionId
+                                cardPurchaseDetailsByTransactionId,
+                                cardRefundDetailsByTransactionId
                         )
                 );
     }

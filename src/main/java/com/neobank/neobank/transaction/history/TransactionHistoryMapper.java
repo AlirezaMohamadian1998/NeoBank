@@ -1,10 +1,12 @@
 package com.neobank.neobank.transaction.history;
 
 import com.neobank.neobank.card.CardPurchaseDetails;
+import com.neobank.neobank.card.CardRefundDetails;
 import com.neobank.neobank.transaction.EntryDirection;
 import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.history.dto.CardPurchaseHistoryResponse;
+import com.neobank.neobank.transaction.history.dto.CardRefundHistoryResponse;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryResponse;
 
@@ -14,7 +16,8 @@ public class TransactionHistoryMapper {
     public static TransactionHistoryItem toResponse(
             LedgerEntry entry,
             String accountNumber,
-            Map<Long, CardPurchaseDetails> cardPurchaseDetailsByTransactionId
+            Map<Long, CardPurchaseDetails> cardPurchaseDetailsByTransactionId,
+            Map<Long, CardRefundDetails> cardRefundDetailsByTransactionId
     ) {
         if(isCardPurchasePayerEntry(entry)) {
             CardPurchaseDetails cardPurchaseDetails = cardPurchaseDetailsByTransactionId.get(entry.getBankTransaction().getId());
@@ -28,6 +31,18 @@ public class TransactionHistoryMapper {
             return toCardPurchaseResponse(entry, accountNumber, cardPurchaseDetails);
         }
 
+        if(isCardRefundReceiverEntry(entry)) {
+            CardRefundDetails cardRefundDetails = cardRefundDetailsByTransactionId.get(entry.getBankTransaction().getId());
+
+            if(cardRefundDetails == null) {
+                throw new IllegalStateException(
+                        "Card refund details not found for transaction " + entry.getBankTransaction().getReference()
+                );
+            }
+
+            return toCardRefundResponse(entry, accountNumber, cardRefundDetails);
+        }
+
         boolean isTransferOperationReceiver =
                 (entry.getBankTransaction().getTransactionType() == TransactionType.TRANSFER)
                         &&
@@ -36,6 +51,7 @@ public class TransactionHistoryMapper {
         return new TransactionHistoryResponse(
                 accountNumber,
                 entry.getReference(),
+                entry.getBankTransaction().getReference(),
                 entry.getBankTransaction().getTransactionType(),
                 entry.getDirection(),
                 entry.getAmount(),
@@ -53,6 +69,12 @@ public class TransactionHistoryMapper {
                 (entry.getDirection() == EntryDirection.DEBIT);
     }
 
+    public static boolean isCardRefundReceiverEntry(LedgerEntry entry) {
+        return (entry.getBankTransaction().getTransactionType() == TransactionType.DEBIT_CARD_REFUND)
+                &&
+                (entry.getDirection() == EntryDirection.CREDIT);
+    }
+
     private static CardPurchaseHistoryResponse toCardPurchaseResponse(
             LedgerEntry entry,
             String accountNumber,
@@ -61,6 +83,7 @@ public class TransactionHistoryMapper {
         return new CardPurchaseHistoryResponse(
                 accountNumber,
                 entry.getReference(),
+                entry.getBankTransaction().getReference(),
                 entry.getBankTransaction().getTransactionType(),
                 entry.getDirection(),
                 entry.getAmount(),
@@ -72,6 +95,32 @@ public class TransactionHistoryMapper {
                 cardPurchaseDetails.getMerchantName(),
                 cardPurchaseDetails.getCardReference(),
                 cardPurchaseDetails.getCardLastFourDigits()
+        );
+    }
+
+    private static CardRefundHistoryResponse toCardRefundResponse(
+            LedgerEntry entry,
+            String accountNumber,
+            CardRefundDetails cardRefundDetails
+    ) {
+        CardPurchaseDetails cardPurchaseDetails = cardRefundDetails.getCardPurchaseDetails();
+
+        return new CardRefundHistoryResponse(
+                accountNumber,
+                entry.getReference(),
+                entry.getBankTransaction().getReference(),
+                entry.getBankTransaction().getTransactionType(),
+                entry.getDirection(),
+                entry.getAmount(),
+                entry.getCurrency(),
+                entry.getBankTransaction().getRequestedAmount(),
+                entry.getBankTransaction().getRequestedCurrency(),
+                entry.getBalanceAfter(),
+                entry.getCreatedAt(),
+                cardPurchaseDetails.getMerchantName(),
+                cardPurchaseDetails.getCardReference(),
+                cardPurchaseDetails.getCardLastFourDigits(),
+                cardPurchaseDetails.getBankTransaction().getReference()
         );
     }
 }
