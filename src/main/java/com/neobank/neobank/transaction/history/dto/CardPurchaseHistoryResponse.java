@@ -12,6 +12,8 @@ public record CardPurchaseHistoryResponse(
 
         String entryReference,
 
+        String transactionReference,
+
         TransactionType transactionType,
 
         EntryDirection direction,

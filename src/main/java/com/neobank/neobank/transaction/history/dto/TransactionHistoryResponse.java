@@ -13,6 +13,8 @@ public record TransactionHistoryResponse(
 
         String entryReference,
 
+        String transactionReference,
+
         TransactionType transactionType,
 
         EntryDirection direction,

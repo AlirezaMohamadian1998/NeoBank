@@ -348,4 +348,28 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
     }
+
+    @ExceptionHandler(CardPurchaseNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleCardPurchaseNotFoundException(
+            CardPurchaseNotFoundException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Card purchase not found");
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
+    }
+
+    @ExceptionHandler(CardPurchaseNotRefundableException.class)
+    public ResponseEntity<ProblemDetail> handleCardPurchaseNotRefundableException(
+            CardPurchaseNotRefundableException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Card purchase not refundable");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
 }

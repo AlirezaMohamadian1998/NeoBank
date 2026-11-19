@@ -1,6 +1,7 @@
 package com.neobank.neobank.transaction.history;
 
 import com.neobank.neobank.card.CardPurchaseDetails;
+import com.neobank.neobank.card.CardRefundDetails;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
@@ -9,6 +10,7 @@ import com.neobank.neobank.transaction.EntryDirection;
 import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.history.dto.CardPurchaseHistoryResponse;
+import com.neobank.neobank.transaction.history.dto.CardRefundHistoryResponse;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryResponse;
 import org.junit.jupiter.api.Test;
@@ -60,7 +62,7 @@ class TransactionHistoryMapperTest {
         ReflectionTestUtils.setField(entry, "createdAt", Instant.parse("2026-09-16T12:00:00Z"));
 
         TransactionHistoryItem item =
-                TransactionHistoryMapper.toResponse(entry, "12345678901234", Map.of());
+                TransactionHistoryMapper.toResponse(entry, "12345678901234", Map.of(), Map.of());
 
         assertThat(item)
                 .isInstanceOf(TransactionHistoryResponse.class);
@@ -86,6 +88,9 @@ class TransactionHistoryMapperTest {
 
         assertThat(result.entryReference())
                 .isEqualTo(entry.getReference());
+
+        assertThat(result.transactionReference())
+                .isEqualTo(transaction.getReference());
 
         assertThat(result.transactionType())
                 .isSameAs(type);
@@ -160,7 +165,8 @@ class TransactionHistoryMapperTest {
         TransactionHistoryItem item = TransactionHistoryMapper.toResponse(
                 payerEntry,
                 "12".repeat(7),
-                Map.of(1L, cardPurchaseDetails)
+                Map.of(1L, cardPurchaseDetails),
+                Map.of()
         );
 
         assertThat(item)
@@ -173,6 +179,9 @@ class TransactionHistoryMapperTest {
 
         assertThat(result.entryReference())
                 .isEqualTo(payerEntry.getReference());
+
+        assertThat(result.transactionReference())
+                .isEqualTo("3".repeat(32));
 
         assertThat(result.transactionType())
                 .isSameAs(TransactionType.DEBIT_CARD_PURCHASE);
@@ -234,7 +243,7 @@ class TransactionHistoryMapperTest {
                 fundingLedgerAccount
         );
 
-        assertThatThrownBy(() -> TransactionHistoryMapper.toResponse(payerEntry, "12".repeat(7), Map.of()))
+        assertThatThrownBy(() -> TransactionHistoryMapper.toResponse(payerEntry, "12".repeat(7), Map.of(), Map.of()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Card purchase details not found for transaction " + "3".repeat(32));
     }
@@ -272,6 +281,112 @@ class TransactionHistoryMapperTest {
                 .isEqualTo(expectedResult);
     }
 
+    @Test
+    void mapsCardRefundCreditToCardRefundResponseLinkedToItsPurchase() {
+        LedgerAccount fundingLedgerAccount = LedgerAccount.createNew("1".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY);
+        LedgerAccount merchantLedgerAccount = LedgerAccount.createNew("2".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY);
+
+        BankTransaction purchase = BankTransaction.createNew(
+                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.DEBIT_CARD_PURCHASE, "3".repeat(32), null
+        );
+        purchase.addEntry("4".repeat(32), new BigDecimal("250.00"), new BigDecimal("750.00"), EntryDirection.DEBIT, fundingLedgerAccount);
+        purchase.addEntry("5".repeat(32), new BigDecimal("250.00"), new BigDecimal("250.00"), EntryDirection.CREDIT, merchantLedgerAccount);
+        purchase.complete();
+
+        CardPurchaseDetails cardPurchaseDetails = CardPurchaseDetails.createNew(purchase, "Test merchant", "6".repeat(32), "1234");
+        purchase.markRefunded();
+
+        BankTransaction refund = BankTransaction.createNew(
+                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.DEBIT_CARD_REFUND, "7".repeat(32), null
+        );
+        ReflectionTestUtils.setField(refund, "id", 2L);
+        refund.addEntry("8".repeat(32), new BigDecimal("250.00"), new BigDecimal("0.00"), EntryDirection.DEBIT, merchantLedgerAccount);
+        LedgerEntry refundCredit = refund.addEntry("9".repeat(32), new BigDecimal("250.00"), new BigDecimal("1000.00"), EntryDirection.CREDIT, fundingLedgerAccount);
+        refund.complete();
+
+        ReflectionTestUtils.setField(refundCredit, "createdAt", Instant.parse("2026-09-17T12:00:00Z"));
+
+        CardRefundDetails cardRefundDetails = CardRefundDetails.createNew(refund, cardPurchaseDetails);
+
+        TransactionHistoryItem item = TransactionHistoryMapper.toResponse(
+                refundCredit,
+                "12".repeat(7),
+                Map.of(),
+                Map.of(2L, cardRefundDetails)
+        );
+
+        assertThat(item)
+                .isInstanceOf(CardRefundHistoryResponse.class);
+
+        CardRefundHistoryResponse result = (CardRefundHistoryResponse) item;
+
+        assertThat(result.accountNumber()).isEqualTo("12".repeat(7));
+        assertThat(result.entryReference()).isEqualTo("9".repeat(32));
+        assertThat(result.transactionReference()).isEqualTo("7".repeat(32));
+        assertThat(result.transactionType()).isSameAs(TransactionType.DEBIT_CARD_REFUND);
+        assertThat(result.direction()).isSameAs(EntryDirection.CREDIT);
+        assertThat(result.appliedAmount()).isEqualByComparingTo("250.00");
+        assertThat(result.accountCurrency()).isSameAs(CurrencyCode.TRY);
+        assertThat(result.requestedAmount()).isEqualByComparingTo("250.00");
+        assertThat(result.requestedCurrency()).isSameAs(CurrencyCode.TRY);
+        assertThat(result.balanceAfter()).isEqualByComparingTo("1000.00");
+        assertThat(result.createdAt()).isEqualTo(Instant.parse("2026-09-17T12:00:00Z"));
+        assertThat(result.merchantName()).isEqualTo("Test merchant");
+        assertThat(result.cardReference()).isEqualTo("6".repeat(32));
+        assertThat(result.cardLastFourDigits()).isEqualTo("1234");
+        assertThat(result.purchaseReference())
+                .as("links the refund row to the purchase row's transactionReference")
+                .isEqualTo("3".repeat(32));
+    }
+
+    @Test
+    void toResponseThrowsWhenCardRefundDetailsAreMissing() {
+        LedgerAccount fundingLedgerAccount = LedgerAccount.createNew("1".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY);
+
+        BankTransaction refund = BankTransaction.createNew(
+                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.DEBIT_CARD_REFUND, "7".repeat(32), null
+        );
+        ReflectionTestUtils.setField(refund, "id", 2L);
+
+        LedgerEntry refundCredit = refund.addEntry(
+                "9".repeat(32), new BigDecimal("250.00"), new BigDecimal("1000.00"), EntryDirection.CREDIT, fundingLedgerAccount
+        );
+
+        assertThatThrownBy(() -> TransactionHistoryMapper.toResponse(refundCredit, "12".repeat(7), Map.of(), Map.of()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Card refund details not found for transaction " + "7".repeat(32));
+    }
+
+    @ParameterizedTest
+    @MethodSource("cardRefundReceiverEntrySource")
+    void isCardRefundReceiverEntryMatchesOnlyCardRefundCredits(
+            TransactionType type,
+            EntryDirection direction,
+            boolean expectedResult
+    ) {
+        LedgerAccount ledgerAccount = LedgerAccount.createNew("1".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY);
+
+        BankTransaction transaction = BankTransaction.createNew(
+                new BigDecimal("100.00"), CurrencyCode.TRY, type, "3".repeat(32), null
+        );
+
+        LedgerEntry entry = transaction.addEntry(
+                "4".repeat(32), new BigDecimal("100.00"), new BigDecimal("900.00"), direction, ledgerAccount
+        );
+
+        assertThat(TransactionHistoryMapper.isCardRefundReceiverEntry(entry))
+                .isEqualTo(expectedResult);
+    }
+
+    static Stream<Arguments> cardRefundReceiverEntrySource() {
+        return Stream.of(
+                Arguments.of(TransactionType.DEBIT_CARD_REFUND, EntryDirection.CREDIT, true),
+                Arguments.of(TransactionType.DEBIT_CARD_REFUND, EntryDirection.DEBIT, false),
+                Arguments.of(TransactionType.DEBIT_CARD_PURCHASE, EntryDirection.CREDIT, false),
+                Arguments.of(TransactionType.DEPOSIT, EntryDirection.CREDIT, false)
+        );
+    }
+
     static Stream<Arguments> typeAndDirectionVaried() {
         return Stream.of(
                 Arguments.of(TransactionType.DEPOSIT, EntryDirection.CREDIT, false),
@@ -282,7 +397,9 @@ class TransactionHistoryMapperTest {
 
                 Arguments.of(TransactionType.WITHDRAWAL, EntryDirection.DEBIT, false),
 
-                Arguments.of(TransactionType.DEBIT_CARD_PURCHASE, EntryDirection.CREDIT, false)
+                Arguments.of(TransactionType.DEBIT_CARD_PURCHASE, EntryDirection.CREDIT, false),
+
+                Arguments.of(TransactionType.DEBIT_CARD_REFUND, EntryDirection.DEBIT, false)
         );
     }
 

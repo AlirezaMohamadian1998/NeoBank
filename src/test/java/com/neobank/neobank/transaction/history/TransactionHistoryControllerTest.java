@@ -62,6 +62,7 @@ class TransactionHistoryControllerTest {
                 List.of(new TransactionHistoryResponse(
                         "12345678900987",
                         "8f3c8a21d9e64b5fa2c17e9084bd6a32",
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                         TransactionType.DEPOSIT,
                         EntryDirection.CREDIT,
                         new BigDecimal("4000.00"),
@@ -94,6 +95,7 @@ class TransactionHistoryControllerTest {
                         new CardPurchaseHistoryResponse(
                                 "12".repeat(7),
                                 "1".repeat(32),
+                                "b".repeat(32),
                                 TransactionType.DEBIT_CARD_PURCHASE,
                                 EntryDirection.DEBIT,
                                 new BigDecimal("250.00"),
@@ -109,6 +111,7 @@ class TransactionHistoryControllerTest {
                         new TransactionHistoryResponse(
                                 "12".repeat(7),
                                 "3".repeat(32),
+                                "c".repeat(32),
                                 TransactionType.DEPOSIT,
                                 EntryDirection.CREDIT,
                                 new BigDecimal("1000.00"),
@@ -133,7 +136,9 @@ class TransactionHistoryControllerTest {
                 .andExpect(jsonPath("$.content[0].merchantName").value("Test merchant"))
                 .andExpect(jsonPath("$.content[0].cardReference").value("2".repeat(32)))
                 .andExpect(jsonPath("$.content[0].cardLastFourDigits").value("1234"))
+                .andExpect(jsonPath("$.content[0].transactionReference").value("b".repeat(32)))
                 .andExpect(jsonPath("$.content[1].transactionType").value("DEPOSIT"))
+                .andExpect(jsonPath("$.content[1].transactionReference").value("c".repeat(32)))
                 .andExpect(jsonPath("$.content[1].merchantName").doesNotExist())
                 .andExpect(jsonPath("$.content[1].cardReference").doesNotExist())
                 .andExpect(jsonPath("$.content[1].cardLastFourDigits").doesNotExist());
