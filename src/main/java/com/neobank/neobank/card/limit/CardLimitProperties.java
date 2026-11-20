@@ -1,5 +1,6 @@
 package com.neobank.neobank.card.limit;
 
+import com.neobank.neobank.card.CardSpendingLimits;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
@@ -71,6 +72,14 @@ public record CardLimitProperties(
         @AssertTrue(message = "maximum per-transaction limit must not exceed the maximum daily limit")
         public boolean isMaxPerTransactionWithinMaxDaily() {
             return anyNull() || maxPerTransaction.compareTo(maxDaily) <= 0;
+        }
+
+        public CardSpendingLimits defaults() {
+            return CardSpendingLimits.createNew(defaultPerTransaction, defaultDaily);
+        }
+
+        public CardSpendingLimits maximums() {
+            return CardSpendingLimits.createNew(maxPerTransaction, maxDaily);
         }
 
         private boolean anyNull() {

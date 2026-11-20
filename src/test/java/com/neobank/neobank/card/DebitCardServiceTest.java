@@ -12,6 +12,8 @@ import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
 import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
 import com.neobank.neobank.card.issuing.DebitCardIssuer;
 import com.neobank.neobank.card.issuing.IssuedDebitCard;
+import com.neobank.neobank.card.limit.CardLimitProperties;
+import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.idempotency.*;
 import com.neobank.neobank.ledger.LedgerAccount;
@@ -31,10 +33,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -66,6 +70,13 @@ class DebitCardServiceTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-09-23T12:00:00Z"), Clock.systemUTC().getZone());
 
+    private final CardLimitProperties cardLimitProperties = new CardLimitProperties(Map.of(
+            CurrencyCode.USD, currencyLimits("1000.00", "2500.00"),
+            CurrencyCode.EUR, currencyLimits("1000.00", "2500.00"),
+            CurrencyCode.GBP, currencyLimits("1000.00", "2500.00"),
+            CurrencyCode.TRY, currencyLimits("25000.00", "50000.00")
+    ));
+
     private DebitCardService debitCardService;
 
     @BeforeEach
@@ -77,7 +88,8 @@ class DebitCardServiceTest {
                 referenceGenerator,
                 requestHasher,
                 clock,
-                debitCardIssuer
+                debitCardIssuer,
+                cardLimitProperties
         );
     }
 
@@ -253,7 +265,8 @@ class DebitCardServiceTest {
                 "1234",
                 now.plusYears(5),
                 now,
-                account
+                account,
+                TestCardLimits.generous()
         );
 
         IdempotencyRecord idempotencyRecord = IdempotencyRecord.createNew(
@@ -448,7 +461,8 @@ class DebitCardServiceTest {
                 "1234",
                 now.plusYears(5),
                 now,
-                firstAccount
+                firstAccount,
+                TestCardLimits.generous()
         );
 
         firstDebitCard.activateCard(now);
@@ -458,7 +472,8 @@ class DebitCardServiceTest {
                 "4321",
                 now.plusYears(5),
                 now,
-                secondAccount
+                secondAccount,
+                TestCardLimits.generous()
         );
 
         secondDebitCard.activateCard(now);
@@ -725,6 +740,15 @@ class DebitCardServiceTest {
         );
     }
 
+    private static CardLimitProperties.CurrencyLimits currencyLimits(String defaultPerTransaction, String defaultDaily) {
+        return new CardLimitProperties.CurrencyLimits(
+                new BigDecimal(defaultPerTransaction),
+                new BigDecimal(defaultDaily),
+                new BigDecimal(defaultPerTransaction).multiply(BigDecimal.TEN),
+                new BigDecimal(defaultDaily).multiply(BigDecimal.TEN)
+        );
+    }
+
     private DebitCard createDebitCard(YearMonth creationYearMonth, YearMonth expirationYearMonth) {
         Customer customer = Customer.createNew(
                 "customer@example.com",
@@ -751,7 +775,8 @@ class DebitCardServiceTest {
                 "1234",
                 expirationYearMonth,
                 creationYearMonth,
-                account
+                account,
+                TestCardLimits.generous()
         );
     }
 

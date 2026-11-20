@@ -2,6 +2,7 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -27,7 +28,8 @@ class DebitCardLifecycleIntegrationTest extends DebitCardIntegrationTestSupport 
                         "1234",
                         YearMonth.now(clock).plusYears(5),
                         YearMonth.now(clock),
-                        account
+                        account,
+                        TestCardLimits.generous()
                 )
         );
 
@@ -146,7 +148,8 @@ class DebitCardLifecycleIntegrationTest extends DebitCardIntegrationTestSupport 
                         "1234",
                         YearMonth.now(clock).plusYears(5),
                         YearMonth.now(clock),
-                        account
+                        account,
+                        TestCardLimits.generous()
                 )
         );
 
@@ -200,7 +203,8 @@ class DebitCardLifecycleIntegrationTest extends DebitCardIntegrationTestSupport 
                         "1234",
                         now.plusYears(5),
                         now,
-                        account
+                        account,
+                        TestCardLimits.generous()
                 )
         );
 
@@ -231,7 +235,8 @@ class DebitCardLifecycleIntegrationTest extends DebitCardIntegrationTestSupport 
                 "1234",
                 now.plusYears(5),
                 now,
-                account
+                account,
+                TestCardLimits.generous()
         );
 
         debitCard.activateCard(now);
@@ -264,7 +269,8 @@ class DebitCardLifecycleIntegrationTest extends DebitCardIntegrationTestSupport 
                 "1234",
                 now.minusMonths(1),
                 now.minusYears(5),
-                account
+                account,
+                TestCardLimits.generous()
         );
 
         debitCardRepository.save(debitCard);
@@ -295,7 +301,8 @@ class DebitCardLifecycleIntegrationTest extends DebitCardIntegrationTestSupport 
                         "1234",
                         YearMonth.of(2025, 9),
                         YearMonth.of(2020, 9),
-                        account
+                        account,
+                        TestCardLimits.generous()
                 )
         );
 

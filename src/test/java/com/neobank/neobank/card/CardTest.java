@@ -2,6 +2,7 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
+import com.neobank.neobank.card.support.TestCardLimits;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -214,7 +215,17 @@ class CardTest {
                 YearMonth expirationYearMonth,
                 YearMonth currentYearMonth
         ) {
-            super(cardReference, lastFourDigits, expirationYearMonth, currentYearMonth);
+            this(cardReference, lastFourDigits, expirationYearMonth, currentYearMonth, TestCardLimits.generous());
+        }
+
+        private TestCard(
+                String cardReference,
+                String lastFourDigits,
+                YearMonth expirationYearMonth,
+                YearMonth currentYearMonth,
+                CardSpendingLimits spendingLimits
+        ) {
+            super(cardReference, lastFourDigits, expirationYearMonth, currentYearMonth, spendingLimits);
         }
     }
 

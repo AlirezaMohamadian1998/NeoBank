@@ -4,6 +4,7 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
@@ -40,7 +41,8 @@ class DebitCardQueryIntegrationTest extends DebitCardIntegrationTestSupport {
                 "1234",
                 YearMonth.now(clock).plusYears(5),
                 YearMonth.now(clock),
-                account
+                account,
+                TestCardLimits.generous()
         );
 
         debitCard.activateCard(YearMonth.now(clock));
@@ -128,7 +130,8 @@ class DebitCardQueryIntegrationTest extends DebitCardIntegrationTestSupport {
                         "4321",
                         YearMonth.now(clock).plusYears(4),
                         YearMonth.now(clock),
-                        secondAccount
+                        secondAccount,
+                        TestCardLimits.generous()
                 )
         );
 
@@ -160,7 +163,8 @@ class DebitCardQueryIntegrationTest extends DebitCardIntegrationTestSupport {
                         "9874",
                         YearMonth.of(2033, 5),
                         YearMonth.now(clock),
-                        secondCustomerAccount
+                        secondCustomerAccount,
+                        TestCardLimits.generous()
 
                 )
         );

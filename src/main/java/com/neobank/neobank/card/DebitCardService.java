@@ -9,6 +9,7 @@ import com.neobank.neobank.card.exception.DebitCardNotFoundException;
 import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
 import com.neobank.neobank.card.issuing.DebitCardIssuer;
 import com.neobank.neobank.card.issuing.IssuedDebitCard;
+import com.neobank.neobank.card.limit.CardLimitProperties;
 import com.neobank.neobank.idempotency.*;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,8 @@ public class DebitCardService {
     private final Clock clock;
 
     private final DebitCardIssuer debitCardIssuer;
+
+    private final CardLimitProperties cardLimitProperties;
 
     @Transactional
     @Retryable(
@@ -87,7 +90,8 @@ public class DebitCardService {
                 issuedDebitCard.lastFourDigits(),
                 issuedDebitCard.expirationYearMonth(),
                 currentYearMonth,
-                fundingAccount
+                fundingAccount,
+                cardLimitProperties.limitsFor(fundingAccount.getCurrency()).defaults()
         );
 
         debitCardRepository.save(debitCard);

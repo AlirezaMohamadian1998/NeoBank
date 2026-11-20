@@ -25,9 +25,10 @@ public class DebitCard extends Card {
             String lastFourDigits,
             YearMonth expiry,
             YearMonth now,
-            Account account
+            Account account,
+            CardSpendingLimits spendingLimits
     ) {
-        super(cardReference, lastFourDigits, expiry, now);
+        super(cardReference, lastFourDigits, expiry, now, spendingLimits);
 
         this.fundingAccount = account;
     }
@@ -37,7 +38,8 @@ public class DebitCard extends Card {
             String lastFourDigits,
             YearMonth expiry,
             YearMonth now,
-            Account account
+            Account account,
+            CardSpendingLimits spendingLimits
     ) {
 
         if(account == null) {
@@ -57,7 +59,8 @@ public class DebitCard extends Card {
                 lastFourDigits,
                 expiry,
                 now,
-                account
+                account,
+                spendingLimits
         );
     }
 }

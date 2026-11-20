@@ -10,6 +10,7 @@ import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.CardNotActiveException;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCardPaymentException;
+import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.idempotency.IdempotencyConflictException;
@@ -872,7 +873,7 @@ class CardPaymentServiceTest {
         fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
 
         YearMonth lastMonth = YearMonth.now(clock).minusMonths(1);
-        DebitCard debitCard = DebitCard.createNew("2".repeat(32), "1234", lastMonth, lastMonth, fundingAccount);
+        DebitCard debitCard = DebitCard.createNew("2".repeat(32), "1234", lastMonth, lastMonth, fundingAccount, TestCardLimits.generous());
         debitCard.activateCard(lastMonth);
 
         CardPurchaseRequest request = createPurchaseRequest(
@@ -1296,7 +1297,8 @@ class CardPaymentServiceTest {
                 "1234",
                 now.plusYears(5),
                 now,
-                fundingAccount
+                fundingAccount,
+                TestCardLimits.generous()
         );
 
         switch (status) {

@@ -5,6 +5,7 @@ import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.ProviderRateCache;
@@ -68,7 +69,8 @@ class CardPaymentSafetyIntegrationTest extends DebitCardIntegrationTestSupport {
                 "1234",
                 YearMonth.now(clock).plusYears(5),
                 YearMonth.now(clock),
-                account
+                account,
+                TestCardLimits.generous()
         );
         debitCard.activateCard(YearMonth.now(clock));
 
