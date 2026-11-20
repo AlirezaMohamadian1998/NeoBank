@@ -91,7 +91,7 @@ public class DebitCardService {
                 issuedDebitCard.expirationYearMonth(),
                 currentYearMonth,
                 fundingAccount,
-                cardLimitProperties.limitsFor(fundingAccount.getCurrency()).defaults()
+                cardLimitProperties.getDefaultLimits(fundingAccount.getCurrency())
         );
 
         debitCardRepository.save(debitCard);

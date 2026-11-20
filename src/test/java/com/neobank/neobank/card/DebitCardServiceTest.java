@@ -13,6 +13,7 @@ import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
 import com.neobank.neobank.card.issuing.DebitCardIssuer;
 import com.neobank.neobank.card.issuing.IssuedDebitCard;
 import com.neobank.neobank.card.limit.CardLimitProperties;
+import com.neobank.neobank.card.limit.TestCardLimitProperties;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.idempotency.*;
@@ -38,7 +39,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -70,12 +70,7 @@ class DebitCardServiceTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-09-23T12:00:00Z"), Clock.systemUTC().getZone());
 
-    private final CardLimitProperties cardLimitProperties = new CardLimitProperties(Map.of(
-            CurrencyCode.USD, currencyLimits("1000.00", "2500.00"),
-            CurrencyCode.EUR, currencyLimits("1000.00", "2500.00"),
-            CurrencyCode.GBP, currencyLimits("1000.00", "2500.00"),
-            CurrencyCode.TRY, currencyLimits("25000.00", "50000.00")
-    ));
+    private final CardLimitProperties cardLimitProperties = TestCardLimitProperties.standard();
 
     private DebitCardService debitCardService;
 
@@ -740,15 +735,6 @@ class DebitCardServiceTest {
                 Arguments.of(CardStatus.FROZEN),
                 Arguments.of(CardStatus.BLOCKED),
                 Arguments.of(CardStatus.CLOSED)
-        );
-    }
-
-    private static CardLimitProperties.CurrencyLimits currencyLimits(String defaultPerTransaction, String defaultDaily) {
-        return new CardLimitProperties.CurrencyLimits(
-                new BigDecimal(defaultPerTransaction),
-                new BigDecimal(defaultDaily),
-                new BigDecimal(defaultPerTransaction).multiply(BigDecimal.TEN),
-                new BigDecimal(defaultDaily).multiply(BigDecimal.TEN)
         );
     }
 

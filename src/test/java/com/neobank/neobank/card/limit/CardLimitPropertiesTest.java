@@ -1,5 +1,6 @@
 package com.neobank.neobank.card.limit;
 
+import com.neobank.neobank.card.CardSpendingLimits;
 import com.neobank.neobank.card.limit.CardLimitProperties.CurrencyLimits;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
@@ -29,12 +30,14 @@ class CardLimitPropertiesTest {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
 
-                    CurrencyLimits tryLimits = context.getBean(CardLimitProperties.class).limitsFor(CurrencyCode.TRY);
+                    CardLimitProperties properties = context.getBean(CardLimitProperties.class);
+                    CardSpendingLimits tryDefaults = properties.getDefaultLimits(CurrencyCode.TRY);
+                    CardSpendingLimits tryMaximums = properties.getMaximumLimits(CurrencyCode.TRY);
 
-                    assertThat(tryLimits.defaultPerTransaction()).isEqualByComparingTo("100.00");
-                    assertThat(tryLimits.defaultDaily()).isEqualByComparingTo("250.00");
-                    assertThat(tryLimits.maxPerTransaction()).isEqualByComparingTo("1000.00");
-                    assertThat(tryLimits.maxDaily()).isEqualByComparingTo("2500.00");
+                    assertThat(tryDefaults.getPerTransactionLimit()).isEqualByComparingTo("100.00");
+                    assertThat(tryDefaults.getDailyLimit()).isEqualByComparingTo("250.00");
+                    assertThat(tryMaximums.getPerTransactionLimit()).isEqualByComparingTo("1000.00");
+                    assertThat(tryMaximums.getDailyLimit()).isEqualByComparingTo("2500.00");
                 });
     }
 
@@ -88,7 +91,7 @@ class CardLimitPropertiesTest {
     }
 
     @Test
-    void limitsForAnUnconfiguredCurrencyThrows() {
+    void getDefaultLimitsForAnUnconfiguredCurrencyThrows() {
         CardLimitProperties properties = new CardLimitProperties(java.util.Map.of(
                 CurrencyCode.USD,
                 new CurrencyLimits(
@@ -99,7 +102,7 @@ class CardLimitPropertiesTest {
                 )
         ));
 
-        assertThatThrownBy(() -> properties.limitsFor(CurrencyCode.EUR))
+        assertThatThrownBy(() -> properties.getDefaultLimits(CurrencyCode.EUR))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("EUR");
     }

@@ -30,7 +30,19 @@ public record CardLimitProperties(
         return currencies == null || currencies.keySet().containsAll(EnumSet.allOf(CurrencyCode.class));
     }
 
-    public CurrencyLimits limitsFor(CurrencyCode currency) {
+    public CardSpendingLimits getDefaultLimits(CurrencyCode currency) {
+        CurrencyLimits limits = getCurrencyLimits(currency);
+
+        return CardSpendingLimits.createNew(limits.defaultPerTransaction(), limits.defaultDaily());
+    }
+
+    public CardSpendingLimits getMaximumLimits(CurrencyCode currency) {
+        CurrencyLimits limits = getCurrencyLimits(currency);
+
+        return CardSpendingLimits.createNew(limits.maxPerTransaction(), limits.maxDaily());
+    }
+
+    private CurrencyLimits getCurrencyLimits(CurrencyCode currency) {
         CurrencyLimits limits = currencies.get(currency);
 
         if (limits == null) {
@@ -40,7 +52,7 @@ public record CardLimitProperties(
         return limits;
     }
 
-    public record CurrencyLimits(
+    record CurrencyLimits(
             @NotNull @Positive @Digits(integer = 17, fraction = 2)
             BigDecimal defaultPerTransaction,
 
@@ -72,14 +84,6 @@ public record CardLimitProperties(
         @AssertTrue(message = "maximum per-transaction limit must not exceed the maximum daily limit")
         public boolean isMaxPerTransactionWithinMaxDaily() {
             return anyNull() || maxPerTransaction.compareTo(maxDaily) <= 0;
-        }
-
-        public CardSpendingLimits defaults() {
-            return CardSpendingLimits.createNew(defaultPerTransaction, defaultDaily);
-        }
-
-        public CardSpendingLimits maximums() {
-            return CardSpendingLimits.createNew(maxPerTransaction, maxDaily);
         }
 
         private boolean anyNull() {
