@@ -182,6 +182,9 @@ class DebitCardServiceTest {
         assertThat(debitCard.getStatus())
                 .isSameAs(CardStatus.INACTIVE);
 
+        assertThat(debitCard.getSpendingLimits())
+                .isEqualTo(CardSpendingLimits.createNew(new BigDecimal("25000.00"), new BigDecimal("50000.00")));
+
         assertThat(idempotencyRecord.getIdempotencyKey())
                 .isEqualTo(idempotencyKey);
 
