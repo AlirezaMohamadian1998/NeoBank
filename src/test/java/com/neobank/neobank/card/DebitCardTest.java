@@ -2,6 +2,7 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
+import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
@@ -32,7 +33,8 @@ class DebitCardTest {
                 lastFourDigits,
                 expirationYearMonth,
                 currentYearMonth,
-                fundingAccount
+                fundingAccount,
+                TestCardLimits.generous()
         );
 
         assertThat(debitCard.getCardReference())
@@ -62,7 +64,8 @@ class DebitCardTest {
                 "1234",
                 YearMonth.of(2029, 9),
                 YearMonth.of(2026, 9),
-                fundingAccount
+                fundingAccount,
+                TestCardLimits.generous()
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(exceptionMessage);

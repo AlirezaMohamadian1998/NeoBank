@@ -10,3 +10,15 @@ security:
 fx:
   provider:
     app-id: integration-test-app-id
+
+card:
+  limits:
+    currencies:
+      USD: &generous-card-limits
+        default-per-transaction: 1000000.00
+        default-daily: 5000000.00
+        max-per-transaction: 10000000.00
+        max-daily: 50000000.00
+      EUR: *generous-card-limits
+      GBP: *generous-card-limits
+      TRY: *generous-card-limits

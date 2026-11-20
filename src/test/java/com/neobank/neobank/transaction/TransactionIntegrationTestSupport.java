@@ -3,6 +3,7 @@ package com.neobank.neobank.transaction;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
+import com.neobank.neobank.card.CardDailySpendRepository;
 import com.neobank.neobank.card.CardPurchaseDetailsRepository;
 import com.neobank.neobank.card.CardRefundDetailsRepository;
 import com.neobank.neobank.card.DebitCardRepository;
@@ -50,6 +51,9 @@ public abstract class TransactionIntegrationTestSupport {
     protected DebitCardRepository debitCardRepository;
 
     @Autowired
+    protected CardDailySpendRepository cardDailySpendRepository;
+
+    @Autowired
     protected CardPurchaseDetailsRepository cardPurchaseDetailsRepository;
 
     @Autowired
@@ -65,6 +69,7 @@ public abstract class TransactionIntegrationTestSupport {
         idempotencyRecordRepository.deleteAll();
         cardRefundDetailsRepository.deleteAll();
         cardPurchaseDetailsRepository.deleteAll();
+        cardDailySpendRepository.deleteAll();
         debitCardRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
         bankTransactionRepository.deleteAll();

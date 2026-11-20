@@ -9,6 +9,7 @@ public record DebitCardRetrieveResponse(
         String lastFourDigits,
         CardStatus status,
         YearMonth expirationYearMonth,
-        String fundingAccountNumber
+        String fundingAccountNumber,
+        CardSpendingLimitsResponse spendingLimits
 ) {
 }

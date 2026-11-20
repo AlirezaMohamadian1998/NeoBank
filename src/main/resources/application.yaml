@@ -34,3 +34,27 @@ fx:
     read-timeout: 5s
   rate-lock:
     duration: 5m
+
+card:
+  limits:
+    currencies:
+      USD:
+        default-per-transaction: 1000.00
+        default-daily: 2500.00
+        max-per-transaction: 5000.00
+        max-daily: 10000.00
+      EUR:
+        default-per-transaction: 1000.00
+        default-daily: 2500.00
+        max-per-transaction: 5000.00
+        max-daily: 10000.00
+      GBP:
+        default-per-transaction: 1000.00
+        default-daily: 2500.00
+        max-per-transaction: 5000.00
+        max-daily: 10000.00
+      TRY:
+        default-per-transaction: 25000.00
+        default-daily: 50000.00
+        max-per-transaction: 150000.00
+        max-daily: 300000.00

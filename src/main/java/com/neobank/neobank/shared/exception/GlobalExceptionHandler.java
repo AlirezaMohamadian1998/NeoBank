@@ -337,6 +337,60 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
     }
 
+    @ExceptionHandler(CardLimitExceededException.class)
+    public ResponseEntity<ProblemDetail> handleCardLimitExceededException(
+            CardLimitExceededException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Card limit exceeded");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidCardLimitException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidCardLimitException(
+            InvalidCardLimitException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Invalid card limit");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(CardLimitsNotChangeableException.class)
+    public ResponseEntity<ProblemDetail> handleCardLimitsNotChangeableException(
+            CardLimitsNotChangeableException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Card limits not changeable");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
+    @ExceptionHandler(CardDailySpendRaceException.class)
+    public ResponseEntity<ProblemDetail> handleCardDailySpendRaceException(
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Another purchase on this card is being processed. Retry the same request using the same key."
+        );
+
+        problemDetail.setTitle("Card purchase in progress");
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, "1")
+                .body(problemDetail);
+    }
+
     @ExceptionHandler(InvalidCardPaymentException.class)
     public ResponseEntity<ProblemDetail> handleInvalidCardPaymentException(
             InvalidCardPaymentException ex,

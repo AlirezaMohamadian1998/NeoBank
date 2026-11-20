@@ -1,17 +1,20 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.exception.CardExpiredException;
+import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
 import com.neobank.neobank.shared.persistence.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.YearMonth;
 
 @Entity
 @Getter
+@DynamicUpdate
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Inheritance(strategy = InheritanceType.JOINED)
 @Table(name = "cards")
@@ -31,11 +34,15 @@ public abstract class Card extends BaseEntity {
     @Convert(converter = YearMonthAttributeConverter.class)
     private YearMonth expirationYearMonth;
 
+    @Embedded
+    private CardSpendingLimits spendingLimits;
+
     protected Card(
             String cardReference,
             String lastFourDigits,
             YearMonth expirationYearMonth,
-            YearMonth now
+            YearMonth now,
+            CardSpendingLimits spendingLimits
     ) {
         if(cardReference == null) {
             throw new IllegalArgumentException("Card reference must not be null");
@@ -65,10 +72,29 @@ public abstract class Card extends BaseEntity {
             throw new IllegalArgumentException("Expiration should be at the end of this month or in future");
         }
 
+        if(spendingLimits == null) {
+            throw new IllegalArgumentException("Spending limits cannot be null");
+        }
+
         this.cardReference = cardReference;
         this.lastFourDigits = lastFourDigits;
         this.status = CardStatus.INACTIVE;
         this.expirationYearMonth = expirationYearMonth;
+        this.spendingLimits = spendingLimits;
+    }
+
+    public void changeSpendingLimits(CardSpendingLimits newLimits, CardSpendingLimits maximum) {
+        if(newLimits == null) {
+            throw new IllegalArgumentException("Spending limits cannot be null");
+        }
+
+        if(this.status == CardStatus.CLOSED || this.status == CardStatus.BLOCKED) {
+            throw new CardLimitsNotChangeableException("Limits of closed or blocked cards cannot be changed");
+        }
+
+        newLimits.ensureWithin(maximum);
+
+        this.spendingLimits = newLimits;
     }
 
     public void activateCard(YearMonth now) {

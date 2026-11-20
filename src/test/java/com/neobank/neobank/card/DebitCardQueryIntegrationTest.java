@@ -2,12 +2,15 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
+import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +19,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.JsonNode;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.YearMonth;
@@ -27,6 +31,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class DebitCardQueryIntegrationTest extends DebitCardIntegrationTestSupport {
+
+    private static final RecursiveComparisonConfiguration BIG_DECIMAL_BY_VALUE = RecursiveComparisonConfiguration.builder()
+            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+            .build();
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -40,7 +48,8 @@ class DebitCardQueryIntegrationTest extends DebitCardIntegrationTestSupport {
                 "1234",
                 YearMonth.now(clock).plusYears(5),
                 YearMonth.now(clock),
-                account
+                account,
+                TestCardLimits.generous()
         );
 
         debitCard.activateCard(YearMonth.now(clock));
@@ -128,7 +137,8 @@ class DebitCardQueryIntegrationTest extends DebitCardIntegrationTestSupport {
                         "4321",
                         YearMonth.now(clock).plusYears(4),
                         YearMonth.now(clock),
-                        secondAccount
+                        secondAccount,
+                        TestCardLimits.generous()
                 )
         );
 
@@ -160,7 +170,8 @@ class DebitCardQueryIntegrationTest extends DebitCardIntegrationTestSupport {
                         "9874",
                         YearMonth.of(2033, 5),
                         YearMonth.now(clock),
-                        secondCustomerAccount
+                        secondCustomerAccount,
+                        TestCardLimits.generous()
 
                 )
         );
@@ -196,12 +207,14 @@ class DebitCardQueryIntegrationTest extends DebitCardIntegrationTestSupport {
                         .readValue(firstRoot.get("content"));
 
         assertThat(firstPage)
+                .usingRecursiveFieldByFieldElementComparator(BIG_DECIMAL_BY_VALUE)
                 .containsExactly(new DebitCardRetrieveResponse(
                         secondDebitCard.getCardReference(),
                         secondDebitCard.getLastFourDigits(),
                         secondDebitCard.getStatus(),
                         secondDebitCard.getExpirationYearMonth(),
-                        secondDebitCard.getFundingAccount().getAccountNumber()
+                        secondDebitCard.getFundingAccount().getAccountNumber(),
+                        generousLimitsResponse(secondDebitCard.getFundingAccount().getCurrency())
                 ));
 
         assertThat(firstRoot.get("page").get("number").asInt())
@@ -231,12 +244,14 @@ class DebitCardQueryIntegrationTest extends DebitCardIntegrationTestSupport {
                         .readValue(secondRoot.get("content"));
 
         assertThat(secondPage)
+                .usingRecursiveFieldByFieldElementComparator(BIG_DECIMAL_BY_VALUE)
                 .containsExactly(new DebitCardRetrieveResponse(
                         debitCard.getCardReference(),
                         debitCard.getLastFourDigits(),
                         debitCard.getStatus(),
                         debitCard.getExpirationYearMonth(),
-                        debitCard.getFundingAccount().getAccountNumber()
+                        debitCard.getFundingAccount().getAccountNumber(),
+                        generousLimitsResponse(debitCard.getFundingAccount().getCurrency())
                 ));
 
         assertThat(secondRoot.get("page").get("number").asInt())
@@ -301,5 +316,14 @@ class DebitCardQueryIntegrationTest extends DebitCardIntegrationTestSupport {
         assertThat(root.get("page").get("totalPages").asInt())
                 .isEqualTo(0);
 
+    }
+
+    private static CardSpendingLimitsResponse generousLimitsResponse(CurrencyCode currency) {
+        return new CardSpendingLimitsResponse(
+                new BigDecimal("1000000.00"),
+                new BigDecimal("5000000.00"),
+                new BigDecimal("0.00"),
+                currency
+        );
     }
 }

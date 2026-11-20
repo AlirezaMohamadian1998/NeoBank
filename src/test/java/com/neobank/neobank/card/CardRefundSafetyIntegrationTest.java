@@ -6,6 +6,7 @@ import com.neobank.neobank.card.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.dto.CardRefundResponse;
 import com.neobank.neobank.card.exception.CardPurchaseNotRefundableException;
 import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
@@ -71,7 +72,8 @@ class CardRefundSafetyIntegrationTest extends DebitCardIntegrationTestSupport {
                 "1234",
                 YearMonth.now(clock).plusYears(5),
                 YearMonth.now(clock),
-                account
+                account,
+                TestCardLimits.generous()
         );
         debitCard.activateCard(YearMonth.now(clock));
         debitCardRepository.save(debitCard);

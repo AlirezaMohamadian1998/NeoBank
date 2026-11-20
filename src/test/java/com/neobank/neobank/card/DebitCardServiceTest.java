@@ -4,14 +4,21 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
+import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
+import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.exception.CardExpiredException;
+import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
+import com.neobank.neobank.card.exception.InvalidCardLimitException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
 import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
 import com.neobank.neobank.card.issuing.DebitCardIssuer;
 import com.neobank.neobank.card.issuing.IssuedDebitCard;
+import com.neobank.neobank.card.limit.CardLimitProperties;
+import com.neobank.neobank.card.limit.TestCardLimitProperties;
+import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.idempotency.*;
 import com.neobank.neobank.ledger.LedgerAccount;
@@ -30,11 +37,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -64,7 +75,12 @@ class DebitCardServiceTest {
     @Mock
     private DebitCardIssuer debitCardIssuer;
 
+    @Mock
+    private CardDailySpendService cardDailySpendService;
+
     private final Clock clock = Clock.fixed(Instant.parse("2026-09-23T12:00:00Z"), Clock.systemUTC().getZone());
+
+    private final CardLimitProperties cardLimitProperties = TestCardLimitProperties.standard();
 
     private DebitCardService debitCardService;
 
@@ -77,7 +93,9 @@ class DebitCardServiceTest {
                 referenceGenerator,
                 requestHasher,
                 clock,
-                debitCardIssuer
+                debitCardIssuer,
+                cardLimitProperties,
+                cardDailySpendService
         );
     }
 
@@ -170,6 +188,9 @@ class DebitCardServiceTest {
         assertThat(debitCard.getStatus())
                 .isSameAs(CardStatus.INACTIVE);
 
+        assertThat(debitCard.getSpendingLimits())
+                .isEqualTo(CardSpendingLimits.createNew(new BigDecimal("25000.00"), new BigDecimal("50000.00")));
+
         assertThat(idempotencyRecord.getIdempotencyKey())
                 .isEqualTo(idempotencyKey);
 
@@ -253,7 +274,8 @@ class DebitCardServiceTest {
                 "1234",
                 now.plusYears(5),
                 now,
-                account
+                account,
+                TestCardLimits.generous()
         );
 
         IdempotencyRecord idempotencyRecord = IdempotencyRecord.createNew(
@@ -363,7 +385,18 @@ class DebitCardServiceTest {
         given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), customer.getEmail()))
                 .willReturn(Optional.of(debitCard));
 
+        given(cardDailySpendService.getAmountSpent(debitCard, LocalDate.of(2026, 9, 23)))
+                .willReturn(new BigDecimal("40.00"));
+
         DebitCardRetrieveResponse response = debitCardService.getDebitCard(debitCard.getCardReference(), customer.getEmail());
+
+        assertThat(response.spendingLimits())
+                .isEqualTo(new CardSpendingLimitsResponse(
+                        new BigDecimal("1000000.00"),
+                        new BigDecimal("5000000.00"),
+                        new BigDecimal("40.00"),
+                        CurrencyCode.TRY
+                ));
 
         assertThat(response.cardReference())
                 .isEqualTo(debitCard.getCardReference());
@@ -448,7 +481,8 @@ class DebitCardServiceTest {
                 "1234",
                 now.plusYears(5),
                 now,
-                firstAccount
+                firstAccount,
+                TestCardLimits.generous()
         );
 
         firstDebitCard.activateCard(now);
@@ -458,11 +492,15 @@ class DebitCardServiceTest {
                 "4321",
                 now.plusYears(5),
                 now,
-                secondAccount
+                secondAccount,
+                TestCardLimits.generous()
         );
 
         secondDebitCard.activateCard(now);
         secondDebitCard.freezeCard(now);
+
+        ReflectionTestUtils.setField(firstDebitCard, "id", 1L);
+        ReflectionTestUtils.setField(secondDebitCard, "id", 2L);
 
         Page<DebitCard> debitCardPage = new PageImpl<>(
                 List.of(firstDebitCard, secondDebitCard),
@@ -472,6 +510,9 @@ class DebitCardServiceTest {
 
         given(debitCardRepository.findAllByFundingAccount_Customer_EmailIgnoreCaseOrderByCreatedAtDescIdDesc(customer.getEmail(), debitCardPage.getPageable()))
                 .willReturn(debitCardPage);
+
+        given(cardDailySpendService.getAmountSpentPerCard(debitCardPage.getContent(), LocalDate.of(2026, 9, 23)))
+                .willReturn(Map.of(1L, new BigDecimal("40.00"), 2L, new BigDecimal("0.00")));
 
         Page<DebitCardRetrieveResponse> response = debitCardService.getDebitCards(customer.getEmail(), debitCardPage.getPageable());
 
@@ -497,14 +538,26 @@ class DebitCardServiceTest {
                                 firstDebitCard.getLastFourDigits(),
                                 CardStatus.ACTIVE,
                                 firstDebitCard.getExpirationYearMonth(),
-                                firstAccount.getAccountNumber()
+                                firstAccount.getAccountNumber(),
+                                new CardSpendingLimitsResponse(
+                                        new BigDecimal("1000000.00"),
+                                        new BigDecimal("5000000.00"),
+                                        new BigDecimal("40.00"),
+                                        CurrencyCode.TRY
+                                )
                         ),
                         new DebitCardRetrieveResponse(
                                 secondDebitCard.getCardReference(),
                                 secondDebitCard.getLastFourDigits(),
                                 CardStatus.FROZEN,
                                 secondDebitCard.getExpirationYearMonth(),
-                                secondAccount.getAccountNumber()
+                                secondAccount.getAccountNumber(),
+                                new CardSpendingLimitsResponse(
+                                        new BigDecimal("1000000.00"),
+                                        new BigDecimal("5000000.00"),
+                                        new BigDecimal("0.00"),
+                                        CurrencyCode.TRY
+                                )
                         )
                 );
 
@@ -725,6 +778,116 @@ class DebitCardServiceTest {
         );
     }
 
+    @Test
+    void updateSpendingLimitsChangesLimitsWithinMaximumAndReturnsUpdatedCard() {
+        YearMonth now = YearMonth.now(clock);
+        DebitCard debitCard = createDebitCard(now, now.plusYears(5));
+        String email = debitCard.getFundingAccount().getCustomer().getEmail();
+
+        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), email))
+                .willReturn(Optional.of(debitCard));
+        given(debitCardRepository.save(debitCard))
+                .willAnswer(invocation -> invocation.getArgument(0));
+        given(cardDailySpendService.getAmountSpent(debitCard, LocalDate.of(2026, 9, 23)))
+                .willReturn(new BigDecimal("0.00"));
+
+        DebitCardRetrieveResponse response = debitCardService.updateSpendingLimits(
+                debitCard.getCardReference(),
+                email,
+                new CardLimitsUpdateRequest(new BigDecimal("250000.00"), new BigDecimal("500000.00"))
+        );
+
+        assertThat(debitCard.getSpendingLimits())
+                .isEqualTo(CardSpendingLimits.createNew(new BigDecimal("250000.00"), new BigDecimal("500000.00")));
+
+        assertThat(response.spendingLimits())
+                .isEqualTo(new CardSpendingLimitsResponse(
+                        new BigDecimal("250000.00"),
+                        new BigDecimal("500000.00"),
+                        new BigDecimal("0.00"),
+                        CurrencyCode.TRY
+                ));
+
+        verify(debitCardRepository).save(debitCard);
+    }
+
+    @Test
+    void updateSpendingLimitsRejectsLimitsAboveCurrencyMaximumWithoutSaving() {
+        YearMonth now = YearMonth.now(clock);
+        DebitCard debitCard = createDebitCard(now, now.plusYears(5));
+        String email = debitCard.getFundingAccount().getCustomer().getEmail();
+        CardSpendingLimits original = debitCard.getSpendingLimits();
+
+        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), email))
+                .willReturn(Optional.of(debitCard));
+
+        assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
+                debitCard.getCardReference(),
+                email,
+                new CardLimitsUpdateRequest(new BigDecimal("250000.01"), new BigDecimal("500000.00"))
+        ))
+                .isInstanceOf(InvalidCardLimitException.class)
+                .hasMessage("Per-transaction limit must not exceed 250000.00");
+
+        assertThat(debitCard.getSpendingLimits()).isEqualTo(original);
+        verify(debitCardRepository, never()).save(any());
+    }
+
+    @Test
+    void updateSpendingLimitsRejectsPerTransactionAboveDailyWithoutSaving() {
+        YearMonth now = YearMonth.now(clock);
+        DebitCard debitCard = createDebitCard(now, now.plusYears(5));
+        String email = debitCard.getFundingAccount().getCustomer().getEmail();
+
+        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), email))
+                .willReturn(Optional.of(debitCard));
+
+        assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
+                debitCard.getCardReference(),
+                email,
+                new CardLimitsUpdateRequest(new BigDecimal("300.00"), new BigDecimal("200.00"))
+        ))
+                .isInstanceOf(InvalidCardLimitException.class)
+                .hasMessage("Per-transaction limit must not exceed the daily limit");
+
+        verify(debitCardRepository, never()).save(any());
+    }
+
+    @Test
+    void updateSpendingLimitsRejectsClosedCardWithoutSaving() {
+        YearMonth now = YearMonth.now(clock);
+        DebitCard debitCard = createDebitCard(now, now.plusYears(5));
+        debitCard.closeCard();
+        String email = debitCard.getFundingAccount().getCustomer().getEmail();
+
+        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(debitCard.getCardReference(), email))
+                .willReturn(Optional.of(debitCard));
+
+        assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
+                debitCard.getCardReference(),
+                email,
+                new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))
+        ))
+                .isInstanceOf(CardLimitsNotChangeableException.class);
+
+        verify(debitCardRepository, never()).save(any());
+    }
+
+    @Test
+    void updateSpendingLimitsThrowsNotFoundWhenOwnedLookupReturnsEmpty() {
+        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), "customer@example.com"))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
+                "2".repeat(32),
+                "customer@example.com",
+                new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))
+        ))
+                .isInstanceOf(DebitCardNotFoundException.class);
+
+        verify(debitCardRepository, never()).save(any());
+    }
+
     private DebitCard createDebitCard(YearMonth creationYearMonth, YearMonth expirationYearMonth) {
         Customer customer = Customer.createNew(
                 "customer@example.com",
@@ -751,7 +914,8 @@ class DebitCardServiceTest {
                 "1234",
                 expirationYearMonth,
                 creationYearMonth,
-                account
+                account,
+                TestCardLimits.generous()
         );
     }
 

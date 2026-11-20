@@ -2,13 +2,17 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.auth.SecurityConfig;
+import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.dto.CardPurchaseResponse;
+import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.exception.CardExpiredException;
+import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.CardNotActiveException;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
+import com.neobank.neobank.card.exception.InvalidCardLimitException;
 import com.neobank.neobank.card.exception.InvalidCardPaymentException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
 import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
@@ -196,7 +200,8 @@ class DebitCardControllerTest {
                 "1234",
                 CardStatus.ACTIVE,
                 YearMonth.of(2031, 9),
-                "12345678900987"
+                "12345678900987",
+                limitsResponse()
         );
 
         given(debitCardService.getDebitCard(response.cardReference(), email))
@@ -273,7 +278,8 @@ class DebitCardControllerTest {
                 "1234",
                 CardStatus.ACTIVE,
                 YearMonth.of(2031, 9),
-                "12345678900321"
+                "12345678900321",
+                limitsResponse()
         );
 
         DebitCardRetrieveResponse secondResponse = new DebitCardRetrieveResponse(
@@ -281,7 +287,8 @@ class DebitCardControllerTest {
                 "4321",
                 CardStatus.FROZEN,
                 YearMonth.of(2032, 10),
-                "12300123456789"
+                "12300123456789",
+                limitsResponse()
         );
 
         Page<DebitCardRetrieveResponse> responses = new PageImpl<>(
@@ -379,7 +386,8 @@ class DebitCardControllerTest {
                 "1234",
                 CardStatus.ACTIVE,
                 YearMonth.of(2031, 9),
-                "12345678900321"
+                "12345678900321",
+                limitsResponse()
         );
 
         given(debitCardService.changeCardStatus(response.cardReference(), email, CardStatus.ACTIVE))
@@ -801,6 +809,159 @@ class DebitCardControllerTest {
                         "Card expired",
                         409
                 )
+        );
+    }
+
+    @Test
+    void updateSpendingLimitsReturnsUpdatedCardForAuthenticatedCustomer() throws Exception {
+        String email = "customer@example.com";
+        String cardReference = "1".repeat(32);
+        CardLimitsUpdateRequest request = new CardLimitsUpdateRequest(new BigDecimal("500.00"), new BigDecimal("1500.00"));
+
+        DebitCardRetrieveResponse response = new DebitCardRetrieveResponse(
+                cardReference,
+                "1234",
+                CardStatus.ACTIVE,
+                YearMonth.of(2031, 9),
+                "12345678900321",
+                new CardSpendingLimitsResponse(
+                        new BigDecimal("500.00"),
+                        new BigDecimal("1500.00"),
+                        new BigDecimal("40.00"),
+                        CurrencyCode.TRY
+                )
+        );
+
+        given(debitCardService.updateSpendingLimits(cardReference, email, request))
+                .willReturn(response);
+
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", cardReference)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.cardReference").value(cardReference))
+                .andExpect(jsonPath("$.spendingLimits.perTransactionLimit").value(500.00))
+                .andExpect(jsonPath("$.spendingLimits.dailyLimit").value(1500.00))
+                .andExpect(jsonPath("$.spendingLimits.spentToday").value(40.00))
+                .andExpect(jsonPath("$.spendingLimits.currency").value("TRY"));
+
+        verify(debitCardService).updateSpendingLimits(cardReference, email, request);
+    }
+
+    @Test
+    void updateSpendingLimitsReturnsValidationProblemForMissingAndInvalidValues() throws Exception {
+        String email = "customer@example.com";
+        String cardReference = "1".repeat(32);
+
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", cardReference)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dailyLimit\": 10.001}")
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Validation failed"))
+                .andExpect(jsonPath("$.errors.perTransactionLimit").value("Per-transaction limit cannot be null"))
+                .andExpect(jsonPath("$.errors.dailyLimit").value("Daily limit must be a valid decimal number"));
+
+        verifyNoInteractions(debitCardService);
+    }
+
+    @Test
+    void updateSpendingLimitsReturnsValidationProblemForNonPositiveValues() throws Exception {
+        String email = "customer@example.com";
+        String cardReference = "1".repeat(32);
+
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", cardReference)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CardLimitsUpdateRequest(new BigDecimal("-1.00"), BigDecimal.ZERO)))
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.perTransactionLimit").value("Per-transaction limit must be a positive number"))
+                .andExpect(jsonPath("$.errors.dailyLimit").value("Daily limit must be a positive number"));
+
+        verifyNoInteractions(debitCardService);
+    }
+
+    @Test
+    void updateSpendingLimitsRejectsInvalidCardReference() throws Exception {
+        String invalidCardReference = "11zzz1111yy11xx1kkk111ggg11zzz11";
+
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", invalidCardReference)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))))
+                        .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.cardReference").value("Card reference must be 32 hexadecimal characters"));
+
+        verifyNoInteractions(debitCardService);
+    }
+
+    @Test
+    void updateSpendingLimitsReturnsUnauthorizedWithoutAuthentication() throws Exception {
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", "1".repeat(32))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00")))))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(debitCardService);
+    }
+
+    @ParameterizedTest
+    @MethodSource("updateSpendingLimitsServiceExceptionSource")
+    void updateSpendingLimitsReturnsExpectedProblemForServiceException(
+            RuntimeException ex,
+            String title,
+            int httpStatusCode
+    ) throws Exception {
+        String email = "customer@example.com";
+        String cardReference = "1".repeat(32);
+        CardLimitsUpdateRequest request = new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"));
+
+        given(debitCardService.updateSpendingLimits(cardReference, email, request))
+                .willThrow(ex);
+
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", cardReference)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+                .andExpect(status().is(httpStatusCode))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value(ex.getMessage()))
+                .andExpect(jsonPath("$.title").value(title))
+                .andExpect(jsonPath("$.instance").value("/api/debit-cards/%s/limits".formatted(cardReference)));
+    }
+
+    private static Stream<Arguments> updateSpendingLimitsServiceExceptionSource() {
+        return Stream.of(
+                Arguments.argumentSet(
+                        "updateSpendingLimitsReturnsNotFoundProblem",
+                        new DebitCardNotFoundException("Debit card not found"),
+                        "Debit card not found",
+                        404
+                ),
+                Arguments.argumentSet(
+                        "updateSpendingLimitsReturnsBadRequestForLimitAboveMaximum",
+                        new InvalidCardLimitException("Per-transaction limit must not exceed 5000.00"),
+                        "Invalid card limit",
+                        400
+                ),
+                Arguments.argumentSet(
+                        "updateSpendingLimitsReturnsConflictForClosedCard",
+                        new CardLimitsNotChangeableException("Limits of closed or blocked cards cannot be changed"),
+                        "Card limits not changeable",
+                        409
+                )
+        );
+    }
+
+    private static CardSpendingLimitsResponse limitsResponse() {
+        return new CardSpendingLimitsResponse(
+                new BigDecimal("1000.00"),
+                new BigDecimal("2500.00"),
+                new BigDecimal("0.00"),
+                CurrencyCode.TRY
         );
     }
 }

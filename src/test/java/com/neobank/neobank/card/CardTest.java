@@ -1,12 +1,16 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.exception.CardExpiredException;
+import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
+import com.neobank.neobank.card.exception.InvalidCardLimitException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
+import com.neobank.neobank.card.support.TestCardLimits;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.util.stream.Stream;
 
@@ -191,6 +195,114 @@ class CardTest {
                 .hasMessage("Expired cards cannot be blocked");
     }
 
+    @Test
+    void creationRejectsNullSpendingLimits() {
+        assertThatThrownBy(() -> new TestCard(
+                "0123456789abcdef0123456789abcdef",
+                "1234",
+                YearMonth.of(2029, 9),
+                YearMonth.of(2026, 9),
+                null
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Spending limits cannot be null");
+    }
+
+    @Test
+    void creationKeepsGivenSpendingLimits() {
+        CardSpendingLimits limits = limits("100.00", "250.00");
+
+        Card card = new TestCard(
+                "0123456789abcdef0123456789abcdef",
+                "1234",
+                YearMonth.of(2029, 9),
+                YearMonth.of(2026, 9),
+                limits
+        );
+
+        assertThat(card.getSpendingLimits()).isEqualTo(limits);
+    }
+
+    @Test
+    void changeSpendingLimitsReplacesLimitsWithinMaximum() {
+        Card card = createValidCard(YearMonth.of(2026, 9));
+        CardSpendingLimits newLimits = limits("500.00", "1000.00");
+
+        card.changeSpendingLimits(newLimits, limits("500.00", "1000.00"));
+
+        assertThat(card.getSpendingLimits()).isEqualTo(newLimits);
+    }
+
+    @Test
+    void changeSpendingLimitsIsAllowedForInactiveAndFrozenCards() {
+        YearMonth now = YearMonth.of(2026, 9);
+        Card inactiveCard = createValidCard(now);
+        Card frozenCard = createValidCard(now);
+        frozenCard.activateCard(now);
+        frozenCard.freezeCard(now);
+
+        inactiveCard.changeSpendingLimits(limits("10.00", "20.00"), MAXIMUM);
+        frozenCard.changeSpendingLimits(limits("10.00", "20.00"), MAXIMUM);
+
+        assertThat(inactiveCard.getSpendingLimits()).isEqualTo(limits("10.00", "20.00"));
+        assertThat(frozenCard.getSpendingLimits()).isEqualTo(limits("10.00", "20.00"));
+    }
+
+    @Test
+    void changeSpendingLimitsRejectsPerTransactionAboveMaximum() {
+        Card card = createValidCard(YearMonth.of(2026, 9));
+        CardSpendingLimits original = card.getSpendingLimits();
+
+        assertThatThrownBy(() -> card.changeSpendingLimits(limits("1000.01", "2000.00"), MAXIMUM))
+                .isInstanceOf(InvalidCardLimitException.class)
+                .hasMessage("Per-transaction limit must not exceed 1000.00");
+
+        assertThat(card.getSpendingLimits()).isEqualTo(original);
+    }
+
+    @Test
+    void changeSpendingLimitsRejectsDailyAboveMaximum() {
+        Card card = createValidCard(YearMonth.of(2026, 9));
+
+        assertThatThrownBy(() -> card.changeSpendingLimits(limits("100.00", "5000.01"), MAXIMUM))
+                .isInstanceOf(InvalidCardLimitException.class)
+                .hasMessage("Daily limit must not exceed 5000.00");
+    }
+
+    @Test
+    void changeSpendingLimitsRejectsClosedCard() {
+        Card card = createValidCard(YearMonth.of(2026, 9));
+        card.closeCard();
+
+        assertThatThrownBy(() -> card.changeSpendingLimits(limits("10.00", "20.00"), MAXIMUM))
+                .isInstanceOf(CardLimitsNotChangeableException.class);
+    }
+
+    @Test
+    void changeSpendingLimitsRejectsBlockedCard() {
+        YearMonth now = YearMonth.of(2026, 9);
+        Card card = createValidCard(now);
+        card.blockCard(now);
+
+        assertThatThrownBy(() -> card.changeSpendingLimits(limits("10.00", "20.00"), MAXIMUM))
+                .isInstanceOf(CardLimitsNotChangeableException.class);
+    }
+
+    @Test
+    void changeSpendingLimitsRejectsNullLimits() {
+        Card card = createValidCard(YearMonth.of(2026, 9));
+
+        assertThatThrownBy(() -> card.changeSpendingLimits(null, MAXIMUM))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Spending limits cannot be null");
+    }
+
+    private static final CardSpendingLimits MAXIMUM = limits("1000.00", "5000.00");
+
+    private static CardSpendingLimits limits(String perTransaction, String daily) {
+        return CardSpendingLimits.createNew(new BigDecimal(perTransaction), new BigDecimal(daily));
+    }
+
     private static Card createValidCard(YearMonth currentYearMonth) {
         return createCard(currentYearMonth.plusYears(3), currentYearMonth);
     }
@@ -214,7 +326,17 @@ class CardTest {
                 YearMonth expirationYearMonth,
                 YearMonth currentYearMonth
         ) {
-            super(cardReference, lastFourDigits, expirationYearMonth, currentYearMonth);
+            this(cardReference, lastFourDigits, expirationYearMonth, currentYearMonth, TestCardLimits.generous());
+        }
+
+        private TestCard(
+                String cardReference,
+                String lastFourDigits,
+                YearMonth expirationYearMonth,
+                YearMonth currentYearMonth,
+                CardSpendingLimits spendingLimits
+        ) {
+            super(cardReference, lastFourDigits, expirationYearMonth, currentYearMonth, spendingLimits);
         }
     }
 
