@@ -15,12 +15,15 @@ import org.springframework.dao.DataIntegrityViolationException;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,8 +45,8 @@ class CardDailySpendServiceTest {
         cardDailySpendService = new CardDailySpendService(cardDailySpendRepository);
 
         card = mock(Card.class);
-        given(card.getSpendingLimits())
-                .willReturn(CardSpendingLimits.createNew(new BigDecimal("100.00"), new BigDecimal("250.00")));
+        lenient().when(card.getSpendingLimits())
+                .thenReturn(CardSpendingLimits.createNew(new BigDecimal("100.00"), new BigDecimal("250.00")));
     }
 
     @Test
@@ -115,6 +118,51 @@ class CardDailySpendServiceTest {
 
         assertThatThrownBy(() -> cardDailySpendService.recordSpend(card, TODAY, new BigDecimal("40.00")))
                 .isSameAs(violation);
+    }
+
+    @Test
+    void getAmountSpentReturnsAmountOfExistingRow() {
+        CardDailySpend existing = CardDailySpend.createNew(card, TODAY);
+        existing.add(new BigDecimal("60.00"), TestCardLimits.generous());
+
+        given(cardDailySpendRepository.findByCardAndSpendDate(card, TODAY))
+                .willReturn(Optional.of(existing));
+
+        assertThat(cardDailySpendService.getAmountSpent(card, TODAY)).isEqualTo(new BigDecimal("60.00"));
+    }
+
+    @Test
+    void getAmountSpentReturnsZeroWhenNothingWasSpent() {
+        given(cardDailySpendRepository.findByCardAndSpendDate(card, TODAY))
+                .willReturn(Optional.empty());
+
+        assertThat(cardDailySpendService.getAmountSpent(card, TODAY)).isEqualTo(new BigDecimal("0.00"));
+    }
+
+    @Test
+    void getAmountSpentPerCardMapsEveryCardAndFillsZeroForCardsWithoutSpend() {
+        Card otherCard = mock(Card.class);
+        given(card.getId()).willReturn(1L);
+        given(otherCard.getId()).willReturn(2L);
+
+        CardDailySpend spend = CardDailySpend.createNew(card, TODAY);
+        spend.add(new BigDecimal("75.00"), TestCardLimits.generous());
+
+        given(cardDailySpendRepository.findAllByCardInAndSpendDate(List.of(card, otherCard), TODAY))
+                .willReturn(List.of(spend));
+
+        assertThat(cardDailySpendService.getAmountSpentPerCard(List.of(card, otherCard), TODAY))
+                .containsOnly(
+                        Map.entry(1L, new BigDecimal("75.00")),
+                        Map.entry(2L, new BigDecimal("0.00"))
+                );
+    }
+
+    @Test
+    void getAmountSpentPerCardForNoCardsSkipsQuery() {
+        assertThat(cardDailySpendService.getAmountSpentPerCard(List.of(), TODAY)).isEmpty();
+
+        verify(cardDailySpendRepository, never()).findAllByCardInAndSpendDate(any(), any());
     }
 
     private static DataIntegrityViolationException violationOf(String constraintName) {

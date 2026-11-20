@@ -2,6 +2,7 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
+import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
@@ -28,7 +29,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
@@ -164,6 +165,109 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
 
         assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("10000.00");
         assertThat(spentToday()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void cardResponsesShowLimitsAndTodaysSpending() throws Exception {
+        purchase(null, "40.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/debit-cards/{cardReference}", CARD_REFERENCE)
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.spendingLimits.perTransactionLimit").value(100.00))
+                .andExpect(jsonPath("$.spendingLimits.dailyLimit").value(250.00))
+                .andExpect(jsonPath("$.spendingLimits.spentToday").value(40.00))
+                .andExpect(jsonPath("$.spendingLimits.currency").value("TRY"));
+
+        mockMvc.perform(get("/api/debit-cards")
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].spendingLimits.spentToday").value(40.00));
+    }
+
+    @Test
+    void cardWithoutPurchasesTodayShowsZeroSpent() throws Exception {
+        mockMvc.perform(get("/api/debit-cards/{cardReference}", CARD_REFERENCE)
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.spendingLimits.spentToday").value(0.00));
+    }
+
+    @Test
+    void customerCanRaiseLimitsAndThenSpendMore() throws Exception {
+        updateLimits(CARD_REFERENCE, "500.00", "1000.00", customer.getEmail())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.spendingLimits.perTransactionLimit").value(500.00))
+                .andExpect(jsonPath("$.spendingLimits.dailyLimit").value(1000.00));
+
+        purchase(null, "300.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
+
+        assertThat(spentToday()).isEqualByComparingTo("300.00");
+    }
+
+    @Test
+    void loweringDailyLimitBelowTodaysSpendingBlocksFurtherPurchases() throws Exception {
+        purchase(null, "100.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
+
+        updateLimits(CARD_REFERENCE, "50.00", "80.00", customer.getEmail()).andExpect(status().isOk());
+
+        purchase(null, "1.00", CurrencyCode.TRY, "3".repeat(32))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Purchase exceeds the card's daily limit"));
+    }
+
+    @Test
+    void limitsAboveBankMaximumAreRejected() throws Exception {
+        updateLimits(CARD_REFERENCE, "10000000.01", "20000000.00", customer.getEmail())
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Invalid card limit"))
+                .andExpect(jsonPath("$.detail").value("Per-transaction limit must not exceed 10000000.00"));
+
+        assertThat(reloadedLimits())
+                .isEqualTo(CardSpendingLimits.createNew(new BigDecimal("100.00"), new BigDecimal("250.00")));
+    }
+
+    @Test
+    void perTransactionLimitAboveDailyLimitIsRejected() throws Exception {
+        updateLimits(CARD_REFERENCE, "300.00", "200.00", customer.getEmail())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Per-transaction limit must not exceed the daily limit"));
+    }
+
+    @Test
+    void customerCannotChangeAnotherCustomersCardLimits() throws Exception {
+        customerRepository.save(Customer.createNew("other@example.com", "{bcrypt}password-hash", "Other Customer"));
+
+        updateLimits(CARD_REFERENCE, "50.00", "80.00", "other@example.com")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Debit card not found"));
+
+        assertThat(reloadedLimits())
+                .isEqualTo(CardSpendingLimits.createNew(new BigDecimal("100.00"), new BigDecimal("250.00")));
+    }
+
+    @Test
+    void closedCardLimitsCannotBeChanged() throws Exception {
+        debitCard.closeCard();
+        debitCardRepository.save(debitCard);
+
+        updateLimits(CARD_REFERENCE, "50.00", "80.00", customer.getEmail())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Card limits not changeable"));
+    }
+
+    private ResultActions updateLimits(String cardReference, String perTransaction, String daily, String email) throws Exception {
+        return mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", cardReference)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(
+                        new CardLimitsUpdateRequest(new BigDecimal(perTransaction), new BigDecimal(daily))
+                ))
+                .with(jwt().jwt(jwt -> jwt.subject(email))));
+    }
+
+    private CardSpendingLimits reloadedLimits() {
+        return debitCardRepository.findByCardReference(CARD_REFERENCE).orElseThrow().getSpendingLimits();
     }
 
     private ResultActions purchase(String merchantAccountNumber, String amount, CurrencyCode currency, String idempotencyKey) throws Exception {
