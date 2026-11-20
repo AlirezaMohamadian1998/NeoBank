@@ -7,6 +7,7 @@ import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.exception.CardExpiredException;
+import com.neobank.neobank.card.exception.CardLimitExceededException;
 import com.neobank.neobank.card.exception.CardNotActiveException;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCardPaymentException;
@@ -45,6 +46,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
@@ -1080,7 +1082,7 @@ class CardPaymentServiceTest {
 
         verify(cardPurchaseDetailsRepository, never()).save(any());
         verify(idempotencyService, never()).save(any());
-        verifyNoInteractions(referenceGenerator, fxRateService);
+        verifyNoInteractions(referenceGenerator, fxRateService, cardDailySpendService);
     }
 
     @Test
@@ -1140,7 +1142,7 @@ class CardPaymentServiceTest {
         verify(cardPurchaseDetailsRepository, never()).save(any());
         verify(idempotencyService, never()).save(any());
 
-        verifyNoInteractions(referenceGenerator, fxRateService);
+        verifyNoInteractions(referenceGenerator, fxRateService, cardDailySpendService);
     }
 
     @Test
@@ -1191,7 +1193,7 @@ class CardPaymentServiceTest {
 
         verify(cardPurchaseDetailsRepository, never()).save(any());
         verify(idempotencyService, never()).save(any());
-        verifyNoInteractions(referenceGenerator, fxRateService);
+        verifyNoInteractions(referenceGenerator, fxRateService, cardDailySpendService);
     }
 
     @Test
@@ -1242,6 +1244,123 @@ class CardPaymentServiceTest {
                 Arguments.of(CardStatus.BLOCKED),
                 Arguments.of(CardStatus.CLOSED)
         );
+    }
+
+    @Test
+    void makePurchaseRecordsDailySpendWithDebitedAmountForToday() {
+        Customer customer = createCustomer("customer@example.com");
+        Customer merchantCustomer = createCustomer("merchant@example.com");
+
+        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
+        Account merchantAccount = createAccount("98".repeat(7), "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
+        fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
+
+        DebitCard debitCard = createDebitCard(fundingAccount, CardStatus.ACTIVE);
+
+        CardPurchaseRequest request = createPurchaseRequest("98".repeat(7), new BigDecimal("250"), CurrencyCode.TRY, "Coffee");
+
+        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+                .willReturn(Optional.of(debitCard));
+
+        given(accountRepository.findByAccountNumber("98".repeat(7)))
+                .willReturn(Optional.of(merchantAccount));
+
+        given(idempotencyService.findAndValidateRecord("1".repeat(32), customer.getEmail(), hash(request)))
+                .willReturn(Optional.empty());
+
+        given(referenceGenerator.generate())
+                .willReturn("6".repeat(32), "7".repeat(32), "8".repeat(32));
+
+        given(cardPurchaseDetailsRepository.save(any(CardPurchaseDetails.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        cardPaymentService.makePurchase("2".repeat(32), request, "1".repeat(32), customer.getEmail());
+
+        verify(cardDailySpendService).recordSpend(debitCard, LocalDate.of(2026, 9, 23), new BigDecimal("250.00"));
+    }
+
+    @Test
+    void crossCurrencyPurchaseRecordsDailySpendInFundingCurrency() {
+        Customer customer = createCustomer("customer@example.com");
+
+        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
+        fundingAccount.getLedgerAccount().credit(new BigDecimal("10000.00"));
+
+        InternalAccount settlementAccount = createSettlementAccount("5".repeat(32), CurrencyCode.USD, 2L);
+
+        DebitCard debitCard = createDebitCard(fundingAccount, CardStatus.ACTIVE);
+
+        CardPurchaseRequest request = createPurchaseRequest(null, new BigDecimal("100.00"), CurrencyCode.USD, "Online order");
+
+        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+                .willReturn(Optional.of(debitCard));
+
+        given(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.USD))
+                .willReturn(Optional.of(settlementAccount));
+
+        given(idempotencyService.findAndValidateRecord("1".repeat(32), customer.getEmail(), hash(request)))
+                .willReturn(Optional.empty());
+
+        given(referenceGenerator.generate())
+                .willReturn("6".repeat(32), "7".repeat(32), "8".repeat(32));
+
+        given(fxRateService.getRates(CurrencyCode.USD))
+                .willReturn(Map.of(
+                        CurrencyCode.USD, BigDecimal.ONE,
+                        CurrencyCode.TRY, new BigDecimal("40.00"),
+                        CurrencyCode.EUR, new BigDecimal("0.85"),
+                        CurrencyCode.GBP, new BigDecimal("0.75")
+                ));
+
+        given(cardPurchaseDetailsRepository.save(any(CardPurchaseDetails.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        cardPaymentService.makePurchase("2".repeat(32), request, "1".repeat(32), customer.getEmail());
+
+        verify(cardDailySpendService).recordSpend(debitCard, LocalDate.of(2026, 9, 23), new BigDecimal("4000.00"));
+    }
+
+    @Test
+    void makePurchaseMovesNoMoneyWhenCardLimitIsExceeded() {
+        Customer customer = createCustomer("customer@example.com");
+        Customer merchantCustomer = createCustomer("merchant@example.com");
+
+        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
+        Account merchantAccount = createAccount("98".repeat(7), "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
+        fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
+
+        DebitCard debitCard = createDebitCard(fundingAccount, CardStatus.ACTIVE);
+
+        CardPurchaseRequest request = createPurchaseRequest("98".repeat(7), new BigDecimal("250.00"), CurrencyCode.TRY, "Coffee");
+
+        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+                .willReturn(Optional.of(debitCard));
+
+        given(accountRepository.findByAccountNumber("98".repeat(7)))
+                .willReturn(Optional.of(merchantAccount));
+
+        given(idempotencyService.findAndValidateRecord("1".repeat(32), customer.getEmail(), hash(request)))
+                .willReturn(Optional.empty());
+
+        given(referenceGenerator.generate())
+                .willReturn("6".repeat(32));
+
+        given(cardDailySpendService.recordSpend(debitCard, LocalDate.of(2026, 9, 23), new BigDecimal("250.00")))
+                .willThrow(new CardLimitExceededException("Purchase exceeds the card's daily limit"));
+
+        assertThatThrownBy(() -> cardPaymentService.makePurchase("2".repeat(32), request, "1".repeat(32), customer.getEmail()))
+                .isInstanceOf(CardLimitExceededException.class)
+                .hasMessage("Purchase exceeds the card's daily limit");
+
+        assertThat(fundingAccount.getBalance())
+                .isEqualByComparingTo("1000.00");
+
+        assertThat(merchantAccount.getBalance())
+                .isEqualByComparingTo("0.00");
+
+        verify(referenceGenerator, times(1)).generate();
+        verify(idempotencyService, never()).save(any());
+        verifyNoInteractions(cardPurchaseDetailsRepository);
     }
 
     private Customer createCustomer(String email) {
