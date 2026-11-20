@@ -337,6 +337,36 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
     }
 
+    @ExceptionHandler(CardLimitExceededException.class)
+    public ResponseEntity<ProblemDetail> handleCardLimitExceededException(
+            CardLimitExceededException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Card limit exceeded");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
+    @ExceptionHandler(CardDailySpendRaceException.class)
+    public ResponseEntity<ProblemDetail> handleCardDailySpendRaceException(
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Another purchase on this card is being processed. Retry the same request using the same key."
+        );
+
+        problemDetail.setTitle("Card purchase in progress");
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, "1")
+                .body(problemDetail);
+    }
+
     @ExceptionHandler(InvalidCardPaymentException.class)
     public ResponseEntity<ProblemDetail> handleInvalidCardPaymentException(
             InvalidCardPaymentException ex,

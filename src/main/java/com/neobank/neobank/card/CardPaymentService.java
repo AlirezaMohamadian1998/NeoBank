@@ -4,6 +4,7 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.card.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.dto.CardPurchaseResponse;
+import com.neobank.neobank.card.exception.CardDailySpendRaceException;
 import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.CardNotActiveException;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
@@ -27,6 +28,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Map;
 import java.util.Optional;
@@ -58,6 +60,8 @@ public class CardPaymentService {
 
     private final Clock clock;
 
+    private final CardDailySpendService cardDailySpendService;
+
     @Transactional
     @Retryable(
             delay = 200,
@@ -67,6 +71,7 @@ public class CardPaymentService {
             jitter = 50,
             includes = {
                     IdempotencyKeyRaceException.class,
+                    CardDailySpendRaceException.class,
                     ConcurrencyFailureException.class
             }
     )
@@ -180,15 +185,19 @@ public class CardPaymentService {
             bankTransaction.addFxInfo(fxInfo);
         }
 
+        BigDecimal debitAmount = request.amount().multiply(
+                fxInfo == null
+                        ? BigDecimal.ONE
+                        : fxInfo.getRate(CurrencyContext.SOURCE)
+        ).setScale(2, RoundingMode.HALF_EVEN);
+
+        cardDailySpendService.recordSpend(debitCard, LocalDate.now(clock), debitAmount);
+
         LedgerEntry sourceEntry = ledgerPostingService.post(
                 bankTransaction,
                 debitCard.getFundingAccount().getLedgerAccount(),
                 EntryDirection.DEBIT,
-                request.amount().multiply(
-                        fxInfo == null
-                                ? BigDecimal.ONE
-                                : fxInfo.getRate(CurrencyContext.SOURCE)
-                ).setScale(2, RoundingMode.HALF_EVEN)
+                debitAmount
         );
 
         ledgerPostingService.post(

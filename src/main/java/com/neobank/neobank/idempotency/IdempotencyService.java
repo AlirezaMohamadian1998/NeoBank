@@ -1,7 +1,7 @@
 package com.neobank.neobank.idempotency;
 
+import com.neobank.neobank.shared.persistence.ConstraintViolations;
 import lombok.RequiredArgsConstructor;
-import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -32,34 +32,11 @@ public class IdempotencyService {
         try {
             return idempotencyRepository.saveAndFlush(idempotencyRecord);
         } catch (DataIntegrityViolationException e) {
-            if(hasIdempotencyConstraint(e)) {
+            if(ConstraintViolations.isViolationOf(e, IDEMPOTENCY_KEY_CONSTRAINT)) {
                 throw new IdempotencyKeyRaceException(e);
             }
 
             throw e;
         }
-    }
-
-    private boolean hasIdempotencyConstraint(Throwable throwable) {
-        Throwable current = throwable;
-
-        while (current != null) {
-            if (current instanceof ConstraintViolationException violation) {
-                String constraintName = violation.getConstraintName();
-
-                if (constraintName == null) {
-                    return false;
-                }
-
-                int lastDot = constraintName.lastIndexOf('.');
-                String unqualifiedName = constraintName.substring(lastDot + 1);
-
-                return IDEMPOTENCY_KEY_CONSTRAINT.equalsIgnoreCase(unqualifiedName);
-            }
-
-            current = current.getCause();
-        }
-
-        return false;
     }
 }

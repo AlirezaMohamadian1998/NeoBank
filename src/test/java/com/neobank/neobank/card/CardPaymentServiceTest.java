@@ -80,6 +80,9 @@ class CardPaymentServiceTest {
     @Mock
     private ReferenceGenerator referenceGenerator;
 
+    @Mock
+    private CardDailySpendService cardDailySpendService;
+
     private final RequestHasher requestHasher = new RequestHasher();
 
     private final JsonMapper objectMapper = JsonMapper.builder().build();
@@ -108,7 +111,8 @@ class CardPaymentServiceTest {
                 requestHasher,
                 objectMapper,
                 referenceGenerator,
-                clock
+                clock,
+                cardDailySpendService
         );
     }
 
