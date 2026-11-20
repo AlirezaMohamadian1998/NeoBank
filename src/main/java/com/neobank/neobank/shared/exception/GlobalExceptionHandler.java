@@ -349,6 +349,30 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
     }
 
+    @ExceptionHandler(InvalidCardLimitException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidCardLimitException(
+            InvalidCardLimitException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Invalid card limit");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(CardLimitsNotChangeableException.class)
+    public ResponseEntity<ProblemDetail> handleCardLimitsNotChangeableException(
+            CardLimitsNotChangeableException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Card limits not changeable");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
     @ExceptionHandler(CardDailySpendRaceException.class)
     public ResponseEntity<ProblemDetail> handleCardDailySpendRaceException(
             HttpServletRequest request

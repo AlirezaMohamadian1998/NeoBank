@@ -3,6 +3,7 @@ package com.neobank.neobank.card;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
+import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
@@ -20,8 +21,11 @@ import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -43,6 +47,8 @@ public class DebitCardService {
     private final DebitCardIssuer debitCardIssuer;
 
     private final CardLimitProperties cardLimitProperties;
+
+    private final CardDailySpendService cardDailySpendService;
 
     @Transactional
     @Retryable(
@@ -115,7 +121,9 @@ public class DebitCardService {
                 debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, email)
                         .orElseThrow(() -> new DebitCardNotFoundException("Debit card not found"));
 
-        return DebitCardMapper.toRetrieveDebitCardResponse(debitCard, debitCard.getFundingAccount().getAccountNumber());
+        BigDecimal spentToday = cardDailySpendService.getAmountSpent(debitCard, LocalDate.now(clock));
+
+        return DebitCardMapper.toRetrieveDebitCardResponse(debitCard, spentToday);
     }
 
     @Transactional(readOnly = true)
@@ -124,9 +132,31 @@ public class DebitCardService {
         Page<DebitCard> debitCards =
                 debitCardRepository.findAllByFundingAccount_Customer_EmailIgnoreCaseOrderByCreatedAtDescIdDesc(email, pageable);
 
+        Map<Long, BigDecimal> spentTodayByCardId = cardDailySpendService.getAmountSpentPerCard(debitCards.getContent(), LocalDate.now(clock));
+
         return debitCards.map(debitCard ->
-            DebitCardMapper.toRetrieveDebitCardResponse(debitCard, debitCard.getFundingAccount().getAccountNumber())
+            DebitCardMapper.toRetrieveDebitCardResponse(
+                    debitCard,
+                    spentTodayByCardId.get(debitCard.getId())
+            )
         );
+    }
+
+    @Transactional
+    public DebitCardRetrieveResponse updateSpendingLimits(String cardReference, String email, CardLimitsUpdateRequest request) {
+        DebitCard debitCard =
+                debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, email)
+                        .orElseThrow(() -> new DebitCardNotFoundException("Debit card not found"));
+
+        CardSpendingLimits newLimits = CardSpendingLimits.createNew(request.perTransactionLimit(), request.dailyLimit());
+        CardSpendingLimits maximum = cardLimitProperties.getMaximumLimits(debitCard.getFundingAccount().getCurrency());
+
+        debitCard.changeSpendingLimits(newLimits, maximum);
+
+        DebitCard savedDebitCard = debitCardRepository.save(debitCard);
+        BigDecimal spentToday = cardDailySpendService.getAmountSpent(savedDebitCard, LocalDate.now(clock));
+
+        return DebitCardMapper.toRetrieveDebitCardResponse(savedDebitCard, spentToday);
     }
 
     @Transactional
@@ -151,8 +181,9 @@ public class DebitCardService {
             case INACTIVE -> throw new UnsupportedCardStatusException("Cards cannot be changed back to inactive");
         }
 
-        return DebitCardMapper.toRetrieveDebitCardResponse(
-                debitCardRepository.save(debitCard), debitCard.getFundingAccount().getAccountNumber()
-        );
+        DebitCard savedDebitCard = debitCardRepository.save(debitCard);
+        BigDecimal spentToday = cardDailySpendService.getAmountSpent(savedDebitCard, LocalDate.now(clock));
+
+        return DebitCardMapper.toRetrieveDebitCardResponse(savedDebitCard, spentToday);
     }
 }
