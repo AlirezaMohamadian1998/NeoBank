@@ -12,6 +12,8 @@ import com.neobank.neobank.card.exception.CardNotActiveException;
 import com.neobank.neobank.card.exception.CardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCardPaymentException;
 import com.neobank.neobank.card.support.TestCardLimits;
+import com.neobank.neobank.creditaccount.CreditAccount;
+import com.neobank.neobank.creditaccount.CreditLimitExceededException;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.idempotency.IdempotencyConflictException;
@@ -1391,6 +1393,112 @@ class CardPaymentServiceTest {
         verifyNoInteractions(cardPurchaseDetailsRepository);
     }
 
+    @Test
+    void makePurchaseWithCreditCardDebitsCreditLedgerAndReturnsCreditAccountNumber() {
+        Customer customer = createCustomer("customer@example.com");
+        Customer merchantCustomer = createCustomer("merchant@example.com");
+
+        CreditAccount creditAccount = createCreditAccount(customer, new BigDecimal("1000.00"), 1L);
+        Account merchantAccount = createAccount("98".repeat(7), "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
+
+        CreditCard creditCard = createActiveCreditCard(creditAccount);
+
+        CardPurchaseRequest request = createPurchaseRequest(
+                "98".repeat(7),
+                new BigDecimal("250.00"),
+                CurrencyCode.TRY,
+                "Coffee"
+        );
+
+        given(cardRepository.findByCardReference("2".repeat(32)))
+                .willReturn(Optional.of(creditCard));
+
+        given(accountRepository.findByAccountNumber("98".repeat(7)))
+                .willReturn(Optional.of(merchantAccount));
+
+        given(idempotencyService.findAndValidateRecord("1".repeat(32), customer.getEmail(), hash(request)))
+                .willReturn(Optional.empty());
+
+        given(referenceGenerator.generate())
+                .willReturn("6".repeat(32), "7".repeat(32), "8".repeat(32));
+
+        given(cardPurchaseDetailsRepository.save(any(CardPurchaseDetails.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        CardPurchaseResponse response = cardPaymentService.makePurchase(
+                "2".repeat(32),
+                request,
+                "1".repeat(32),
+                customer.getEmail()
+        );
+
+        assertThat(creditAccount.getLedgerAccount().getBalance())
+                .isEqualByComparingTo("250.00");
+
+        assertThat(creditAccount.getAvailableCredit())
+                .isEqualByComparingTo("750.00");
+
+        assertThat(merchantAccount.getBalance())
+                .isEqualByComparingTo("250.00");
+
+        assertThat(response.linkedAccountNumber())
+                .isEqualTo("55".repeat(7));
+
+        assertThat(response.balanceAfter())
+                .isEqualByComparingTo("250.00");
+
+        verify(cardDailySpendService).recordSpend(creditCard, LocalDate.now(clock), new BigDecimal("250.00"));
+    }
+
+    @Test
+    void makePurchaseWithCreditCardThrowsWhenAmountExceedsAvailableCreditAndWritesNothing() {
+        Customer customer = createCustomer("customer@example.com");
+        Customer merchantCustomer = createCustomer("merchant@example.com");
+
+        CreditAccount creditAccount = createCreditAccount(customer, new BigDecimal("1000.00"), 1L);
+        creditAccount.getLedgerAccount().debit(new BigDecimal("800.00"));
+        Account merchantAccount = createAccount("98".repeat(7), "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
+
+        CreditCard creditCard = createActiveCreditCard(creditAccount);
+
+        CardPurchaseRequest request = createPurchaseRequest(
+                "98".repeat(7),
+                new BigDecimal("200.01"),
+                CurrencyCode.TRY,
+                "Coffee"
+        );
+
+        given(cardRepository.findByCardReference("2".repeat(32)))
+                .willReturn(Optional.of(creditCard));
+
+        given(accountRepository.findByAccountNumber("98".repeat(7)))
+                .willReturn(Optional.of(merchantAccount));
+
+        given(idempotencyService.findAndValidateRecord("1".repeat(32), customer.getEmail(), hash(request)))
+                .willReturn(Optional.empty());
+
+        given(referenceGenerator.generate())
+                .willReturn("6".repeat(32));
+
+        assertThatThrownBy(() -> cardPaymentService.makePurchase(
+                "2".repeat(32),
+                request,
+                "1".repeat(32),
+                customer.getEmail()
+        ))
+                .isInstanceOf(CreditLimitExceededException.class)
+                .hasMessage("Amount exceeds the available credit of 200.00");
+
+        assertThat(creditAccount.getLedgerAccount().getBalance())
+                .isEqualByComparingTo("800.00");
+
+        assertThat(merchantAccount.getBalance())
+                .isEqualByComparingTo("0.00");
+
+        verifyNoInteractions(cardDailySpendService, cardPurchaseDetailsRepository);
+        verify(idempotencyService, never()).save(any());
+    }
+
     private Customer createCustomer(String email) {
         return Customer.createNew(
                 email,
@@ -1465,6 +1573,37 @@ class CardPaymentServiceTest {
         }
 
         return debitCard;
+    }
+
+    private CreditAccount createCreditAccount(Customer customer, BigDecimal creditLimit, Long ledgerAccountId) {
+        CreditAccount creditAccount = CreditAccount.createNew(
+                "55".repeat(7),
+                "5".repeat(32),
+                customer,
+                CurrencyCode.TRY,
+                creditLimit
+        );
+
+        ReflectionTestUtils.setField(creditAccount.getLedgerAccount(), "id", ledgerAccountId);
+
+        return creditAccount;
+    }
+
+    private CreditCard createActiveCreditCard(CreditAccount creditAccount) {
+        YearMonth now = YearMonth.now(clock);
+
+        CreditCard creditCard = CreditCard.createNew(
+                "2".repeat(32),
+                "5678",
+                now.plusYears(5),
+                now,
+                creditAccount,
+                TestCardLimits.generous()
+        );
+
+        creditCard.activateCard(now);
+
+        return creditCard;
     }
 
     private CardPurchaseRequest createPurchaseRequest(

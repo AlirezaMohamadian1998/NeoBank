@@ -6,7 +6,9 @@ import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.CardDailySpendRepository;
 import com.neobank.neobank.card.CardPurchaseDetailsRepository;
 import com.neobank.neobank.card.CardRefundDetailsRepository;
+import com.neobank.neobank.card.CardRepository;
 import com.neobank.neobank.card.DebitCardRepository;
+import com.neobank.neobank.creditaccount.CreditAccountRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerRepository;
 import com.neobank.neobank.idempotency.IdempotencyRecordRepository;
@@ -52,6 +54,12 @@ public abstract class DebitCardIntegrationTestSupport {
     protected DebitCardRepository debitCardRepository;
 
     @Autowired
+    protected CardRepository cardRepository;
+
+    @Autowired
+    protected CreditAccountRepository creditAccountRepository;
+
+    @Autowired
     protected LedgerAccountRepository ledgerAccountRepository;
 
     @Autowired
@@ -90,10 +98,11 @@ public abstract class DebitCardIntegrationTestSupport {
         cardRefundDetailsRepository.deleteAll();
         cardPurchaseDetailsRepository.deleteAll();
         cardDailySpendRepository.deleteAll();
-        debitCardRepository.deleteAll();
+        cardRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
         bankTransactionRepository.deleteAll();
         accountRepository.deleteAll();
+        creditAccountRepository.deleteAll();
         internalAccountRepository.deleteAll();
         ledgerAccountRepository.deleteAll();
         customerRepository.deleteAll();

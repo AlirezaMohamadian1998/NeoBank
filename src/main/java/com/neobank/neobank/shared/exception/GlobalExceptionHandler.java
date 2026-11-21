@@ -2,6 +2,7 @@ package com.neobank.neobank.shared.exception;
 
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.card.exception.*;
+import com.neobank.neobank.creditaccount.CreditLimitExceededException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
 import com.neobank.neobank.fx.FxProviderUnavailableException;
@@ -357,6 +358,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problemDetail.setInstance(URI.create(request.getRequestURI()));
         problemDetail.setTitle("Card limit exceeded");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
+    @ExceptionHandler(CreditLimitExceededException.class)
+    public ResponseEntity<ProblemDetail> handleCreditLimitExceededException(
+            CreditLimitExceededException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Credit limit exceeded");
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
     }

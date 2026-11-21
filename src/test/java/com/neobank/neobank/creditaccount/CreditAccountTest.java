@@ -1,0 +1,175 @@
+package com.neobank.neobank.creditaccount;
+
+import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.ledger.LedgerAccount;
+import com.neobank.neobank.ledger.LedgerAccountStatus;
+import com.neobank.neobank.ledger.LedgerAccountType;
+import com.neobank.neobank.shared.money.CurrencyCode;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.math.BigDecimal;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class CreditAccountTest {
+
+    private static final String ACCOUNT_NUMBER = "55".repeat(7);
+
+    private static final String LEDGER_REFERENCE = "5".repeat(32);
+
+    private final Customer customer = Customer.createNew("customer@example.com", "{bcrypt}password-hash", "Ada Lovelace");
+
+    @Test
+    void createNewPreservesValuesAndNormalizesLimit() {
+        CreditAccount creditAccount = CreditAccount.createNew(
+                ACCOUNT_NUMBER,
+                LEDGER_REFERENCE,
+                customer,
+                CurrencyCode.TRY,
+                new BigDecimal("1000")
+        );
+
+        assertThat(creditAccount.getAccountNumber()).isEqualTo(ACCOUNT_NUMBER);
+        assertThat(creditAccount.getCustomer()).isSameAs(customer);
+        assertThat(creditAccount.getCreditLimit()).isEqualTo(new BigDecimal("1000.00"));
+        assertThat(creditAccount.getCurrency()).isEqualTo(CurrencyCode.TRY);
+        assertThat(creditAccount.getAvailableCredit()).isEqualByComparingTo("1000.00");
+    }
+
+    @Test
+    void createNewCreatesAnActiveAssetLedgerThatAllowsNegativeBalance() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+
+        LedgerAccount ledgerAccount = creditAccount.getLedgerAccount();
+
+        assertThat(ledgerAccount.getLedgerReference()).isEqualTo(LEDGER_REFERENCE);
+        assertThat(ledgerAccount.getType()).isEqualTo(LedgerAccountType.ASSET);
+        assertThat(ledgerAccount.getCurrency()).isEqualTo(CurrencyCode.TRY);
+        assertThat(ledgerAccount.isNegativeBalanceAllowed()).isTrue();
+        assertThat(ledgerAccount.getStatus()).isEqualTo(LedgerAccountStatus.ACTIVE);
+        assertThat(ledgerAccount.getBalance()).isEqualByComparingTo("0.00");
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidAccountNumbers")
+    void createNewRejectsInvalidAccountNumber(String accountNumber) {
+        assertThatThrownBy(() -> CreditAccount.createNew(
+                accountNumber,
+                LEDGER_REFERENCE,
+                customer,
+                CurrencyCode.TRY,
+                new BigDecimal("1000.00")
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Account number must be exactly 14 numeric characters");
+    }
+
+    @Test
+    void createNewRejectsNullCustomer() {
+        assertThatThrownBy(() -> CreditAccount.createNew(
+                ACCOUNT_NUMBER,
+                LEDGER_REFERENCE,
+                null,
+                CurrencyCode.TRY,
+                new BigDecimal("1000.00")
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Customer cannot be null");
+    }
+
+    @Test
+    void createNewRejectsInvalidLedgerReference() {
+        assertThatThrownBy(() -> CreditAccount.createNew(
+                ACCOUNT_NUMBER,
+                "not-a-reference",
+                customer,
+                CurrencyCode.TRY,
+                new BigDecimal("1000.00")
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Ledger reference must be exactly 32 hexadecimal characters");
+    }
+
+    @Test
+    void createNewRejectsNullCurrency() {
+        assertThatThrownBy(() -> CreditAccount.createNew(
+                ACCOUNT_NUMBER,
+                LEDGER_REFERENCE,
+                customer,
+                null,
+                new BigDecimal("1000.00")
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Currency cannot be null");
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidCreditLimits")
+    void createNewRejectsInvalidCreditLimit(BigDecimal creditLimit, String message) {
+        assertThatThrownBy(() -> creditAccount(creditLimit))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(message);
+    }
+
+    @Test
+    void ensureWithinCreditLimitAcceptsAmountUpToTheLimit() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+        creditAccount.getLedgerAccount().debit(new BigDecimal("600.00"));
+
+        creditAccount.ensureWithinCreditLimit(new BigDecimal("400.00"));
+
+        assertThat(creditAccount.getAvailableCredit()).isEqualByComparingTo("400.00");
+    }
+
+    @Test
+    void ensureWithinCreditLimitRejectsAmountOneCentOverTheLimit() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+        creditAccount.getLedgerAccount().debit(new BigDecimal("600.00"));
+
+        assertThatThrownBy(() -> creditAccount.ensureWithinCreditLimit(new BigDecimal("400.01")))
+                .isInstanceOf(CreditLimitExceededException.class)
+                .hasMessage("Amount exceeds the available credit of 400.00");
+    }
+
+    @Test
+    void ensureWithinCreditLimitRejectsNullAmount() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+
+        assertThatThrownBy(() -> creditAccount.ensureWithinCreditLimit(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Amount must not be null");
+    }
+
+    @Test
+    void creditBalanceMakesAvailableCreditExceedTheLimit() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+        creditAccount.getLedgerAccount().credit(new BigDecimal("150.00"));
+
+        assertThat(creditAccount.getLedgerAccount().getBalance()).isEqualByComparingTo("-150.00");
+        assertThat(creditAccount.getAvailableCredit()).isEqualByComparingTo("1150.00");
+
+        creditAccount.ensureWithinCreditLimit(new BigDecimal("1150.00"));
+    }
+
+    private static Stream<String> invalidAccountNumbers() {
+        return Stream.of(null, "", "1234567890123", "123456789012345", "1234567890123a");
+    }
+
+    private static Stream<Arguments> invalidCreditLimits() {
+        return Stream.of(
+                Arguments.of(null, "Credit limit cannot be null"),
+                Arguments.of(BigDecimal.ZERO, "Credit limit must be greater than zero"),
+                Arguments.of(new BigDecimal("-1.00"), "Credit limit must be greater than zero"),
+                Arguments.of(new BigDecimal("10.001"), "Credit limit must not have more than 2 decimal places")
+        );
+    }
+
+    private CreditAccount creditAccount(BigDecimal creditLimit) {
+        return CreditAccount.createNew(ACCOUNT_NUMBER, LEDGER_REFERENCE, customer, CurrencyCode.TRY, creditLimit);
+    }
+}

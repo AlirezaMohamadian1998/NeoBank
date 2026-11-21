@@ -192,6 +192,10 @@ public class CardPaymentService {
                         : fxInfo.getRate(CurrencyContext.SOURCE)
         ).setScale(2, RoundingMode.HALF_EVEN);
 
+        if(card instanceof CreditCard creditCard) {
+            creditCard.getCreditAccount().ensureWithinCreditLimit(debitAmount);
+        }
+
         cardDailySpendService.recordSpend(card, LocalDate.now(clock), debitAmount);
 
         LedgerEntry sourceEntry = ledgerPostingService.post(

@@ -8,6 +8,7 @@ import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.CardNotActiveException;
 import com.neobank.neobank.card.exception.CardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCardPaymentException;
+import com.neobank.neobank.creditaccount.CreditLimitExceededException;
 import com.neobank.neobank.fx.FxProviderUnavailableException;
 import com.neobank.neobank.idempotency.IdempotencyConflictException;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
@@ -329,6 +330,12 @@ class CardControllerTest {
                         "makePaymentReturnsConflictForInactiveCard",
                         new CardNotActiveException("Card must be active for purchase"),
                         "Card not active",
+                        409
+                ),
+                Arguments.argumentSet(
+                        "makePaymentReturnsConflictWhenCreditLimitIsExceeded",
+                        new CreditLimitExceededException("Amount exceeds the available credit of 200.00"),
+                        "Credit limit exceeded",
                         409
                 ),
                 Arguments.argumentSet(
