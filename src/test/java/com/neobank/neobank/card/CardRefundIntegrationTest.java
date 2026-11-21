@@ -304,7 +304,7 @@ class CardRefundIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        String body = mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", CARD_REFERENCE)
+        String body = mockMvc.perform(post("/api/cards/{cardReference}/payments", CARD_REFERENCE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "c".repeat(32))

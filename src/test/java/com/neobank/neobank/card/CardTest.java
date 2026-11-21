@@ -5,6 +5,8 @@ import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.InvalidCardLimitException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
 import com.neobank.neobank.card.support.TestCardLimits;
+import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.ledger.LedgerAccount;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -337,6 +339,21 @@ class CardTest {
                 CardSpendingLimits spendingLimits
         ) {
             super(cardReference, lastFourDigits, expirationYearMonth, currentYearMonth, spendingLimits);
+        }
+
+        @Override
+        public Customer getOwner() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public LedgerAccount getLinkedLedgerAccount() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public String getLinkedAccountNumber() {
+            throw new UnsupportedOperationException();
         }
     }
 

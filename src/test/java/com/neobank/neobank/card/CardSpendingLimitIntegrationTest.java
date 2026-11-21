@@ -279,7 +279,7 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        return mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", CARD_REFERENCE)
+        return mockMvc.perform(post("/api/cards/{cardReference}/payments", CARD_REFERENCE)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request))
                 .header("Idempotency-Key", idempotencyKey)

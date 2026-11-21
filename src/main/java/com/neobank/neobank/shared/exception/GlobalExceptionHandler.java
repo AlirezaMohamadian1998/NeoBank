@@ -289,6 +289,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
     }
 
+    @ExceptionHandler(CardNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleCardNotFoundException(
+            CardNotFoundException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Card not found");
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
+    }
+
     @ExceptionHandler(DebitCardNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleDebitCardNotFoundException(
             DebitCardNotFoundException ex,

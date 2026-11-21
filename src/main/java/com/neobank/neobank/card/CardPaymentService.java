@@ -7,7 +7,7 @@ import com.neobank.neobank.card.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.exception.CardDailySpendRaceException;
 import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.CardNotActiveException;
-import com.neobank.neobank.card.exception.DebitCardNotFoundException;
+import com.neobank.neobank.card.exception.CardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCardPaymentException;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.idempotency.*;
@@ -46,7 +46,7 @@ public class CardPaymentService {
 
     private final CardPurchaseDetailsRepository cardPurchaseDetailsRepository;
 
-    private final DebitCardRepository debitCardRepository;
+    private final CardRepository cardRepository;
 
     private final AccountRepository accountRepository;
 
@@ -85,9 +85,10 @@ public class CardPaymentService {
             throw new InvalidIdempotencyKeyException("Idempotency key is invalid");
         }
 
-        DebitCard debitCard =
-                debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, customerEmail)
-                        .orElseThrow(() -> new DebitCardNotFoundException("Debit card not found"));
+        Card card =
+                cardRepository.findByCardReference(cardReference)
+                        .filter(found -> found.getOwner().getEmail().equalsIgnoreCase(customerEmail))
+                        .orElseThrow(() -> new CardNotFoundException("Card not found"));
 
         boolean isExternalMerchant = request.merchantAccountNumber() == null;
 
@@ -100,12 +101,12 @@ public class CardPaymentService {
                         .orElseThrow(() -> new AccountNotFoundException("Merchant's account not found"))
                         .getLedgerAccount();
 
-        if(destinationLedgerAccount.getId().equals(debitCard.getFundingAccount().getLedgerAccount().getId())) {
+        if(destinationLedgerAccount.getId().equals(card.getLinkedLedgerAccount().getId())) {
             throw new InvalidCardPaymentException("Merchant's account and the card's funding account cannot be same");
         }
 
         boolean isCrossCurrency =
-                (request.currency() != debitCard.getFundingAccount().getCurrency())
+                (request.currency() != card.getLinkedLedgerAccount().getCurrency())
                         || (!isExternalMerchant && request.currency() != destinationLedgerAccount.getCurrency());
 
         CardPurchaseCanonicalRequest canonicalRequest = new CardPurchaseCanonicalRequest(
@@ -136,15 +137,15 @@ public class CardPaymentService {
                     .findFirst()
                     .orElseThrow();
 
-            return DebitCardMapper
-                    .toCardPurchaseResponse(debitCard, existingCardPurchaseDetails, existingEntry);
+            return CardMapper
+                    .toCardPurchaseResponse(card, existingCardPurchaseDetails, existingEntry);
         }
 
-        if(debitCard.isExpired(YearMonth.now(clock))) {
+        if(card.isExpired(YearMonth.now(clock))) {
             throw new CardExpiredException("Card is Expired");
         }
 
-        if(debitCard.getStatus() != CardStatus.ACTIVE) {
+        if(card.getStatus() != CardStatus.ACTIVE) {
             throw new CardNotActiveException("Card must be active for purchase");
         }
 
@@ -176,8 +177,8 @@ public class CardPaymentService {
                             ),
                             FxRate.createNew(
                                     CurrencyContext.SOURCE,
-                                    debitCard.getFundingAccount().getCurrency(),
-                                    rates.get(debitCard.getFundingAccount().getCurrency())
+                                    card.getLinkedLedgerAccount().getCurrency(),
+                                    rates.get(card.getLinkedLedgerAccount().getCurrency())
                             )
                     )
             );
@@ -191,11 +192,11 @@ public class CardPaymentService {
                         : fxInfo.getRate(CurrencyContext.SOURCE)
         ).setScale(2, RoundingMode.HALF_EVEN);
 
-        cardDailySpendService.recordSpend(debitCard, LocalDate.now(clock), debitAmount);
+        cardDailySpendService.recordSpend(card, LocalDate.now(clock), debitAmount);
 
         LedgerEntry sourceEntry = ledgerPostingService.post(
                 bankTransaction,
-                debitCard.getFundingAccount().getLedgerAccount(),
+                card.getLinkedLedgerAccount(),
                 EntryDirection.DEBIT,
                 debitAmount
         );
@@ -219,7 +220,7 @@ public class CardPaymentService {
                                 bankTransaction,
                                 request.merchantName(),
                                 cardReference,
-                                debitCard.getLastFourDigits()
+                                card.getLastFourDigits()
                         )
                 );
 
@@ -227,13 +228,13 @@ public class CardPaymentService {
                 IdempotencyRecord.createNew(
                         idempotencyKey,
                         requestHash,
-                        debitCard.getFundingAccount().getCustomer(),
+                        card.getOwner(),
                         bankTransaction.getReference()
                 )
         );
 
-        return DebitCardMapper.toCardPurchaseResponse(
-                debitCard,
+        return CardMapper.toCardPurchaseResponse(
+                card,
                 cardPurchaseDetails,
                 sourceEntry
         );

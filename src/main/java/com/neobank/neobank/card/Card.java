@@ -3,6 +3,8 @@ package com.neobank.neobank.card;
 import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
+import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.shared.persistence.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -82,6 +84,12 @@ public abstract class Card extends BaseEntity {
         this.expirationYearMonth = expirationYearMonth;
         this.spendingLimits = spendingLimits;
     }
+
+    public abstract Customer getOwner();
+
+    public abstract LedgerAccount getLinkedLedgerAccount();
+
+    public abstract String getLinkedAccountNumber();
 
     public void changeSpendingLimits(CardSpendingLimits newLimits, CardSpendingLimits maximum) {
         if(newLimits == null) {

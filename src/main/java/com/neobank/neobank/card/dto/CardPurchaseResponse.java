@@ -15,6 +15,6 @@ public record CardPurchaseResponse(
         String merchantName,
         String cardLastFourDigits,
         String cardReference,
-        String fundingAccountNumber,
+        String linkedAccountNumber,
         Instant createdAt
 ) {}

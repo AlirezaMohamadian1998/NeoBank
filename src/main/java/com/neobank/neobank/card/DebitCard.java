@@ -2,6 +2,8 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
+import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -31,6 +33,21 @@ public class DebitCard extends Card {
         super(cardReference, lastFourDigits, expiry, now, spendingLimits);
 
         this.fundingAccount = account;
+    }
+
+    @Override
+    public Customer getOwner() {
+        return fundingAccount.getCustomer();
+    }
+
+    @Override
+    public LedgerAccount getLinkedLedgerAccount() {
+        return fundingAccount.getLedgerAccount();
+    }
+
+    @Override
+    public String getLinkedAccountNumber() {
+        return fundingAccount.getAccountNumber();
     }
 
     public static DebitCard createNew(

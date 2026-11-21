@@ -107,7 +107,7 @@ public class CardRefundService {
                     cardRefundDetailsRepository.findByBankTransaction_Reference(idempotencyRecord.get().getResultReference())
                             .orElseThrow(() -> new IdempotencyResultNotFoundException("Idempotency result not found"));
 
-            return DebitCardMapper.toCardRefundResponse(
+            return CardMapper.toCardRefundResponse(
                     existingRefund,
                     getEntry(existingRefund.getBankTransaction(), EntryDirection.DEBIT),
                     merchantAccount.getAccountNumber()
@@ -146,7 +146,7 @@ public class CardRefundService {
                 )
         );
 
-        return DebitCardMapper.toCardRefundResponse(
+        return CardMapper.toCardRefundResponse(
                 cardRefundDetails,
                 getEntry(cardRefundDetails.getBankTransaction(), EntryDirection.DEBIT),
                 merchantAccount.getAccountNumber()
