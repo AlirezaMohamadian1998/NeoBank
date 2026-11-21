@@ -64,13 +64,13 @@ public class TransactionHistoryMapper {
     }
 
     public static boolean isCardPurchasePayerEntry(LedgerEntry entry) {
-        return (entry.getBankTransaction().getTransactionType() == TransactionType.DEBIT_CARD_PURCHASE)
+        return (entry.getBankTransaction().getTransactionType() == TransactionType.CARD_PURCHASE)
                 &&
                 (entry.getDirection() == EntryDirection.DEBIT);
     }
 
     public static boolean isCardRefundReceiverEntry(LedgerEntry entry) {
-        return (entry.getBankTransaction().getTransactionType() == TransactionType.DEBIT_CARD_REFUND)
+        return (entry.getBankTransaction().getTransactionType() == TransactionType.CARD_REFUND)
                 &&
                 (entry.getDirection() == EntryDirection.CREDIT);
     }

@@ -33,7 +33,7 @@ public class CardRefundDetails extends BaseEntity {
             throw new IllegalArgumentException("Bank transaction must not be null");
         }
 
-        if(bankTransaction.getTransactionType() != TransactionType.DEBIT_CARD_REFUND) {
+        if(bankTransaction.getTransactionType() != TransactionType.CARD_REFUND) {
             throw new IllegalArgumentException("The transaction type is not correct");
         }
 

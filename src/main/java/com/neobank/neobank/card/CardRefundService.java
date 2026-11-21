@@ -84,7 +84,7 @@ public class CardRefundService {
         // the holder's committed work afterwards: its idempotency record (same key -> replay) or the
         // REFUNDED status (different key -> 409). Reading anything first would freeze an older snapshot.
         BankTransaction purchaseTransaction =
-                bankTransactionRepository.findForUpdateByReferenceAndTransactionType(purchaseReference, TransactionType.DEBIT_CARD_PURCHASE)
+                bankTransactionRepository.findForUpdateByReferenceAndTransactionType(purchaseReference, TransactionType.CARD_PURCHASE)
                         .orElseThrow(() -> new CardPurchaseNotFoundException("Card purchase not found"));
 
         Account merchantAccount =
@@ -92,7 +92,7 @@ public class CardRefundService {
                         .orElseThrow(() -> new AccountNotFoundException("Merchant's account not found"));
 
         CardRefundCanonicalRequest canonicalRequest = new CardRefundCanonicalRequest(
-                TransactionType.DEBIT_CARD_REFUND,
+                TransactionType.CARD_REFUND,
                 merchantAccountNumber,
                 purchaseReference
         );
@@ -162,7 +162,7 @@ public class CardRefundService {
         BankTransaction refundTransaction = BankTransaction.createNew(
                 requestedAmount,
                 requestedCurrency,
-                TransactionType.DEBIT_CARD_REFUND,
+                TransactionType.CARD_REFUND,
                 referenceGenerator.generate(),
                 null
         );

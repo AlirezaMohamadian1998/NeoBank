@@ -186,7 +186,7 @@ class CardPaymentServiceTest {
                 .isEqualTo("6".repeat(32));
 
         assertThat(savedTransaction.getTransactionType())
-                .isSameAs(TransactionType.DEBIT_CARD_PURCHASE);
+                .isSameAs(TransactionType.CARD_PURCHASE);
 
         assertThat(savedTransaction.getStatus())
                 .isSameAs(TransactionStatus.COMPLETED);
@@ -1462,7 +1462,7 @@ class CardPaymentServiceTest {
         BankTransaction transaction = BankTransaction.createNew(
                 request.amount(),
                 request.currency(),
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 "6".repeat(32),
                 request.note()
         );
@@ -1500,7 +1500,7 @@ class CardPaymentServiceTest {
     private String hash(CardPurchaseRequest request) {
         return requestHasher.hashRequest(objectMapper.writeValueAsString(
                 new CardPurchaseCanonicalRequest(
-                        TransactionType.DEBIT_CARD_PURCHASE,
+                        TransactionType.CARD_PURCHASE,
                         "2".repeat(32),
                         request.merchantAccountNumber(),
                         request.merchantName(),

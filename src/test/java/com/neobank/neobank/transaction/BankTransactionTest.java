@@ -596,7 +596,7 @@ class BankTransactionTest {
 
     @Test
     void completedCardPurchaseCanBeMarkedRefunded() {
-        BankTransaction transaction = createCompletedTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+        BankTransaction transaction = createCompletedTransaction(TransactionType.CARD_PURCHASE);
 
         transaction.markRefunded();
 
@@ -606,7 +606,7 @@ class BankTransactionTest {
 
     @Test
     void refundedCardPurchaseCannotBeMarkedRefundedAgain() {
-        BankTransaction transaction = createCompletedTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+        BankTransaction transaction = createCompletedTransaction(TransactionType.CARD_PURCHASE);
         transaction.markRefunded();
 
         assertThatThrownBy(transaction::markRefunded)
@@ -619,7 +619,7 @@ class BankTransactionTest {
 
     @Test
     void pendingCardPurchaseCannotBeMarkedRefunded() {
-        BankTransaction transaction = createTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+        BankTransaction transaction = createTransaction(TransactionType.CARD_PURCHASE);
 
         assertThatThrownBy(transaction::markRefunded)
                 .isInstanceOf(IllegalStateException.class)
@@ -635,7 +635,7 @@ class BankTransactionTest {
 
         assertThatThrownBy(transaction::markRefunded)
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Only debit card purchases can be refunded");
+                .hasMessage("Only card purchases can be refunded");
 
         assertThat(transaction.getStatus())
                 .isEqualTo(TransactionStatus.COMPLETED);

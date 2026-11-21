@@ -20,7 +20,7 @@ class CardRefundDetailsTest {
         CardPurchaseDetails purchase = createPurchaseDetails();
         purchase.getBankTransaction().markRefunded();
 
-        BankTransaction refund = createCompletedTransaction(TransactionType.DEBIT_CARD_REFUND, "a");
+        BankTransaction refund = createCompletedTransaction(TransactionType.CARD_REFUND, "a");
 
         CardRefundDetails details = CardRefundDetails.createNew(refund, purchase);
 
@@ -58,7 +58,7 @@ class CardRefundDetailsTest {
         CardPurchaseDetails purchase = createPurchaseDetails();
         purchase.getBankTransaction().markRefunded();
 
-        BankTransaction refund = createTransaction(TransactionType.DEBIT_CARD_REFUND, "a");
+        BankTransaction refund = createTransaction(TransactionType.CARD_REFUND, "a");
 
         assertThatThrownBy(() -> CardRefundDetails.createNew(refund, purchase))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -67,7 +67,7 @@ class CardRefundDetailsTest {
 
     @Test
     void createNewRejectsNullPurchaseDetails() {
-        BankTransaction refund = createCompletedTransaction(TransactionType.DEBIT_CARD_REFUND, "a");
+        BankTransaction refund = createCompletedTransaction(TransactionType.CARD_REFUND, "a");
 
         assertThatThrownBy(() -> CardRefundDetails.createNew(refund, null))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -77,7 +77,7 @@ class CardRefundDetailsTest {
     @Test
     void createNewRejectsPurchaseNotMarkedRefunded() {
         CardPurchaseDetails purchase = createPurchaseDetails();
-        BankTransaction refund = createCompletedTransaction(TransactionType.DEBIT_CARD_REFUND, "a");
+        BankTransaction refund = createCompletedTransaction(TransactionType.CARD_REFUND, "a");
 
         assertThatThrownBy(() -> CardRefundDetails.createNew(refund, purchase))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -86,7 +86,7 @@ class CardRefundDetailsTest {
 
     private CardPurchaseDetails createPurchaseDetails() {
         return CardPurchaseDetails.createNew(
-                createCompletedTransaction(TransactionType.DEBIT_CARD_PURCHASE, "1"),
+                createCompletedTransaction(TransactionType.CARD_PURCHASE, "1"),
                 "Test merchant",
                 "6".repeat(32),
                 "1234"

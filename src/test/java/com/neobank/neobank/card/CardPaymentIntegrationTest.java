@@ -163,7 +163,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 .isEqualTo(savedTransaction.getCreatedAt());
 
         assertThat(savedTransaction.getTransactionType())
-                .isSameAs(TransactionType.DEBIT_CARD_PURCHASE);
+                .isSameAs(TransactionType.CARD_PURCHASE);
 
         assertThat(savedTransaction.getStatus())
                 .isSameAs(TransactionStatus.COMPLETED);
@@ -639,12 +639,12 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/transactions")
-                        .param("type", "DEBIT_CARD_PURCHASE")
+                        .param("type", "CARD_PURCHASE")
                         .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].accountNumber").value(account.getAccountNumber()))
-                .andExpect(jsonPath("$.content[0].transactionType").value("DEBIT_CARD_PURCHASE"))
+                .andExpect(jsonPath("$.content[0].transactionType").value("CARD_PURCHASE"))
                 .andExpect(jsonPath("$.content[0].direction").value("DEBIT"))
                 .andExpect(jsonPath("$.content[0].appliedAmount").value(250.00))
                 .andExpect(jsonPath("$.content[0].merchantName").value("Test merchant"))
@@ -652,7 +652,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(jsonPath("$.content[0].cardLastFourDigits").value(debitCard.getLastFourDigits()));
 
         mockMvc.perform(get("/api/transactions")
-                        .param("type", "DEBIT_CARD_PURCHASE")
+                        .param("type", "CARD_PURCHASE")
                         .with(jwt().jwt(jwt -> jwt.subject(merchantCustomer.getEmail()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))

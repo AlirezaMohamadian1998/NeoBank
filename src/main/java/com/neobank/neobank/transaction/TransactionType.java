@@ -6,6 +6,6 @@ public enum TransactionType {
     TRANSFER,
     LOAN_DISBURSEMENT,
     LOAN_PAYMENT,
-    DEBIT_CARD_PURCHASE,
-    DEBIT_CARD_REFUND
+    CARD_PURCHASE,
+    CARD_REFUND
 }

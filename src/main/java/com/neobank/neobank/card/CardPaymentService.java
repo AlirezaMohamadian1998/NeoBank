@@ -109,7 +109,7 @@ public class CardPaymentService {
                         || (!isExternalMerchant && request.currency() != destinationLedgerAccount.getCurrency());
 
         CardPurchaseCanonicalRequest canonicalRequest = new CardPurchaseCanonicalRequest(
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 cardReference,
                 request.merchantAccountNumber(),
                 request.merchantName(),
@@ -151,7 +151,7 @@ public class CardPaymentService {
         BankTransaction bankTransaction = BankTransaction.createNew(
                 request.amount(),
                 request.currency(),
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 referenceGenerator.generate(),
                 normalizedNote.isEmpty() ? null : normalizedNote
         );
