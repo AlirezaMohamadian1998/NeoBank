@@ -1,7 +1,7 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.exception.CardExpiredException;
-import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
+import com.neobank.neobank.card.exception.CardSpendingLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.InvalidCardLimitException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
 import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
@@ -278,7 +278,7 @@ class CardTest {
         card.closeCard();
 
         assertThatThrownBy(() -> card.changeSpendingLimits(limits("10.00", "20.00"), MAXIMUM))
-                .isInstanceOf(CardLimitsNotChangeableException.class);
+                .isInstanceOf(CardSpendingLimitsNotChangeableException.class);
     }
 
     @Test
@@ -288,7 +288,7 @@ class CardTest {
         card.blockCard(now);
 
         assertThatThrownBy(() -> card.changeSpendingLimits(limits("10.00", "20.00"), MAXIMUM))
-                .isInstanceOf(CardLimitsNotChangeableException.class);
+                .isInstanceOf(CardSpendingLimitsNotChangeableException.class);
     }
 
     @Test

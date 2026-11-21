@@ -3,7 +3,7 @@ package com.neobank.neobank.card;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
+import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
@@ -142,7 +142,7 @@ public class DebitCardService {
     }
 
     @Transactional
-    public DebitCardRetrieveResponse updateSpendingLimits(String cardReference, String email, CardLimitsUpdateRequest request) {
+    public DebitCardRetrieveResponse updateSpendingLimits(String cardReference, String email, CardSpendingLimitsUpdateRequest request) {
         DebitCard debitCard =
                 debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, email)
                         .orElseThrow(() -> new DebitCardNotFoundException("Debit card not found"));

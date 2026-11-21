@@ -1,6 +1,6 @@
 package com.neobank.neobank.card;
 
-import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
+import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
@@ -61,12 +61,12 @@ public class CreditCardController {
         return ResponseEntity.ok(creditCardService.changeCardStatus(cardReference, jwt.getSubject(), status));
     }
 
-    @PutMapping("/{cardReference}/limits")
+    @PutMapping("/{cardReference}/spending-limits")
     public ResponseEntity<CreditCardRetrieveResponse> updateSpendingLimits(
             @PathVariable
             @Pattern(regexp = "[a-f0-9]{32}", message = "Card reference must be 32 hexadecimal characters")
             String cardReference,
-            @RequestBody @Valid CardLimitsUpdateRequest request,
+            @RequestBody @Valid CardSpendingLimitsUpdateRequest request,
             @AuthenticationPrincipal Jwt jwt
     ) {
         return ResponseEntity.ok(creditCardService.updateSpendingLimits(cardReference, jwt.getSubject(), request));

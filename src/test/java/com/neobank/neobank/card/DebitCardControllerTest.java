@@ -2,12 +2,12 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.auth.SecurityConfig;
-import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
+import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.exception.CardExpiredException;
-import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
+import com.neobank.neobank.card.exception.CardSpendingLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCardLimitException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
@@ -505,7 +505,7 @@ class DebitCardControllerTest {
     void updateSpendingLimitsReturnsUpdatedCardForAuthenticatedCustomer() throws Exception {
         String email = "customer@example.com";
         String cardReference = "1".repeat(32);
-        CardLimitsUpdateRequest request = new CardLimitsUpdateRequest(new BigDecimal("500.00"), new BigDecimal("1500.00"));
+        CardSpendingLimitsUpdateRequest request = new CardSpendingLimitsUpdateRequest(new BigDecimal("500.00"), new BigDecimal("1500.00"));
 
         DebitCardRetrieveResponse response = new DebitCardRetrieveResponse(
                 cardReference,
@@ -524,7 +524,7 @@ class DebitCardControllerTest {
         given(debitCardService.updateSpendingLimits(cardReference, email, request))
                 .willReturn(response);
 
-        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", cardReference)
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/spending-limits", cardReference)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
@@ -544,7 +544,7 @@ class DebitCardControllerTest {
         String email = "customer@example.com";
         String cardReference = "1".repeat(32);
 
-        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", cardReference)
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/spending-limits", cardReference)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"dailyLimit\": 10.001}")
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
@@ -562,9 +562,9 @@ class DebitCardControllerTest {
         String email = "customer@example.com";
         String cardReference = "1".repeat(32);
 
-        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", cardReference)
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/spending-limits", cardReference)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new CardLimitsUpdateRequest(new BigDecimal("-1.00"), BigDecimal.ZERO)))
+                        .content(objectMapper.writeValueAsString(new CardSpendingLimitsUpdateRequest(new BigDecimal("-1.00"), BigDecimal.ZERO)))
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.perTransactionLimit").value("Per-transaction limit must be a positive number"))
@@ -577,9 +577,9 @@ class DebitCardControllerTest {
     void updateSpendingLimitsRejectsInvalidCardReference() throws Exception {
         String invalidCardReference = "11zzz1111yy11xx1kkk111ggg11zzz11";
 
-        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", invalidCardReference)
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/spending-limits", invalidCardReference)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))))
+                        .content(objectMapper.writeValueAsString(new CardSpendingLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))))
                         .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.cardReference").value("Card reference must be 32 hexadecimal characters"));
@@ -589,9 +589,9 @@ class DebitCardControllerTest {
 
     @Test
     void updateSpendingLimitsReturnsUnauthorizedWithoutAuthentication() throws Exception {
-        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", "1".repeat(32))
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/spending-limits", "1".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00")))))
+                        .content(objectMapper.writeValueAsString(new CardSpendingLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00")))))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(debitCardService);
@@ -606,12 +606,12 @@ class DebitCardControllerTest {
     ) throws Exception {
         String email = "customer@example.com";
         String cardReference = "1".repeat(32);
-        CardLimitsUpdateRequest request = new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"));
+        CardSpendingLimitsUpdateRequest request = new CardSpendingLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"));
 
         given(debitCardService.updateSpendingLimits(cardReference, email, request))
                 .willThrow(ex);
 
-        mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", cardReference)
+        mockMvc.perform(put("/api/debit-cards/{cardReference}/spending-limits", cardReference)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
@@ -619,7 +619,7 @@ class DebitCardControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail").value(ex.getMessage()))
                 .andExpect(jsonPath("$.title").value(title))
-                .andExpect(jsonPath("$.instance").value("/api/debit-cards/%s/limits".formatted(cardReference)));
+                .andExpect(jsonPath("$.instance").value("/api/debit-cards/%s/spending-limits".formatted(cardReference)));
     }
 
     private static Stream<Arguments> updateSpendingLimitsServiceExceptionSource() {
@@ -638,7 +638,7 @@ class DebitCardControllerTest {
                 ),
                 Arguments.argumentSet(
                         "updateSpendingLimitsReturnsConflictForClosedCard",
-                        new CardLimitsNotChangeableException("Limits of closed or blocked cards cannot be changed"),
+                        new CardSpendingLimitsNotChangeableException("Limits of closed or blocked cards cannot be changed"),
                         "Card limits not changeable",
                         409
                 )

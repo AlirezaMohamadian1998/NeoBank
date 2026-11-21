@@ -1,8 +1,8 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.auth.SecurityConfig;
-import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
+import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
@@ -168,12 +168,12 @@ class CreditCardControllerTest {
 
     @Test
     void updateSpendingLimitsReturnsUpdatedCard() throws Exception {
-        CardLimitsUpdateRequest request = new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("300.00"));
+        CardSpendingLimitsUpdateRequest request = new CardSpendingLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("300.00"));
 
         given(creditCardService.updateSpendingLimits(CARD_REFERENCE, EMAIL, request))
                 .willReturn(retrieveResponse(CardStatus.ACTIVE));
 
-        mockMvc.perform(put("/api/credit-cards/{cardReference}/limits", CARD_REFERENCE)
+        mockMvc.perform(put("/api/credit-cards/{cardReference}/spending-limits", CARD_REFERENCE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))

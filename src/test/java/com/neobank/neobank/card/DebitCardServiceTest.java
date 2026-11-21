@@ -4,12 +4,12 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
-import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
+import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.exception.CardExpiredException;
-import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
+import com.neobank.neobank.card.exception.CardSpendingLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCardLimitException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
@@ -794,7 +794,7 @@ class DebitCardServiceTest {
         DebitCardRetrieveResponse response = debitCardService.updateSpendingLimits(
                 debitCard.getCardReference(),
                 email,
-                new CardLimitsUpdateRequest(new BigDecimal("250000.00"), new BigDecimal("500000.00"))
+                new CardSpendingLimitsUpdateRequest(new BigDecimal("250000.00"), new BigDecimal("500000.00"))
         );
 
         assertThat(debitCard.getSpendingLimits())
@@ -824,7 +824,7 @@ class DebitCardServiceTest {
         assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
                 debitCard.getCardReference(),
                 email,
-                new CardLimitsUpdateRequest(new BigDecimal("250000.01"), new BigDecimal("500000.00"))
+                new CardSpendingLimitsUpdateRequest(new BigDecimal("250000.01"), new BigDecimal("500000.00"))
         ))
                 .isInstanceOf(InvalidCardLimitException.class)
                 .hasMessage("Per-transaction limit must not exceed 250000.00");
@@ -845,7 +845,7 @@ class DebitCardServiceTest {
         assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
                 debitCard.getCardReference(),
                 email,
-                new CardLimitsUpdateRequest(new BigDecimal("300.00"), new BigDecimal("200.00"))
+                new CardSpendingLimitsUpdateRequest(new BigDecimal("300.00"), new BigDecimal("200.00"))
         ))
                 .isInstanceOf(InvalidCardLimitException.class)
                 .hasMessage("Per-transaction limit must not exceed the daily limit");
@@ -866,9 +866,9 @@ class DebitCardServiceTest {
         assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
                 debitCard.getCardReference(),
                 email,
-                new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))
+                new CardSpendingLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))
         ))
-                .isInstanceOf(CardLimitsNotChangeableException.class);
+                .isInstanceOf(CardSpendingLimitsNotChangeableException.class);
 
         verify(debitCardRepository, never()).save(any());
     }
@@ -881,7 +881,7 @@ class DebitCardServiceTest {
         assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
                 "2".repeat(32),
                 "customer@example.com",
-                new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))
+                new CardSpendingLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))
         ))
                 .isInstanceOf(DebitCardNotFoundException.class);
 

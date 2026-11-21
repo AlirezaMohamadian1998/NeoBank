@@ -1,7 +1,7 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.exception.CardExpiredException;
-import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
+import com.neobank.neobank.card.exception.CardSpendingLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
 import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
 import com.neobank.neobank.customer.Customer;
@@ -98,7 +98,7 @@ public abstract class Card extends BaseEntity {
         }
 
         if(this.status == CardStatus.CLOSED || this.status == CardStatus.BLOCKED) {
-            throw new CardLimitsNotChangeableException("Limits of closed or blocked cards cannot be changed");
+            throw new CardSpendingLimitsNotChangeableException("Limits of closed or blocked cards cannot be changed");
         }
 
         newLimits.ensureWithin(maximum);

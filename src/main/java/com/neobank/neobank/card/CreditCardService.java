@@ -1,7 +1,7 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.AccountNumberGenerator;
-import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
+import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
@@ -150,7 +150,7 @@ public class CreditCardService {
     }
 
     @Transactional
-    public CreditCardRetrieveResponse updateSpendingLimits(String cardReference, String email, CardLimitsUpdateRequest request) {
+    public CreditCardRetrieveResponse updateSpendingLimits(String cardReference, String email, CardSpendingLimitsUpdateRequest request) {
         CreditCard creditCard = findOwnedCreditCard(cardReference, email);
 
         CardSpendingLimits newLimits = CardSpendingLimits.createNew(request.perTransactionLimit(), request.dailyLimit());

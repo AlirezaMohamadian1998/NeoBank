@@ -1,7 +1,7 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.AccountNumberGenerator;
-import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
+import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
@@ -255,7 +255,7 @@ class CreditCardServiceTest {
         given(creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase(creditCard.getCardReference(), EMAIL))
                 .willReturn(Optional.of(creditCard));
 
-        CardLimitsUpdateRequest request = new CardLimitsUpdateRequest(new BigDecimal("250000.01"), new BigDecimal("300000.00"));
+        CardSpendingLimitsUpdateRequest request = new CardSpendingLimitsUpdateRequest(new BigDecimal("250000.01"), new BigDecimal("300000.00"));
 
         assertThatThrownBy(() -> creditCardService.updateSpendingLimits(creditCard.getCardReference(), EMAIL, request))
                 .isInstanceOf(InvalidCardLimitException.class);
@@ -272,7 +272,7 @@ class CreditCardServiceTest {
         given(creditCardRepository.save(creditCard)).willReturn(creditCard);
         given(cardDailySpendService.getAmountSpent(creditCard, LocalDate.now(clock))).willReturn(new BigDecimal("0.00"));
 
-        CardLimitsUpdateRequest request = new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("300.00"));
+        CardSpendingLimitsUpdateRequest request = new CardSpendingLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("300.00"));
 
         CreditCardRetrieveResponse response =
                 creditCardService.updateSpendingLimits(creditCard.getCardReference(), EMAIL, request);

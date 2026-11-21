@@ -2,9 +2,9 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
-import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.dto.CardPurchaseResponse;
+import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxProviderRates;
@@ -258,10 +258,10 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
     }
 
     private ResultActions updateLimits(String cardReference, String perTransaction, String daily, String email) throws Exception {
-        return mockMvc.perform(put("/api/debit-cards/{cardReference}/limits", cardReference)
+        return mockMvc.perform(put("/api/debit-cards/{cardReference}/spending-limits", cardReference)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
-                        new CardLimitsUpdateRequest(new BigDecimal(perTransaction), new BigDecimal(daily))
+                        new CardSpendingLimitsUpdateRequest(new BigDecimal(perTransaction), new BigDecimal(daily))
                 ))
                 .with(jwt().jwt(jwt -> jwt.subject(email))));
     }

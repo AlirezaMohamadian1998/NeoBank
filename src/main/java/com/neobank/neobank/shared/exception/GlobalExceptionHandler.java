@@ -398,9 +398,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
     }
 
-    @ExceptionHandler(CardLimitsNotChangeableException.class)
-    public ResponseEntity<ProblemDetail> handleCardLimitsNotChangeableException(
-            CardLimitsNotChangeableException ex,
+    @ExceptionHandler(CardSpendingLimitsNotChangeableException.class)
+    public ResponseEntity<ProblemDetail> handleCardSpendingLimitsNotChangeableException(
+            CardSpendingLimitsNotChangeableException ex,
             HttpServletRequest request
     ) {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
