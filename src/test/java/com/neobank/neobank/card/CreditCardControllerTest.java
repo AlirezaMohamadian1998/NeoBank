@@ -5,8 +5,12 @@ import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
 import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
+import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
+import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
 import com.neobank.neobank.card.exception.CreditCardNotFoundException;
+import com.neobank.neobank.card.exception.InvalidCreditCardRepaymentException;
+import com.neobank.neobank.creditaccount.RepaymentExceedsBalanceException;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.YearMonth;
 import java.util.List;
 
@@ -50,6 +55,9 @@ class CreditCardControllerTest {
 
     @MockitoBean
     private CreditCardService creditCardService;
+
+    @MockitoBean
+    private CreditCardRepaymentService creditCardRepaymentService;
 
     @MockitoBean
     private JwtDecoder jwtDecoder;
@@ -180,6 +188,83 @@ class CreditCardControllerTest {
                 .andExpect(status().isOk());
 
         verify(creditCardService).updateSpendingLimits(CARD_REFERENCE, EMAIL, request);
+    }
+
+    @Test
+    void repayReturnsCreatedRepayment() throws Exception {
+        CreditCardRepaymentRequest request = new CreditCardRepaymentRequest("12345678900987", new BigDecimal("250.00"), null);
+
+        given(creditCardRepaymentService.repay(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+                .willReturn(new CreditCardRepaymentResponse(
+                        "a".repeat(32),
+                        CARD_REFERENCE,
+                        "55".repeat(7),
+                        "12345678900987",
+                        new BigDecimal("250.00"),
+                        CurrencyCode.USD,
+                        new BigDecimal("250.00"),
+                        CurrencyCode.USD,
+                        new BigDecimal("750.00"),
+                        new BigDecimal("150.00"),
+                        Instant.parse("2026-09-23T12:00:00Z")
+                ));
+
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.transactionReference").value("a".repeat(32)))
+                .andExpect(jsonPath("$.sourceAccountBalanceAfter").value(750.00))
+                .andExpect(jsonPath("$.creditCardBalanceAfter").value(150.00));
+    }
+
+    @Test
+    void repayReturnsValidationProblemWhenAmountIsMissing() throws Exception {
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sourceAccountNumber\":\"12345678900987\"}")
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        verifyNoInteractions(creditCardRepaymentService);
+    }
+
+    @Test
+    void repayReturnsConflictWhenRepaymentExceedsBalance() throws Exception {
+        CreditCardRepaymentRequest request = new CreditCardRepaymentRequest("12345678900987", new BigDecimal("250.00"), null);
+
+        given(creditCardRepaymentService.repay(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+                .willThrow(new RepaymentExceedsBalanceException("Repayment exceeds the outstanding balance of 100.00"));
+
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Repayment exceeds balance"))
+                .andExpect(jsonPath("$.detail").value("Repayment exceeds the outstanding balance of 100.00"));
+    }
+
+    @Test
+    void repayReturnsBadRequestForInvalidRepayment() throws Exception {
+        CreditCardRepaymentRequest request = new CreditCardRepaymentRequest("12345678900987", new BigDecimal("250.00"), null);
+
+        given(creditCardRepaymentService.repay(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+                .willThrow(new InvalidCreditCardRepaymentException("Lock ID is not required for same currency repayment"));
+
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid credit card repayment"))
+                .andExpect(jsonPath("$.detail").value("Lock ID is not required for same currency repayment"));
     }
 
     private static CreditCardRetrieveResponse retrieveResponse(CardStatus status) {

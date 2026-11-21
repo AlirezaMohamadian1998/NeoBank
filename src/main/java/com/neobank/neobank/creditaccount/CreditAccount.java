@@ -102,4 +102,18 @@ public class CreditAccount extends BaseEntity {
             );
         }
     }
+
+    public void ensureWithinOutstandingBalance(BigDecimal amount) {
+        if(amount == null) {
+            throw new IllegalArgumentException("Amount must not be null");
+        }
+
+        BigDecimal outstandingBalance = ledgerAccount.getBalance().max(BigDecimal.ZERO).setScale(2, RoundingMode.UNNECESSARY);
+
+        if(amount.compareTo(outstandingBalance) > 0) {
+            throw new RepaymentExceedsBalanceException(
+                    "Repayment exceeds the outstanding balance of " + outstandingBalance.toPlainString()
+            );
+        }
+    }
 }

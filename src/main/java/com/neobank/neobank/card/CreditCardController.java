@@ -3,6 +3,8 @@ package com.neobank.neobank.card;
 import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
+import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
+import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -21,6 +23,8 @@ import org.springframework.web.bind.annotation.*;
 public class CreditCardController {
 
     private final CreditCardService creditCardService;
+
+    private final CreditCardRepaymentService creditCardRepaymentService;
 
     @PostMapping
     public ResponseEntity<CreditCardIssueResponse> issueCreditCard(
@@ -70,5 +74,18 @@ public class CreditCardController {
             @AuthenticationPrincipal Jwt jwt
     ) {
         return ResponseEntity.ok(creditCardService.updateSpendingLimits(cardReference, jwt.getSubject(), request));
+    }
+
+    @PostMapping("/{cardReference}/repayments")
+    public ResponseEntity<CreditCardRepaymentResponse> repay(
+            @PathVariable
+            @Pattern(regexp = "[a-f0-9]{32}", message = "Card reference must be 32 hexadecimal characters")
+            String cardReference,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody @Valid CreditCardRepaymentRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(creditCardRepaymentService.repay(cardReference, request, idempotencyKey, jwt.getSubject()));
     }
 }

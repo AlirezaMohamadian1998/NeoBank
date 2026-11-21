@@ -1,22 +1,40 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.dto.CardPurchaseRequest;
+import com.neobank.neobank.card.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
+import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
+import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.fx.FxProviderRates;
+import com.neobank.neobank.fx.FxRateService;
+import com.neobank.neobank.fx.ProviderRateCache;
+import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
+
+    @MockitoBean
+    private ProviderRateCache providerRateCache;
+
+    @Autowired
+    private FxRateService fxRateService;
 
     @Test
     void issuingTwiceWithSameIdempotencyKeyCreatesOneCreditCardAndAccount() throws Exception {
@@ -71,6 +89,201 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
                         .with(jwt().jwt(jwt -> jwt.subject("other@example.com"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Credit card not found"));
+    }
+
+    @Test
+    void repaymentFreesUpCreditAndShowsInTheSourceAccountHistory() throws Exception {
+        CreditCardIssueResponse issued = issueAndActivateCreditCard();
+
+        purchase(issued.cardReference(), "150000.00", "2".repeat(32))
+                .andExpect(status().isCreated());
+
+        purchase(issued.cardReference(), "0.01", "3".repeat(32))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Credit limit exceeded"));
+
+        repay(issued.cardReference(), "50000.00", "4".repeat(32))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.creditAccountNumber").value(issued.creditAccountNumber()))
+                .andExpect(jsonPath("$.sourceAccountNumber").value(account.getAccountNumber()))
+                .andExpect(jsonPath("$.debitedAmount").value(50000.00))
+                .andExpect(jsonPath("$.debitedCurrency").value("TRY"))
+                .andExpect(jsonPath("$.creditedAmount").value(50000.00))
+                .andExpect(jsonPath("$.creditedCurrency").value("TRY"))
+                .andExpect(jsonPath("$.sourceAccountBalanceAfter").value(100000.00))
+                .andExpect(jsonPath("$.creditCardBalanceAfter").value(100000.00));
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}", issued.cardReference())
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance").value(100000.00))
+                .andExpect(jsonPath("$.availableCredit").value(50000.00));
+
+        mockMvc.perform(get("/api/transactions")
+                        .param("type", "CREDIT_CARD_REPAYMENT")
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].accountNumber").value(account.getAccountNumber()))
+                .andExpect(jsonPath("$.content[0].direction").value("DEBIT"))
+                .andExpect(jsonPath("$.content[0].appliedAmount").value(50000.00))
+                .andExpect(jsonPath("$.content[0].balanceAfter").value(100000.00));
+    }
+
+    @Test
+    void repayingTwiceWithSameIdempotencyKeyRepaysOnce() throws Exception {
+        CreditCardIssueResponse issued = issueAndActivateCreditCard();
+
+        purchase(issued.cardReference(), "1000.00", "2".repeat(32))
+                .andExpect(status().isCreated());
+
+        CreditCardRepaymentResponse first = objectMapper.readValue(
+                repay(issued.cardReference(), "400.00", "3".repeat(32))
+                        .andExpect(status().isCreated())
+                        .andReturn().getResponse().getContentAsString(),
+                CreditCardRepaymentResponse.class
+        );
+
+        repay(issued.cardReference(), "400.00", "3".repeat(32))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.transactionReference").value(first.transactionReference()))
+                .andExpect(jsonPath("$.sourceAccountBalanceAfter").value(600.00))
+                .andExpect(jsonPath("$.creditCardBalanceAfter").value(600.00));
+
+        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+                .isEqualByComparingTo("600.00");
+    }
+
+    @Test
+    void repaymentOverTheOutstandingBalanceIsRejected() throws Exception {
+        CreditCardIssueResponse issued = issueAndActivateCreditCard();
+
+        purchase(issued.cardReference(), "1000.00", "2".repeat(32))
+                .andExpect(status().isCreated());
+
+        repay(issued.cardReference(), "1000.01", "3".repeat(32))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Repayment exceeds balance"))
+                .andExpect(jsonPath("$.detail").value("Repayment exceeds the outstanding balance of 1000.00"));
+
+        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+                .isEqualByComparingTo("1000.00");
+    }
+
+    @Test
+    void refundAfterFullRepaymentLeavesACreditBalance() throws Exception {
+        CreditCardIssueResponse issued = issueAndActivateCreditCard();
+
+        String purchaseReference = objectMapper.readValue(
+                purchase(issued.cardReference(), "1000.00", "2".repeat(32))
+                        .andExpect(status().isCreated())
+                        .andReturn().getResponse().getContentAsString(),
+                CardPurchaseResponse.class
+        ).transactionReference();
+
+        repay(issued.cardReference(), "1000.00", "3".repeat(32))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.creditCardBalanceAfter").value(0.00));
+
+        LedgerAccount merchantLedgerAccount =
+                accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getLedgerAccount();
+        merchantLedgerAccount.credit(new BigDecimal("1000.00"));
+        ledgerAccountRepository.save(merchantLedgerAccount);
+
+        mockMvc.perform(post("/api/accounts/{merchantAccountNumber}/card-refunds/{purchaseReference}",
+                        account.getAccountNumber(), purchaseReference)
+                        .header("Idempotency-Key", "4".repeat(32))
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}", issued.cardReference())
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance").value(-1000.00))
+                .andExpect(jsonPath("$.availableCredit").value(151000.00));
+
+        repay(issued.cardReference(), "0.01", "5".repeat(32))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Repayment exceeds the outstanding balance of 0.00"));
+    }
+
+    @Test
+    void repaymentFromAccountInAnotherCurrencyUsesTheLockedRate() throws Exception {
+        given(providerRateCache.getLatestRates()).willReturn(new FxProviderRates(
+                "test-provider",
+                CurrencyCode.USD,
+                Map.of(
+                        CurrencyCode.USD, BigDecimal.ONE,
+                        CurrencyCode.EUR, new BigDecimal("0.85"),
+                        CurrencyCode.GBP, new BigDecimal("0.75"),
+                        CurrencyCode.TRY, new BigDecimal("40.00")
+                ),
+                Instant.now()
+        ));
+
+        CreditCardIssueResponse issued = issueAndActivateCreditCard(CurrencyCode.USD);
+
+        mockMvc.perform(post("/api/cards/{cardReference}/payments", issued.cardReference())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CardPurchaseRequest(
+                                account.getAccountNumber(),
+                                CurrencyCode.USD,
+                                new BigDecimal("100.00"),
+                                null,
+                                "Test merchant"
+                        )))
+                        .header("Idempotency-Key", "2".repeat(32))
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isCreated());
+
+        String lockId = fxRateService.createRateLock(CurrencyCode.USD, customer.getEmail()).lockId();
+
+        repay(issued.cardReference(), "100.00", lockId, "3".repeat(32))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.debitedAmount").value(4000.00))
+                .andExpect(jsonPath("$.debitedCurrency").value("TRY"))
+                .andExpect(jsonPath("$.creditedAmount").value(100.00))
+                .andExpect(jsonPath("$.creditedCurrency").value("USD"))
+                .andExpect(jsonPath("$.sourceAccountBalanceAfter").value(0.00))
+                .andExpect(jsonPath("$.creditCardBalanceAfter").value(0.00));
+    }
+
+    @Test
+    void repaymentFromAccountInAnotherCurrencyWithoutALockIsRejected() throws Exception {
+        CreditCardIssueResponse issued = issueCreditCard(CurrencyCode.USD, "1".repeat(32));
+
+        repay(issued.cardReference(), "10.00", "2".repeat(32))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Fx rate lock unavailable"))
+                .andExpect(jsonPath("$.detail").value("Lock ID is required for cross-currency repayment"));
+    }
+
+    private CreditCardIssueResponse issueAndActivateCreditCard() throws Exception {
+        return issueAndActivateCreditCard(CurrencyCode.TRY);
+    }
+
+    private CreditCardIssueResponse issueAndActivateCreditCard(CurrencyCode currency) throws Exception {
+        CreditCardIssueResponse issued = issueCreditCard(currency, "1".repeat(32));
+
+        mockMvc.perform(patch("/api/credit-cards/{cardReference}/status/{status}", issued.cardReference(), "ACTIVE")
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk());
+
+        return issued;
+    }
+
+    private ResultActions repay(String cardReference, String amount, String idempotencyKey) throws Exception {
+        return repay(cardReference, amount, null, idempotencyKey);
+    }
+
+    private ResultActions repay(String cardReference, String amount, String lockId, String idempotencyKey) throws Exception {
+        return mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", cardReference)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(
+                        new CreditCardRepaymentRequest(account.getAccountNumber(), new BigDecimal(amount), lockId)
+                ))
+                .header("Idempotency-Key", idempotencyKey)
+                .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))));
     }
 
     private CreditCardIssueResponse issueCreditCard(CurrencyCode currency, String idempotencyKey) throws Exception {

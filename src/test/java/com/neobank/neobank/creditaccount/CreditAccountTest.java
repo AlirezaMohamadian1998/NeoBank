@@ -156,6 +156,43 @@ class CreditAccountTest {
         creditAccount.ensureWithinCreditLimit(new BigDecimal("1150.00"));
     }
 
+    @Test
+    void ensureWithinOutstandingBalanceAcceptsTheFullBalance() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+        creditAccount.getLedgerAccount().debit(new BigDecimal("600.00"));
+
+        creditAccount.ensureWithinOutstandingBalance(new BigDecimal("600.00"));
+    }
+
+    @Test
+    void ensureWithinOutstandingBalanceRejectsAmountOneCentOverTheBalance() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+        creditAccount.getLedgerAccount().debit(new BigDecimal("600.00"));
+
+        assertThatThrownBy(() -> creditAccount.ensureWithinOutstandingBalance(new BigDecimal("600.01")))
+                .isInstanceOf(RepaymentExceedsBalanceException.class)
+                .hasMessage("Repayment exceeds the outstanding balance of 600.00");
+    }
+
+    @Test
+    void ensureWithinOutstandingBalanceRejectsAnyAmountWhenThereIsACreditBalance() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+        creditAccount.getLedgerAccount().credit(new BigDecimal("150.00"));
+
+        assertThatThrownBy(() -> creditAccount.ensureWithinOutstandingBalance(new BigDecimal("0.01")))
+                .isInstanceOf(RepaymentExceedsBalanceException.class)
+                .hasMessage("Repayment exceeds the outstanding balance of 0.00");
+    }
+
+    @Test
+    void ensureWithinOutstandingBalanceRejectsNullAmount() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+
+        assertThatThrownBy(() -> creditAccount.ensureWithinOutstandingBalance(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Amount must not be null");
+    }
+
     private static Stream<String> invalidAccountNumbers() {
         return Stream.of(null, "", "1234567890123", "123456789012345", "1234567890123a");
     }
