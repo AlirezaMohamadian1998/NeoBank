@@ -128,7 +128,7 @@ class TransactionHistoryMapperTest {
         BankTransaction transaction = BankTransaction.createNew(
                 new BigDecimal("250.00"),
                 CurrencyCode.TRY,
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 "3".repeat(32),
                 null
         );
@@ -184,7 +184,7 @@ class TransactionHistoryMapperTest {
                 .isEqualTo("3".repeat(32));
 
         assertThat(result.transactionType())
-                .isSameAs(TransactionType.DEBIT_CARD_PURCHASE);
+                .isSameAs(TransactionType.CARD_PURCHASE);
 
         assertThat(result.direction())
                 .isSameAs(EntryDirection.DEBIT);
@@ -228,7 +228,7 @@ class TransactionHistoryMapperTest {
         BankTransaction transaction = BankTransaction.createNew(
                 new BigDecimal("250.00"),
                 CurrencyCode.TRY,
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 "3".repeat(32),
                 null
         );
@@ -287,7 +287,7 @@ class TransactionHistoryMapperTest {
         LedgerAccount merchantLedgerAccount = LedgerAccount.createNew("2".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY);
 
         BankTransaction purchase = BankTransaction.createNew(
-                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.DEBIT_CARD_PURCHASE, "3".repeat(32), null
+                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.CARD_PURCHASE, "3".repeat(32), null
         );
         purchase.addEntry("4".repeat(32), new BigDecimal("250.00"), new BigDecimal("750.00"), EntryDirection.DEBIT, fundingLedgerAccount);
         purchase.addEntry("5".repeat(32), new BigDecimal("250.00"), new BigDecimal("250.00"), EntryDirection.CREDIT, merchantLedgerAccount);
@@ -297,7 +297,7 @@ class TransactionHistoryMapperTest {
         purchase.markRefunded();
 
         BankTransaction refund = BankTransaction.createNew(
-                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.DEBIT_CARD_REFUND, "7".repeat(32), null
+                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.CARD_REFUND, "7".repeat(32), null
         );
         ReflectionTestUtils.setField(refund, "id", 2L);
         refund.addEntry("8".repeat(32), new BigDecimal("250.00"), new BigDecimal("0.00"), EntryDirection.DEBIT, merchantLedgerAccount);
@@ -323,7 +323,7 @@ class TransactionHistoryMapperTest {
         assertThat(result.accountNumber()).isEqualTo("12".repeat(7));
         assertThat(result.entryReference()).isEqualTo("9".repeat(32));
         assertThat(result.transactionReference()).isEqualTo("7".repeat(32));
-        assertThat(result.transactionType()).isSameAs(TransactionType.DEBIT_CARD_REFUND);
+        assertThat(result.transactionType()).isSameAs(TransactionType.CARD_REFUND);
         assertThat(result.direction()).isSameAs(EntryDirection.CREDIT);
         assertThat(result.appliedAmount()).isEqualByComparingTo("250.00");
         assertThat(result.accountCurrency()).isSameAs(CurrencyCode.TRY);
@@ -344,7 +344,7 @@ class TransactionHistoryMapperTest {
         LedgerAccount fundingLedgerAccount = LedgerAccount.createNew("1".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY);
 
         BankTransaction refund = BankTransaction.createNew(
-                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.DEBIT_CARD_REFUND, "7".repeat(32), null
+                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.CARD_REFUND, "7".repeat(32), null
         );
         ReflectionTestUtils.setField(refund, "id", 2L);
 
@@ -380,9 +380,9 @@ class TransactionHistoryMapperTest {
 
     static Stream<Arguments> cardRefundReceiverEntrySource() {
         return Stream.of(
-                Arguments.of(TransactionType.DEBIT_CARD_REFUND, EntryDirection.CREDIT, true),
-                Arguments.of(TransactionType.DEBIT_CARD_REFUND, EntryDirection.DEBIT, false),
-                Arguments.of(TransactionType.DEBIT_CARD_PURCHASE, EntryDirection.CREDIT, false),
+                Arguments.of(TransactionType.CARD_REFUND, EntryDirection.CREDIT, true),
+                Arguments.of(TransactionType.CARD_REFUND, EntryDirection.DEBIT, false),
+                Arguments.of(TransactionType.CARD_PURCHASE, EntryDirection.CREDIT, false),
                 Arguments.of(TransactionType.DEPOSIT, EntryDirection.CREDIT, false)
         );
     }
@@ -397,16 +397,16 @@ class TransactionHistoryMapperTest {
 
                 Arguments.of(TransactionType.WITHDRAWAL, EntryDirection.DEBIT, false),
 
-                Arguments.of(TransactionType.DEBIT_CARD_PURCHASE, EntryDirection.CREDIT, false),
+                Arguments.of(TransactionType.CARD_PURCHASE, EntryDirection.CREDIT, false),
 
-                Arguments.of(TransactionType.DEBIT_CARD_REFUND, EntryDirection.DEBIT, false)
+                Arguments.of(TransactionType.CARD_REFUND, EntryDirection.DEBIT, false)
         );
     }
 
     static Stream<Arguments> cardPurchasePayerEntrySource() {
         return Stream.of(
-                Arguments.of(TransactionType.DEBIT_CARD_PURCHASE, EntryDirection.DEBIT, true),
-                Arguments.of(TransactionType.DEBIT_CARD_PURCHASE, EntryDirection.CREDIT, false),
+                Arguments.of(TransactionType.CARD_PURCHASE, EntryDirection.DEBIT, true),
+                Arguments.of(TransactionType.CARD_PURCHASE, EntryDirection.CREDIT, false),
                 Arguments.of(TransactionType.TRANSFER, EntryDirection.DEBIT, false),
                 Arguments.of(TransactionType.WITHDRAWAL, EntryDirection.DEBIT, false)
         );

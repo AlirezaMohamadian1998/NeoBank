@@ -17,8 +17,6 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class AccountService {
-    private static final int MAX_ACCOUNT_NUMBER_GENERATION_ATTEMPTS = 10;
-
     private final AccountNumberGenerator accountNumberGenerator;
 
     private final AccountRepository accountRepository;
@@ -32,7 +30,7 @@ public class AccountService {
         Customer customer = customerRepository.findByEmailIgnoreCase(customerEmail)
                 .orElseThrow(() -> new CustomerNotFoundException("Customer not found"));
 
-        String accountNumber = generateUniqueAccountNumber();
+        String accountNumber = accountNumberGenerator.generateUnique();
 
         String reference = referenceGenerator.generate();
         LedgerAccount ledgerAccount = LedgerAccount.createNew(
@@ -49,17 +47,6 @@ public class AccountService {
         );
 
         return AccountMapper.toResponse(accountRepository.save(account));
-    }
-
-    private String generateUniqueAccountNumber() {
-        String accountNumber;
-        for (int i = 0; i < MAX_ACCOUNT_NUMBER_GENERATION_ATTEMPTS; i++) {
-            accountNumber = accountNumberGenerator.generate();
-            if (!accountRepository.existsByAccountNumber(accountNumber)) {
-                return accountNumber;
-            }
-        }
-        throw new IllegalStateException("Failed to generate unique account number");
     }
 
     @Transactional(readOnly = true)

@@ -72,7 +72,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        MvcResult mvcResult = mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        MvcResult mvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "1".repeat(32))
@@ -88,7 +88,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(jsonPath("$.merchantName").isNotEmpty())
                 .andExpect(jsonPath("$.cardLastFourDigits").isNotEmpty())
                 .andExpect(jsonPath("$.cardReference").isNotEmpty())
-                .andExpect(jsonPath("$.fundingAccountNumber").isNotEmpty())
+                .andExpect(jsonPath("$.linkedAccountNumber").isNotEmpty())
                 .andExpect(jsonPath("$.createdAt").isNotEmpty())
                 .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.bankTransaction").doesNotHaveJsonPath())
@@ -156,14 +156,14 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
         assertThat(response.cardReference())
                 .isEqualTo("2".repeat(32));
 
-        assertThat(response.fundingAccountNumber())
+        assertThat(response.linkedAccountNumber())
                 .isEqualTo(account.getAccountNumber());
 
         assertThat(response.createdAt())
                 .isEqualTo(savedTransaction.getCreatedAt());
 
         assertThat(savedTransaction.getTransactionType())
-                .isSameAs(TransactionType.DEBIT_CARD_PURCHASE);
+                .isSameAs(TransactionType.CARD_PURCHASE);
 
         assertThat(savedTransaction.getStatus())
                 .isSameAs(TransactionStatus.COMPLETED);
@@ -260,7 +260,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        MvcResult mvcResult = mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        MvcResult mvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "1".repeat(32))
@@ -343,7 +343,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        MvcResult firstMvcResult = mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        MvcResult firstMvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "1".repeat(32))
@@ -351,7 +351,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(status().isCreated())
                 .andReturn();
 
-        MvcResult secondMvcResult = mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        MvcResult secondMvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "1".repeat(32))
@@ -391,7 +391,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        MvcResult firstMvcResult = mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        MvcResult firstMvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "1".repeat(32))
@@ -404,7 +404,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(CardStatus.FROZEN.name()));
 
-        MvcResult replayMvcResult = mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        MvcResult replayMvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "1".repeat(32))
@@ -418,7 +418,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
         assertThat(replayResponse)
                 .isEqualTo(firstResponse);
 
-        mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "5".repeat(32))
@@ -456,14 +456,14 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(firstRequest))
                         .header("Idempotency-Key", "1".repeat(32))
                         .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(secondRequest))
                         .header("Idempotency-Key", "1".repeat(32))
@@ -500,14 +500,14 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "1".repeat(32))
                         .with(jwt().jwt(jwt -> jwt.subject(otherCustomer.getEmail()))))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Debit card not found"));
+                .andExpect(jsonPath("$.title").value("Card not found"));
 
         assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
                 .isEqualByComparingTo("10000.00");
@@ -542,7 +542,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", inactiveCardReference)
+        mockMvc.perform(post("/api/cards/{cardReference}/payments", inactiveCardReference)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "1".repeat(32))
@@ -571,7 +571,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "1".repeat(32))
@@ -631,7 +631,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", "2".repeat(32))
+        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "1".repeat(32))
@@ -639,12 +639,12 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/transactions")
-                        .param("type", "DEBIT_CARD_PURCHASE")
+                        .param("type", "CARD_PURCHASE")
                         .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].accountNumber").value(account.getAccountNumber()))
-                .andExpect(jsonPath("$.content[0].transactionType").value("DEBIT_CARD_PURCHASE"))
+                .andExpect(jsonPath("$.content[0].transactionType").value("CARD_PURCHASE"))
                 .andExpect(jsonPath("$.content[0].direction").value("DEBIT"))
                 .andExpect(jsonPath("$.content[0].appliedAmount").value(250.00))
                 .andExpect(jsonPath("$.content[0].merchantName").value("Test merchant"))
@@ -652,7 +652,7 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(jsonPath("$.content[0].cardLastFourDigits").value(debitCard.getLastFourDigits()));
 
         mockMvc.perform(get("/api/transactions")
-                        .param("type", "DEBIT_CARD_PURCHASE")
+                        .param("type", "CARD_PURCHASE")
                         .with(jwt().jwt(jwt -> jwt.subject(merchantCustomer.getEmail()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))

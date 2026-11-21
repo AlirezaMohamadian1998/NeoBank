@@ -106,7 +106,7 @@ class CardRefundIntegrationTest extends DebitCardIntegrationTestSupport {
                 .hasSize(2);
 
         assertThat(refundTransaction.getTransactionType())
-                .isSameAs(TransactionType.DEBIT_CARD_REFUND);
+                .isSameAs(TransactionType.CARD_REFUND);
 
         assertThat(refundTransaction.getStatus())
                 .isSameAs(TransactionStatus.COMPLETED);
@@ -217,7 +217,7 @@ class CardRefundIntegrationTest extends DebitCardIntegrationTestSupport {
 
         // The merchant finds the reference to refund in their own history.
         mockMvc.perform(get("/api/transactions")
-                        .param("type", "DEBIT_CARD_PURCHASE")
+                        .param("type", "CARD_PURCHASE")
                         .with(jwt().jwt(jwt -> jwt.subject(MERCHANT_EMAIL))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
@@ -232,20 +232,20 @@ class CardRefundIntegrationTest extends DebitCardIntegrationTestSupport {
 
         // Cardholder: the purchase row and the refund row share the purchase reference.
         mockMvc.perform(get("/api/transactions")
-                        .param("type", "DEBIT_CARD_PURCHASE")
+                        .param("type", "CARD_PURCHASE")
                         .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].transactionReference").value(purchaseReference));
 
         mockMvc.perform(get("/api/transactions")
-                        .param("type", "DEBIT_CARD_REFUND")
+                        .param("type", "CARD_REFUND")
                         .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].accountNumber").value(account.getAccountNumber()))
                 .andExpect(jsonPath("$.content[0].transactionReference").value(refund.refundReference()))
-                .andExpect(jsonPath("$.content[0].transactionType").value("DEBIT_CARD_REFUND"))
+                .andExpect(jsonPath("$.content[0].transactionType").value("CARD_REFUND"))
                 .andExpect(jsonPath("$.content[0].direction").value("CREDIT"))
                 .andExpect(jsonPath("$.content[0].appliedAmount").value(250.00))
                 .andExpect(jsonPath("$.content[0].balanceAfter").value(1000.00))
@@ -256,7 +256,7 @@ class CardRefundIntegrationTest extends DebitCardIntegrationTestSupport {
 
         // Merchant: the refund is a plain debit row, mirroring how the purchase credit is shown.
         mockMvc.perform(get("/api/transactions")
-                        .param("type", "DEBIT_CARD_REFUND")
+                        .param("type", "CARD_REFUND")
                         .with(jwt().jwt(jwt -> jwt.subject(MERCHANT_EMAIL))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
@@ -304,7 +304,7 @@ class CardRefundIntegrationTest extends DebitCardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        String body = mockMvc.perform(post("/api/debit-cards/{cardReference}/payments", CARD_REFERENCE)
+        String body = mockMvc.perform(post("/api/cards/{cardReference}/payments", CARD_REFERENCE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .header("Idempotency-Key", "c".repeat(32))

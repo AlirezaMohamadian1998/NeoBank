@@ -9,9 +9,11 @@ import com.neobank.neobank.card.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.CardLimitExceededException;
 import com.neobank.neobank.card.exception.CardNotActiveException;
-import com.neobank.neobank.card.exception.DebitCardNotFoundException;
+import com.neobank.neobank.card.exception.CardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCardPaymentException;
 import com.neobank.neobank.card.support.TestCardLimits;
+import com.neobank.neobank.creditaccount.CreditAccount;
+import com.neobank.neobank.creditaccount.CreditLimitExceededException;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.idempotency.IdempotencyConflictException;
@@ -71,7 +73,7 @@ class CardPaymentServiceTest {
     private CardPurchaseDetailsRepository cardPurchaseDetailsRepository;
 
     @Mock
-    private DebitCardRepository debitCardRepository;
+    private CardRepository cardRepository;
 
     @Mock
     private AccountRepository accountRepository;
@@ -107,7 +109,7 @@ class CardPaymentServiceTest {
                 fxRateService,
                 idempotencyService,
                 cardPurchaseDetailsRepository,
-                debitCardRepository,
+                cardRepository,
                 accountRepository,
                 internalAccountRepository,
                 requestHasher,
@@ -138,7 +140,7 @@ class CardPaymentServiceTest {
 
         String requestHash = hash(request);
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -186,7 +188,7 @@ class CardPaymentServiceTest {
                 .isEqualTo("6".repeat(32));
 
         assertThat(savedTransaction.getTransactionType())
-                .isSameAs(TransactionType.DEBIT_CARD_PURCHASE);
+                .isSameAs(TransactionType.CARD_PURCHASE);
 
         assertThat(savedTransaction.getStatus())
                 .isSameAs(TransactionStatus.COMPLETED);
@@ -272,7 +274,7 @@ class CardPaymentServiceTest {
         assertThat(response.cardReference())
                 .isEqualTo("2".repeat(32));
 
-        assertThat(response.fundingAccountNumber())
+        assertThat(response.linkedAccountNumber())
                 .isEqualTo("12".repeat(7));
 
         assertThat(response.createdAt())
@@ -323,7 +325,7 @@ class CardPaymentServiceTest {
 
         String requestHash = hash(request);
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY))
@@ -410,7 +412,7 @@ class CardPaymentServiceTest {
                 CurrencyCode.GBP, new BigDecimal("0.75")
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.USD))
@@ -528,7 +530,7 @@ class CardPaymentServiceTest {
                 CurrencyCode.GBP, new BigDecimal("0.75")
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -601,7 +603,7 @@ class CardPaymentServiceTest {
                 CurrencyCode.GBP, new BigDecimal("0.01875")
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -673,7 +675,7 @@ class CardPaymentServiceTest {
                 CurrencyCode.GBP, new BigDecimal("0.75")
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.USD))
@@ -721,7 +723,7 @@ class CardPaymentServiceTest {
                 .hasMessage("Idempotency key is invalid");
 
         verifyNoInteractions(
-                debitCardRepository,
+                cardRepository,
                 accountRepository,
                 internalAccountRepository,
                 idempotencyService,
@@ -732,8 +734,10 @@ class CardPaymentServiceTest {
     }
 
     @Test
-    void makePurchaseThrowsDebitCardNotFoundExceptionWhenCardIsNotOwnedByCustomer() {
-        String email = "customer@example.com";
+    void makePurchaseThrowsCardNotFoundExceptionWhenCardIsNotOwnedByCustomer() {
+        Customer owner = createCustomer("owner@example.com");
+        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, owner, 1L);
+        DebitCard debitCard = createDebitCard(fundingAccount, CardStatus.ACTIVE);
 
         CardPurchaseRequest request = createPurchaseRequest(
                 "98".repeat(7),
@@ -742,12 +746,38 @@ class CardPaymentServiceTest {
                 "Test"
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), email))
+        given(cardRepository.findByCardReference("2".repeat(32)))
+                .willReturn(Optional.of(debitCard));
+
+        assertThatThrownBy(() -> cardPaymentService.makePurchase("2".repeat(32), request, "1".repeat(32), "customer@example.com"))
+                .isInstanceOf(CardNotFoundException.class)
+                .hasMessage("Card not found");
+
+        verifyNoInteractions(
+                accountRepository,
+                internalAccountRepository,
+                idempotencyService,
+                fxRateService,
+                cardPurchaseDetailsRepository,
+                referenceGenerator
+        );
+    }
+
+    @Test
+    void makePurchaseThrowsCardNotFoundExceptionWhenCardDoesNotExist() {
+        CardPurchaseRequest request = createPurchaseRequest(
+                "98".repeat(7),
+                new BigDecimal("250.00"),
+                CurrencyCode.TRY,
+                "Test"
+        );
+
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> cardPaymentService.makePurchase("2".repeat(32), request, "1".repeat(32), email))
-                .isInstanceOf(DebitCardNotFoundException.class)
-                .hasMessage("Debit card not found");
+        assertThatThrownBy(() -> cardPaymentService.makePurchase("2".repeat(32), request, "1".repeat(32), "customer@example.com"))
+                .isInstanceOf(CardNotFoundException.class)
+                .hasMessage("Card not found");
 
         verifyNoInteractions(
                 accountRepository,
@@ -775,7 +805,7 @@ class CardPaymentServiceTest {
                 "Test"
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -812,7 +842,7 @@ class CardPaymentServiceTest {
                 "Test"
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.USD))
@@ -847,7 +877,7 @@ class CardPaymentServiceTest {
                 "Test"
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("12".repeat(7)))
@@ -891,7 +921,7 @@ class CardPaymentServiceTest {
 
         String requestHash = hash(request);
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -935,7 +965,7 @@ class CardPaymentServiceTest {
 
         String requestHash = hash(request);
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -978,7 +1008,7 @@ class CardPaymentServiceTest {
 
         String requestHash = hash(request);
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -1034,7 +1064,7 @@ class CardPaymentServiceTest {
                 "6".repeat(32)
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -1071,7 +1101,7 @@ class CardPaymentServiceTest {
         assertThat(response.cardReference())
                 .isEqualTo("2".repeat(32));
 
-        assertThat(response.fundingAccountNumber())
+        assertThat(response.linkedAccountNumber())
                 .isEqualTo("12".repeat(7));
 
         assertThat(fundingAccount.getBalance())
@@ -1114,7 +1144,7 @@ class CardPaymentServiceTest {
                 "6".repeat(32)
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -1172,7 +1202,7 @@ class CardPaymentServiceTest {
                 "6".repeat(32)
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -1214,7 +1244,7 @@ class CardPaymentServiceTest {
                 "Test"
         );
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -1259,7 +1289,7 @@ class CardPaymentServiceTest {
 
         CardPurchaseRequest request = createPurchaseRequest("98".repeat(7), new BigDecimal("250"), CurrencyCode.TRY, "Coffee");
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -1292,7 +1322,7 @@ class CardPaymentServiceTest {
 
         CardPurchaseRequest request = createPurchaseRequest(null, new BigDecimal("100.00"), CurrencyCode.USD, "Online order");
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.USD))
@@ -1333,7 +1363,7 @@ class CardPaymentServiceTest {
 
         CardPurchaseRequest request = createPurchaseRequest("98".repeat(7), new BigDecimal("250.00"), CurrencyCode.TRY, "Coffee");
 
-        given(debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase("2".repeat(32), customer.getEmail()))
+        given(cardRepository.findByCardReference("2".repeat(32)))
                 .willReturn(Optional.of(debitCard));
 
         given(accountRepository.findByAccountNumber("98".repeat(7)))
@@ -1361,6 +1391,112 @@ class CardPaymentServiceTest {
         verify(referenceGenerator, times(1)).generate();
         verify(idempotencyService, never()).save(any());
         verifyNoInteractions(cardPurchaseDetailsRepository);
+    }
+
+    @Test
+    void makePurchaseWithCreditCardDebitsCreditLedgerAndReturnsCreditAccountNumber() {
+        Customer customer = createCustomer("customer@example.com");
+        Customer merchantCustomer = createCustomer("merchant@example.com");
+
+        CreditAccount creditAccount = createCreditAccount(customer, new BigDecimal("1000.00"), 1L);
+        Account merchantAccount = createAccount("98".repeat(7), "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
+
+        CreditCard creditCard = createActiveCreditCard(creditAccount);
+
+        CardPurchaseRequest request = createPurchaseRequest(
+                "98".repeat(7),
+                new BigDecimal("250.00"),
+                CurrencyCode.TRY,
+                "Coffee"
+        );
+
+        given(cardRepository.findByCardReference("2".repeat(32)))
+                .willReturn(Optional.of(creditCard));
+
+        given(accountRepository.findByAccountNumber("98".repeat(7)))
+                .willReturn(Optional.of(merchantAccount));
+
+        given(idempotencyService.findAndValidateRecord("1".repeat(32), customer.getEmail(), hash(request)))
+                .willReturn(Optional.empty());
+
+        given(referenceGenerator.generate())
+                .willReturn("6".repeat(32), "7".repeat(32), "8".repeat(32));
+
+        given(cardPurchaseDetailsRepository.save(any(CardPurchaseDetails.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        CardPurchaseResponse response = cardPaymentService.makePurchase(
+                "2".repeat(32),
+                request,
+                "1".repeat(32),
+                customer.getEmail()
+        );
+
+        assertThat(creditAccount.getLedgerAccount().getBalance())
+                .isEqualByComparingTo("250.00");
+
+        assertThat(creditAccount.getAvailableCredit())
+                .isEqualByComparingTo("750.00");
+
+        assertThat(merchantAccount.getBalance())
+                .isEqualByComparingTo("250.00");
+
+        assertThat(response.linkedAccountNumber())
+                .isEqualTo("55".repeat(7));
+
+        assertThat(response.balanceAfter())
+                .isEqualByComparingTo("250.00");
+
+        verify(cardDailySpendService).recordSpend(creditCard, LocalDate.now(clock), new BigDecimal("250.00"));
+    }
+
+    @Test
+    void makePurchaseWithCreditCardThrowsWhenAmountExceedsAvailableCreditAndWritesNothing() {
+        Customer customer = createCustomer("customer@example.com");
+        Customer merchantCustomer = createCustomer("merchant@example.com");
+
+        CreditAccount creditAccount = createCreditAccount(customer, new BigDecimal("1000.00"), 1L);
+        creditAccount.getLedgerAccount().debit(new BigDecimal("800.00"));
+        Account merchantAccount = createAccount("98".repeat(7), "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
+
+        CreditCard creditCard = createActiveCreditCard(creditAccount);
+
+        CardPurchaseRequest request = createPurchaseRequest(
+                "98".repeat(7),
+                new BigDecimal("200.01"),
+                CurrencyCode.TRY,
+                "Coffee"
+        );
+
+        given(cardRepository.findByCardReference("2".repeat(32)))
+                .willReturn(Optional.of(creditCard));
+
+        given(accountRepository.findByAccountNumber("98".repeat(7)))
+                .willReturn(Optional.of(merchantAccount));
+
+        given(idempotencyService.findAndValidateRecord("1".repeat(32), customer.getEmail(), hash(request)))
+                .willReturn(Optional.empty());
+
+        given(referenceGenerator.generate())
+                .willReturn("6".repeat(32));
+
+        assertThatThrownBy(() -> cardPaymentService.makePurchase(
+                "2".repeat(32),
+                request,
+                "1".repeat(32),
+                customer.getEmail()
+        ))
+                .isInstanceOf(CreditLimitExceededException.class)
+                .hasMessage("Amount exceeds the available credit of 200.00");
+
+        assertThat(creditAccount.getLedgerAccount().getBalance())
+                .isEqualByComparingTo("800.00");
+
+        assertThat(merchantAccount.getBalance())
+                .isEqualByComparingTo("0.00");
+
+        verifyNoInteractions(cardDailySpendService, cardPurchaseDetailsRepository);
+        verify(idempotencyService, never()).save(any());
     }
 
     private Customer createCustomer(String email) {
@@ -1439,6 +1575,37 @@ class CardPaymentServiceTest {
         return debitCard;
     }
 
+    private CreditAccount createCreditAccount(Customer customer, BigDecimal creditLimit, Long ledgerAccountId) {
+        CreditAccount creditAccount = CreditAccount.createNew(
+                "55".repeat(7),
+                "5".repeat(32),
+                customer,
+                CurrencyCode.TRY,
+                creditLimit
+        );
+
+        ReflectionTestUtils.setField(creditAccount.getLedgerAccount(), "id", ledgerAccountId);
+
+        return creditAccount;
+    }
+
+    private CreditCard createActiveCreditCard(CreditAccount creditAccount) {
+        YearMonth now = YearMonth.now(clock);
+
+        CreditCard creditCard = CreditCard.createNew(
+                "2".repeat(32),
+                "5678",
+                now.plusYears(5),
+                now,
+                creditAccount,
+                TestCardLimits.generous()
+        );
+
+        creditCard.activateCard(now);
+
+        return creditCard;
+    }
+
     private CardPurchaseRequest createPurchaseRequest(
             String merchantAccountNumber,
             BigDecimal amount,
@@ -1462,7 +1629,7 @@ class CardPaymentServiceTest {
         BankTransaction transaction = BankTransaction.createNew(
                 request.amount(),
                 request.currency(),
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 "6".repeat(32),
                 request.note()
         );
@@ -1500,7 +1667,7 @@ class CardPaymentServiceTest {
     private String hash(CardPurchaseRequest request) {
         return requestHasher.hashRequest(objectMapper.writeValueAsString(
                 new CardPurchaseCanonicalRequest(
-                        TransactionType.DEBIT_CARD_PURCHASE,
+                        TransactionType.CARD_PURCHASE,
                         "2".repeat(32),
                         request.merchantAccountNumber(),
                         request.merchantName(),

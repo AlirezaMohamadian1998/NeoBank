@@ -3,13 +3,12 @@ package com.neobank.neobank.card;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
+import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
-import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
-import com.neobank.neobank.card.issuing.DebitCardIssuer;
-import com.neobank.neobank.card.issuing.IssuedDebitCard;
+import com.neobank.neobank.card.issuing.CardIssuer;
+import com.neobank.neobank.card.issuing.IssuedCard;
 import com.neobank.neobank.card.limit.CardLimitProperties;
 import com.neobank.neobank.idempotency.*;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
@@ -44,7 +43,7 @@ public class DebitCardService {
 
     private final Clock clock;
 
-    private final DebitCardIssuer debitCardIssuer;
+    private final CardIssuer cardIssuer;
 
     private final CardLimitProperties cardLimitProperties;
 
@@ -89,12 +88,12 @@ public class DebitCardService {
         }
 
         YearMonth currentYearMonth = YearMonth.now(clock);
-        IssuedDebitCard issuedDebitCard = debitCardIssuer.issue(currentYearMonth);
+        IssuedCard issuedCard = cardIssuer.issue(currentYearMonth);
 
         DebitCard debitCard = DebitCard.createNew(
                 referenceGenerator.generate(),
-                issuedDebitCard.lastFourDigits(),
-                issuedDebitCard.expirationYearMonth(),
+                issuedCard.lastFourDigits(),
+                issuedCard.expirationYearMonth(),
                 currentYearMonth,
                 fundingAccount,
                 cardLimitProperties.getDefaultLimits(fundingAccount.getCurrency())
@@ -143,7 +142,7 @@ public class DebitCardService {
     }
 
     @Transactional
-    public DebitCardRetrieveResponse updateSpendingLimits(String cardReference, String email, CardLimitsUpdateRequest request) {
+    public DebitCardRetrieveResponse updateSpendingLimits(String cardReference, String email, CardSpendingLimitsUpdateRequest request) {
         DebitCard debitCard =
                 debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, email)
                         .orElseThrow(() -> new DebitCardNotFoundException("Debit card not found"));
@@ -165,21 +164,7 @@ public class DebitCardService {
                 debitCardRepository.findByCardReferenceAndFundingAccount_Customer_EmailIgnoreCase(cardReference, email)
                         .orElseThrow(() -> new DebitCardNotFoundException("Debit card not found"));
 
-        YearMonth now = YearMonth.now(clock);
-
-        switch(targetStatus) {
-            case ACTIVE -> {
-                if(debitCard.getStatus() == CardStatus.FROZEN) {
-                    debitCard.unfreezeCard(now);
-                } else {
-                    debitCard.activateCard(now);
-                }
-            }
-            case FROZEN -> debitCard.freezeCard(now);
-            case BLOCKED -> debitCard.blockCard(now);
-            case CLOSED -> debitCard.closeCard();
-            case INACTIVE -> throw new UnsupportedCardStatusException("Cards cannot be changed back to inactive");
-        }
+        debitCard.changeStatus(targetStatus, YearMonth.now(clock));
 
         DebitCard savedDebitCard = debitCardRepository.save(debitCard);
         BigDecimal spentToday = cardDailySpendService.getAmountSpent(savedDebitCard, LocalDate.now(clock));

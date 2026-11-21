@@ -1,8 +1,11 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.exception.CardExpiredException;
-import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
+import com.neobank.neobank.card.exception.CardSpendingLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
+import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
+import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.shared.persistence.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -83,18 +86,44 @@ public abstract class Card extends BaseEntity {
         this.spendingLimits = spendingLimits;
     }
 
+    public abstract Customer getOwner();
+
+    public abstract LedgerAccount getLinkedLedgerAccount();
+
+    public abstract String getLinkedAccountNumber();
+
     public void changeSpendingLimits(CardSpendingLimits newLimits, CardSpendingLimits maximum) {
         if(newLimits == null) {
             throw new IllegalArgumentException("Spending limits cannot be null");
         }
 
         if(this.status == CardStatus.CLOSED || this.status == CardStatus.BLOCKED) {
-            throw new CardLimitsNotChangeableException("Limits of closed or blocked cards cannot be changed");
+            throw new CardSpendingLimitsNotChangeableException("Limits of closed or blocked cards cannot be changed");
         }
 
         newLimits.ensureWithin(maximum);
 
         this.spendingLimits = newLimits;
+    }
+
+    public void changeStatus(CardStatus targetStatus, YearMonth now) {
+        if(targetStatus == null) {
+            throw new IllegalArgumentException("Target status cannot be null");
+        }
+
+        switch(targetStatus) {
+            case ACTIVE -> {
+                if(this.status == CardStatus.FROZEN) {
+                    unfreezeCard(now);
+                } else {
+                    activateCard(now);
+                }
+            }
+            case FROZEN -> freezeCard(now);
+            case BLOCKED -> blockCard(now);
+            case CLOSED -> closeCard();
+            case INACTIVE -> throw new UnsupportedCardStatusException("Cards cannot be changed back to inactive");
+        }
     }
 
     public void activateCard(YearMonth now) {

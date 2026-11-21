@@ -39,6 +39,20 @@ public class LedgerAccount extends BaseEntity {
     @Column(nullable = false)
     private LedgerAccountStatus status;
 
+    @Column(nullable = false, updatable = false)
+    private boolean negativeBalanceAllowed;
+
+    public static LedgerAccount createNewWithNegativeBalanceAllowed(
+            String ledgerReference,
+            LedgerAccountType type,
+            CurrencyCode currency
+    ) {
+        LedgerAccount ledgerAccount = createNew(ledgerReference, type, currency);
+        ledgerAccount.negativeBalanceAllowed = true;
+
+        return ledgerAccount;
+    }
+
     public static LedgerAccount createNew(
             String ledgerReference,
             LedgerAccountType type,
@@ -66,7 +80,8 @@ public class LedgerAccount extends BaseEntity {
                 type,
                 currency,
                 BigDecimal.ZERO.setScale(2, RoundingMode.UNNECESSARY),
-                LedgerAccountStatus.ACTIVE
+                LedgerAccountStatus.ACTIVE,
+                false
         );
     }
 
@@ -106,7 +121,7 @@ public class LedgerAccount extends BaseEntity {
     }
 
     private BigDecimal decrease(BigDecimal amount) {
-        if (balance.compareTo(amount) < 0) {
+        if (!negativeBalanceAllowed && balance.compareTo(amount) < 0) {
             throw new InsufficientFundsException();
         }
 

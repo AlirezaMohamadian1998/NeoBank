@@ -139,7 +139,7 @@ class CardRefundServiceTest {
                 .isEqualTo(REFUND_REFERENCE);
 
         assertThat(refundTransaction.getTransactionType())
-                .isSameAs(TransactionType.DEBIT_CARD_REFUND);
+                .isSameAs(TransactionType.CARD_REFUND);
 
         assertThat(refundTransaction.getStatus())
                 .isSameAs(TransactionStatus.COMPLETED);
@@ -315,7 +315,7 @@ class CardRefundServiceTest {
                 fundingAccount, merchantAccount, new BigDecimal("250.00"), CurrencyCode.TRY, BigDecimal.ONE, BigDecimal.ONE
         );
 
-        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.DEBIT_CARD_PURCHASE))
+        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE))
                 .willReturn(Optional.of(purchase.getBankTransaction()));
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(MERCHANT_ACCOUNT_NUMBER, MERCHANT_EMAIL))
@@ -335,7 +335,7 @@ class CardRefundServiceTest {
 
     @Test
     void refundPurchaseRejectsUnknownPurchase() {
-        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.DEBIT_CARD_PURCHASE))
+        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE))
                 .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> cardRefundService.refundPurchase(
@@ -365,7 +365,7 @@ class CardRefundServiceTest {
         var inOrder = inOrder(bankTransactionRepository, accountRepository, idempotencyService, cardPurchaseDetailsRepository);
 
         inOrder.verify(bankTransactionRepository)
-                .findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.DEBIT_CARD_PURCHASE);
+                .findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE);
         inOrder.verify(accountRepository)
                 .findByAccountNumberAndCustomer_EmailIgnoreCase(MERCHANT_ACCOUNT_NUMBER, MERCHANT_EMAIL);
         inOrder.verify(idempotencyService)
@@ -476,7 +476,7 @@ class CardRefundServiceTest {
         );
         CardRefundDetails existingRefund = createCompletedRefund(purchase, merchantAccount, fundingAccount);
 
-        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.DEBIT_CARD_PURCHASE))
+        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE))
                 .willReturn(Optional.of(purchase.getBankTransaction()));
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(MERCHANT_ACCOUNT_NUMBER, MERCHANT_EMAIL))
@@ -519,7 +519,7 @@ class CardRefundServiceTest {
                 fundingAccount, merchantAccount, new BigDecimal("250.00"), CurrencyCode.TRY, BigDecimal.ONE, BigDecimal.ONE
         );
 
-        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.DEBIT_CARD_PURCHASE))
+        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE))
                 .willReturn(Optional.of(purchase.getBankTransaction()));
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(MERCHANT_ACCOUNT_NUMBER, MERCHANT_EMAIL))
@@ -547,7 +547,7 @@ class CardRefundServiceTest {
         given(idempotencyService.findAndValidateRecord(IDEMPOTENCY_KEY, MERCHANT_EMAIL, hash()))
                 .willReturn(Optional.empty());
 
-        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.DEBIT_CARD_PURCHASE))
+        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE))
                 .willReturn(Optional.of(purchase.getBankTransaction()));
 
         given(cardPurchaseDetailsRepository.findByBankTransaction_Reference(PURCHASE_REFERENCE))
@@ -565,7 +565,7 @@ class CardRefundServiceTest {
     private String hash() {
         return requestHasher.hashRequest(objectMapper.writeValueAsString(
                 new CardRefundCanonicalRequest(
-                        TransactionType.DEBIT_CARD_REFUND,
+                        TransactionType.CARD_REFUND,
                         MERCHANT_ACCOUNT_NUMBER,
                         PURCHASE_REFERENCE
                 )
@@ -618,7 +618,7 @@ class CardRefundServiceTest {
         BankTransaction transaction = BankTransaction.createNew(
                 amount,
                 currency,
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 PURCHASE_REFERENCE,
                 null
         );
@@ -673,7 +673,7 @@ class CardRefundServiceTest {
         BankTransaction refund = BankTransaction.createNew(
                 amount,
                 purchase.getBankTransaction().getRequestedCurrency(),
-                TransactionType.DEBIT_CARD_REFUND,
+                TransactionType.CARD_REFUND,
                 REFUND_REFERENCE,
                 null
         );

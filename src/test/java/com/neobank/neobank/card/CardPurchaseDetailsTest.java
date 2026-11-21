@@ -21,7 +21,7 @@ class CardPurchaseDetailsTest {
 
     @Test
     void createNewAcceptsCompletedCardPurchase() {
-        BankTransaction transaction = createTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+        BankTransaction transaction = createTransaction(TransactionType.CARD_PURCHASE);
 
         transaction.complete();
 
@@ -73,7 +73,7 @@ class CardPurchaseDetailsTest {
 
     @Test
     void createNewRejectsUncompletedTransaction() {
-        BankTransaction transaction = createTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+        BankTransaction transaction = createTransaction(TransactionType.CARD_PURCHASE);
 
         assertThatThrownBy(() -> CardPurchaseDetails.createNew(
                 transaction,
@@ -87,7 +87,7 @@ class CardPurchaseDetailsTest {
     @ParameterizedTest
     @MethodSource("invalidMerchantNames")
     void createNewRejectsInvalidMerchantName(String merchantName, String expectedExceptionMessage) {
-        BankTransaction transaction = createTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+        BankTransaction transaction = createTransaction(TransactionType.CARD_PURCHASE);
         transaction.complete();
 
         assertThatThrownBy(() -> CardPurchaseDetails.createNew(
@@ -102,7 +102,7 @@ class CardPurchaseDetailsTest {
     @ParameterizedTest
     @MethodSource("invalidCardReference")
     void createNewRejectsInvalidCardReference(String cardReference, String expectedExceptionMessage) {
-        BankTransaction transaction = createTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+        BankTransaction transaction = createTransaction(TransactionType.CARD_PURCHASE);
         transaction.complete();
 
         assertThatThrownBy(() -> CardPurchaseDetails.createNew(
@@ -117,7 +117,7 @@ class CardPurchaseDetailsTest {
     @ParameterizedTest
     @MethodSource("invalidCardLastFourDigits")
     void createNewRejectsInvalidCardLastFourDigits(String cardLastFourDigits, String expectedExceptionMessage) {
-        BankTransaction transaction = createTransaction(TransactionType.DEBIT_CARD_PURCHASE);
+        BankTransaction transaction = createTransaction(TransactionType.CARD_PURCHASE);
         transaction.complete();
 
         assertThatThrownBy(() -> CardPurchaseDetails.createNew(

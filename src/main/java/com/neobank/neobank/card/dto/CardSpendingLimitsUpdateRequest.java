@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Positive;
 
 import java.math.BigDecimal;
 
-public record CardLimitsUpdateRequest(
+public record CardSpendingLimitsUpdateRequest(
         @NotNull(message = "Per-transaction limit cannot be null")
         @Positive(message = "Per-transaction limit must be a positive number")
         @Digits(integer = 17, fraction = 2, message = "Per-transaction limit must be a valid decimal number")

@@ -4,18 +4,18 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
-import com.neobank.neobank.card.dto.CardLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
+import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.exception.CardExpiredException;
-import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
+import com.neobank.neobank.card.exception.CardSpendingLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.DebitCardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCardLimitException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
 import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
-import com.neobank.neobank.card.issuing.DebitCardIssuer;
-import com.neobank.neobank.card.issuing.IssuedDebitCard;
+import com.neobank.neobank.card.issuing.CardIssuer;
+import com.neobank.neobank.card.issuing.IssuedCard;
 import com.neobank.neobank.card.limit.CardLimitProperties;
 import com.neobank.neobank.card.limit.TestCardLimitProperties;
 import com.neobank.neobank.card.support.TestCardLimits;
@@ -73,7 +73,7 @@ class DebitCardServiceTest {
     private RequestHasher requestHasher;
 
     @Mock
-    private DebitCardIssuer debitCardIssuer;
+    private CardIssuer cardIssuer;
 
     @Mock
     private CardDailySpendService cardDailySpendService;
@@ -93,7 +93,7 @@ class DebitCardServiceTest {
                 referenceGenerator,
                 requestHasher,
                 clock,
-                debitCardIssuer,
+                cardIssuer,
                 cardLimitProperties,
                 cardDailySpendService
         );
@@ -131,7 +131,7 @@ class DebitCardServiceTest {
                 ledgerAccount
         );
 
-        IssuedDebitCard issuedDebitCard = new IssuedDebitCard(
+        IssuedCard issuedCard = new IssuedCard(
                 "1234",
                 now.plusYears(5)
         );
@@ -147,8 +147,8 @@ class DebitCardServiceTest {
         given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
                 .willReturn(Optional.empty());
 
-        given(debitCardIssuer.issue(now))
-                .willReturn(issuedDebitCard);
+        given(cardIssuer.issue(now))
+                .willReturn(issuedCard);
 
         given(referenceGenerator.generate())
                 .willReturn(cardReference);
@@ -180,10 +180,10 @@ class DebitCardServiceTest {
                 .isEqualTo(cardReference);
 
         assertThat(debitCard.getLastFourDigits())
-                .isEqualTo(issuedDebitCard.lastFourDigits());
+                .isEqualTo(issuedCard.lastFourDigits());
 
         assertThat(debitCard.getExpirationYearMonth())
-                .isEqualTo(issuedDebitCard.expirationYearMonth());
+                .isEqualTo(issuedCard.expirationYearMonth());
 
         assertThat(debitCard.getStatus())
                 .isSameAs(CardStatus.INACTIVE);
@@ -207,7 +207,7 @@ class DebitCardServiceTest {
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
         verify(referenceGenerator, times(1)).generate();
         verify(requestHasher).hashRequest("ISSUE_DEBIT_CARD|%s|%s".formatted(email, accountNumber));
-        verify(debitCardIssuer).issue(now);
+        verify(cardIssuer).issue(now);
     }
 
     @Test
@@ -220,7 +220,7 @@ class DebitCardServiceTest {
                 .isInstanceOf(InvalidIdempotencyKeyException.class)
                 .hasMessage("Invalid idempotency key");
 
-        verifyNoInteractions(accountRepository, debitCardRepository, idempotencyService, referenceGenerator, requestHasher, debitCardIssuer);
+        verifyNoInteractions(accountRepository, debitCardRepository, idempotencyService, referenceGenerator, requestHasher, cardIssuer);
     }
 
     @Test
@@ -236,7 +236,7 @@ class DebitCardServiceTest {
                 .isInstanceOf(AccountNotFoundException.class)
                 .hasMessage("Account not found");
 
-        verifyNoInteractions(debitCardRepository, idempotencyService, referenceGenerator, requestHasher, debitCardIssuer);
+        verifyNoInteractions(debitCardRepository, idempotencyService, referenceGenerator, requestHasher, cardIssuer);
 
     }
 
@@ -311,7 +311,7 @@ class DebitCardServiceTest {
         assertThat(response.lastFourDigits())
                 .isEqualTo(debitCard.getLastFourDigits());
 
-        verifyNoInteractions(debitCardIssuer, referenceGenerator);
+        verifyNoInteractions(cardIssuer, referenceGenerator);
 
         verify(debitCardRepository, never()).save(any());
         verify(idempotencyService, never()).save(any());
@@ -368,7 +368,7 @@ class DebitCardServiceTest {
                 .isInstanceOf(IdempotencyResultNotFoundException.class)
                 .hasMessage("Couldn't find debit card with the given reference.");
 
-        verifyNoInteractions(debitCardIssuer, referenceGenerator);
+        verifyNoInteractions(cardIssuer, referenceGenerator);
 
         verify(debitCardRepository, never()).save(any());
         verify(idempotencyService, never()).save(any());
@@ -794,7 +794,7 @@ class DebitCardServiceTest {
         DebitCardRetrieveResponse response = debitCardService.updateSpendingLimits(
                 debitCard.getCardReference(),
                 email,
-                new CardLimitsUpdateRequest(new BigDecimal("250000.00"), new BigDecimal("500000.00"))
+                new CardSpendingLimitsUpdateRequest(new BigDecimal("250000.00"), new BigDecimal("500000.00"))
         );
 
         assertThat(debitCard.getSpendingLimits())
@@ -824,7 +824,7 @@ class DebitCardServiceTest {
         assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
                 debitCard.getCardReference(),
                 email,
-                new CardLimitsUpdateRequest(new BigDecimal("250000.01"), new BigDecimal("500000.00"))
+                new CardSpendingLimitsUpdateRequest(new BigDecimal("250000.01"), new BigDecimal("500000.00"))
         ))
                 .isInstanceOf(InvalidCardLimitException.class)
                 .hasMessage("Per-transaction limit must not exceed 250000.00");
@@ -845,7 +845,7 @@ class DebitCardServiceTest {
         assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
                 debitCard.getCardReference(),
                 email,
-                new CardLimitsUpdateRequest(new BigDecimal("300.00"), new BigDecimal("200.00"))
+                new CardSpendingLimitsUpdateRequest(new BigDecimal("300.00"), new BigDecimal("200.00"))
         ))
                 .isInstanceOf(InvalidCardLimitException.class)
                 .hasMessage("Per-transaction limit must not exceed the daily limit");
@@ -866,9 +866,9 @@ class DebitCardServiceTest {
         assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
                 debitCard.getCardReference(),
                 email,
-                new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))
+                new CardSpendingLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))
         ))
-                .isInstanceOf(CardLimitsNotChangeableException.class);
+                .isInstanceOf(CardSpendingLimitsNotChangeableException.class);
 
         verify(debitCardRepository, never()).save(any());
     }
@@ -881,7 +881,7 @@ class DebitCardServiceTest {
         assertThatThrownBy(() -> debitCardService.updateSpendingLimits(
                 "2".repeat(32),
                 "customer@example.com",
-                new CardLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))
+                new CardSpendingLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"))
         ))
                 .isInstanceOf(DebitCardNotFoundException.class);
 

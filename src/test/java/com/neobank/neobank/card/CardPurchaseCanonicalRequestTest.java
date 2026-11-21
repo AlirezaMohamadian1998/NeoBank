@@ -18,7 +18,7 @@ class CardPurchaseCanonicalRequestTest {
     @Test
     void canonicalRequestNormalizesAmount() {
         CardPurchaseCanonicalRequest canonicalRequest = new CardPurchaseCanonicalRequest(
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 "1".repeat(32),
                 "12".repeat(7),
                 "Test merchant",
@@ -35,7 +35,7 @@ class CardPurchaseCanonicalRequestTest {
     @MethodSource("notesToNormalize")
     void canonicalRequestNormalizesNote(String note, String expectedNote) {
         CardPurchaseCanonicalRequest canonicalRequest = new CardPurchaseCanonicalRequest(
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 "1".repeat(32),
                 "12".repeat(7),
                 "Test merchant",
@@ -54,7 +54,7 @@ class CardPurchaseCanonicalRequestTest {
         RequestHasher requestHasher = new RequestHasher();
 
         CardPurchaseCanonicalRequest firstRequest = new CardPurchaseCanonicalRequest(
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 "1".repeat(32),
                 "12".repeat(7),
                 "Shop",
@@ -64,7 +64,7 @@ class CardPurchaseCanonicalRequestTest {
         );
 
         CardPurchaseCanonicalRequest secondRequest = new CardPurchaseCanonicalRequest(
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 "1".repeat(32),
                 "12".repeat(7),
                 "Shop|10.00|USD|memo",

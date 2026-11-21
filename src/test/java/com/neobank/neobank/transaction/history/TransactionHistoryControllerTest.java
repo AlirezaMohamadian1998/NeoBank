@@ -96,7 +96,7 @@ class TransactionHistoryControllerTest {
                                 "12".repeat(7),
                                 "1".repeat(32),
                                 "b".repeat(32),
-                                TransactionType.DEBIT_CARD_PURCHASE,
+                                TransactionType.CARD_PURCHASE,
                                 EntryDirection.DEBIT,
                                 new BigDecimal("250.00"),
                                 CurrencyCode.TRY,
@@ -132,7 +132,7 @@ class TransactionHistoryControllerTest {
         mockMvc.perform(get("/api/transactions")
                         .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].transactionType").value("DEBIT_CARD_PURCHASE"))
+                .andExpect(jsonPath("$.content[0].transactionType").value("CARD_PURCHASE"))
                 .andExpect(jsonPath("$.content[0].merchantName").value("Test merchant"))
                 .andExpect(jsonPath("$.content[0].cardReference").value("2".repeat(32)))
                 .andExpect(jsonPath("$.content[0].cardLastFourDigits").value("1234"))

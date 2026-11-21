@@ -6,20 +6,20 @@ import java.time.YearMonth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class LocalDebitCardIssuerTest {
+class LocalCardIssuerTest {
 
-    private final LocalDebitCardIssuer debitCardIssuer = new LocalDebitCardIssuer();
+    private final LocalCardIssuer cardIssuer = new LocalCardIssuer();
 
     @Test
     void issueReturnsFourNumericDigitsAndSetsExpirationFiveYearsAfterCurrentMonth() {
         YearMonth currentYearMonth = YearMonth.of(2026, 9);
 
-        IssuedDebitCard issuedDebitCard = debitCardIssuer.issue(currentYearMonth);
+        IssuedCard issuedCard = cardIssuer.issue(currentYearMonth);
 
-        assertThat(issuedDebitCard.lastFourDigits())
+        assertThat(issuedCard.lastFourDigits())
                 .matches("\\d{4}");
 
-        assertThat(issuedDebitCard.expirationYearMonth())
+        assertThat(issuedCard.expirationYearMonth())
                 .isEqualTo(currentYearMonth.plusYears(5));
     }
 }

@@ -429,7 +429,7 @@ class TransactionHistoryServiceTest {
         BankTransaction purchaseTransaction = BankTransaction.createNew(
                 new BigDecimal("250.00"),
                 CurrencyCode.TRY,
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 "3".repeat(32),
                 null
         );
@@ -558,7 +558,7 @@ class TransactionHistoryServiceTest {
         BankTransaction purchaseTransaction = BankTransaction.createNew(
                 new BigDecimal("250.00"),
                 CurrencyCode.TRY,
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 "3".repeat(32),
                 null
         );
@@ -627,7 +627,7 @@ class TransactionHistoryServiceTest {
         PageRequest pageRequest = PageRequest.of(0, 10, Sort.by(Sort.Order.desc("createdAt")));
 
         BankTransaction purchaseTransaction = BankTransaction.createNew(
-                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.DEBIT_CARD_PURCHASE, "3".repeat(32), null
+                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.CARD_PURCHASE, "3".repeat(32), null
         );
         ReflectionTestUtils.setField(purchaseTransaction, "id", 10L);
 
@@ -645,7 +645,7 @@ class TransactionHistoryServiceTest {
         purchaseTransaction.markRefunded();
 
         BankTransaction refundTransaction = BankTransaction.createNew(
-                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.DEBIT_CARD_REFUND, "6".repeat(32), null
+                new BigDecimal("250.00"), CurrencyCode.TRY, TransactionType.CARD_REFUND, "6".repeat(32), null
         );
         ReflectionTestUtils.setField(refundTransaction, "id", 20L);
 

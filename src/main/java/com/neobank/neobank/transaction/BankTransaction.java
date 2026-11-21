@@ -226,8 +226,8 @@ public class BankTransaction extends BaseEntity {
     }
 
     public void markRefunded() {
-        if (transactionType != TransactionType.DEBIT_CARD_PURCHASE) {
-            throw new IllegalStateException("Only debit card purchases can be refunded");
+        if (transactionType != TransactionType.CARD_PURCHASE) {
+            throw new IllegalStateException("Only card purchases can be refunded");
         }
 
         if (status != TransactionStatus.COMPLETED) {

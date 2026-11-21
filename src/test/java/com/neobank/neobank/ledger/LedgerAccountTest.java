@@ -408,4 +408,80 @@ class LedgerAccountTest {
         assertThat(assetAccount.getBalance())
                 .isEqualByComparingTo(new BigDecimal("0.00"));
     }
+
+    @Test
+    void newAccountDoesNotAllowNegativeBalance() {
+        assertThat(ledgerAccount.isNegativeBalanceAllowed()).isFalse();
+    }
+
+    @Test
+    void createNewWithNegativeBalanceAllowedSetsFlagAndKeepsDefaults() {
+        LedgerAccount result = LedgerAccount.createNewWithNegativeBalanceAllowed(
+                "0123456789abcdef0123456789abcdef",
+                LedgerAccountType.ASSET,
+                CurrencyCode.USD
+        );
+
+        assertThat(result.isNegativeBalanceAllowed()).isTrue();
+        assertThat(result.getType()).isEqualTo(LedgerAccountType.ASSET);
+        assertThat(result.getCurrency()).isEqualTo(CurrencyCode.USD);
+        assertThat(result.getStatus()).isEqualTo(LedgerAccountStatus.ACTIVE);
+        assertThat(result.getBalance()).isEqualByComparingTo(new BigDecimal("0.00"));
+    }
+
+    @Test
+    void createNewWithNegativeBalanceAllowedValidatesLikeCreateNew() {
+        assertThatThrownBy(() -> LedgerAccount.createNewWithNegativeBalanceAllowed(
+                null,
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Ledger reference cannot be null");
+    }
+
+    @Test
+    void assetCreditBelowZeroIsAllowedWhenNegativeBalanceIsAllowed() {
+        LedgerAccount assetAccount = LedgerAccount.createNewWithNegativeBalanceAllowed(
+                "abcdef0123456789abcdef0123456789",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        );
+
+        assetAccount.debit(new BigDecimal("30.00"));
+
+        BigDecimal balance = assetAccount.credit(new BigDecimal("100.00"));
+
+        assertThat(balance).isEqualByComparingTo(new BigDecimal("-70.00"));
+        assertThat(assetAccount.getBalance()).isEqualByComparingTo(new BigDecimal("-70.00"));
+    }
+
+    @Test
+    void negativeBalanceGoesBackUpWithDebits() {
+        LedgerAccount assetAccount = LedgerAccount.createNewWithNegativeBalanceAllowed(
+                "abcdef0123456789abcdef0123456789",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        );
+
+        assetAccount.credit(new BigDecimal("50.00"));
+        assetAccount.debit(new BigDecimal("80.00"));
+
+        assertThat(assetAccount.getBalance()).isEqualByComparingTo(new BigDecimal("30.00"));
+    }
+
+    @Test
+    void accountWithNegativeBalanceCannotClose() {
+        LedgerAccount assetAccount = LedgerAccount.createNewWithNegativeBalanceAllowed(
+                "abcdef0123456789abcdef0123456789",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        );
+
+        assetAccount.credit(new BigDecimal("10.00"));
+
+        assertThatThrownBy(assetAccount::close)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Ledger account cannot be closed with a non-zero balance");
+    }
 }

@@ -67,7 +67,7 @@ class BankTransactionLockingIntegrationTest {
         BankTransaction purchase = BankTransaction.createNew(
                 new BigDecimal("100.00"),
                 CurrencyCode.TRY,
-                TransactionType.DEBIT_CARD_PURCHASE,
+                TransactionType.CARD_PURCHASE,
                 PURCHASE_REFERENCE,
                 null
         );
@@ -91,7 +91,7 @@ class BankTransactionLockingIntegrationTest {
     void findsTransactionOnlyWhenReferenceAndTypeMatch() {
         transactionTemplate.executeWithoutResult(status -> {
             assertThat(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(
-                    PURCHASE_REFERENCE, TransactionType.DEBIT_CARD_PURCHASE
+                    PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE
             )).isPresent();
 
             assertThat(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(
@@ -99,7 +99,7 @@ class BankTransactionLockingIntegrationTest {
             )).isEmpty();
 
             assertThat(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(
-                    "f".repeat(32), TransactionType.DEBIT_CARD_PURCHASE
+                    "f".repeat(32), TransactionType.CARD_PURCHASE
             )).isEmpty();
         });
     }
@@ -111,7 +111,7 @@ class BankTransactionLockingIntegrationTest {
 
         Future<?> first = executor.submit(() -> transactionTemplate.executeWithoutResult(status -> {
             BankTransaction purchase = bankTransactionRepository
-                    .findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.DEBIT_CARD_PURCHASE)
+                    .findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE)
                     .orElseThrow();
 
             firstHoldsLock.countDown();
@@ -124,7 +124,7 @@ class BankTransactionLockingIntegrationTest {
 
         Future<TransactionStatus> second = executor.submit(() -> transactionTemplate.execute(status ->
                 bankTransactionRepository
-                        .findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.DEBIT_CARD_PURCHASE)
+                        .findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE)
                         .orElseThrow()
                         .getStatus()
         ));

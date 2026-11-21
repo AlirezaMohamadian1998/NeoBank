@@ -84,7 +84,7 @@ public class CardRefundService {
         // the holder's committed work afterwards: its idempotency record (same key -> replay) or the
         // REFUNDED status (different key -> 409). Reading anything first would freeze an older snapshot.
         BankTransaction purchaseTransaction =
-                bankTransactionRepository.findForUpdateByReferenceAndTransactionType(purchaseReference, TransactionType.DEBIT_CARD_PURCHASE)
+                bankTransactionRepository.findForUpdateByReferenceAndTransactionType(purchaseReference, TransactionType.CARD_PURCHASE)
                         .orElseThrow(() -> new CardPurchaseNotFoundException("Card purchase not found"));
 
         Account merchantAccount =
@@ -92,7 +92,7 @@ public class CardRefundService {
                         .orElseThrow(() -> new AccountNotFoundException("Merchant's account not found"));
 
         CardRefundCanonicalRequest canonicalRequest = new CardRefundCanonicalRequest(
-                TransactionType.DEBIT_CARD_REFUND,
+                TransactionType.CARD_REFUND,
                 merchantAccountNumber,
                 purchaseReference
         );
@@ -107,7 +107,11 @@ public class CardRefundService {
                     cardRefundDetailsRepository.findByBankTransaction_Reference(idempotencyRecord.get().getResultReference())
                             .orElseThrow(() -> new IdempotencyResultNotFoundException("Idempotency result not found"));
 
-            return toResponse(existingRefund, merchantAccount);
+            return CardMapper.toCardRefundResponse(
+                    existingRefund,
+                    getEntry(existingRefund.getBankTransaction(), EntryDirection.DEBIT),
+                    merchantAccount.getAccountNumber()
+            );
         }
 
         CardPurchaseDetails cardPurchaseDetails =
@@ -142,7 +146,11 @@ public class CardRefundService {
                 )
         );
 
-        return toResponse(cardRefundDetails, merchantAccount);
+        return CardMapper.toCardRefundResponse(
+                cardRefundDetails,
+                getEntry(cardRefundDetails.getBankTransaction(), EntryDirection.DEBIT),
+                merchantAccount.getAccountNumber()
+        );
     }
 
     /**
@@ -162,7 +170,7 @@ public class CardRefundService {
         BankTransaction refundTransaction = BankTransaction.createNew(
                 requestedAmount,
                 requestedCurrency,
-                TransactionType.DEBIT_CARD_REFUND,
+                TransactionType.CARD_REFUND,
                 referenceGenerator.generate(),
                 null
         );
@@ -204,14 +212,22 @@ public class CardRefundService {
                 refundTransaction,
                 sourceLedgerAccount,
                 EntryDirection.DEBIT,
-                convert(requestedAmount, fxInfo, CurrencyContext.SOURCE)
+                requestedAmount.multiply(
+                        fxInfo == null
+                                ? BigDecimal.ONE
+                                : fxInfo.getRate(CurrencyContext.SOURCE)
+                ).setScale(2, RoundingMode.HALF_EVEN)
         );
 
         ledgerPostingService.post(
                 refundTransaction,
                 destinationLedgerAccount,
                 EntryDirection.CREDIT,
-                convert(requestedAmount, fxInfo, CurrencyContext.DESTINATION)
+                requestedAmount.multiply(
+                        fxInfo == null
+                                ? BigDecimal.ONE
+                                : fxInfo.getRate(CurrencyContext.DESTINATION)
+                ).setScale(2, RoundingMode.HALF_EVEN)
         );
 
         refundTransaction.complete();
@@ -220,22 +236,6 @@ public class CardRefundService {
         return cardRefundDetailsRepository.save(
                 CardRefundDetails.createNew(refundTransaction, cardPurchaseDetails)
         );
-    }
-
-    private CardRefundResponse toResponse(CardRefundDetails cardRefundDetails, Account merchantAccount) {
-        return DebitCardMapper.toCardRefundResponse(
-                cardRefundDetails,
-                getEntry(cardRefundDetails.getBankTransaction(), EntryDirection.DEBIT),
-                merchantAccount.getAccountNumber()
-        );
-    }
-
-    private static BigDecimal convert(BigDecimal amount, FxInfo fxInfo, CurrencyContext context) {
-        return amount.multiply(
-                fxInfo == null
-                        ? BigDecimal.ONE
-                        : fxInfo.getRate(context)
-        ).setScale(2, RoundingMode.HALF_EVEN);
     }
 
     private static LedgerEntry getEntry(BankTransaction transaction, EntryDirection direction) {

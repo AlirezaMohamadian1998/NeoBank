@@ -50,7 +50,7 @@ public class CardPurchaseDetails extends BaseEntity {
             throw new IllegalArgumentException("Bank transaction must not be null");
         }
 
-        if(bankTransaction.getTransactionType() != TransactionType.DEBIT_CARD_PURCHASE) {
+        if(bankTransaction.getTransactionType() != TransactionType.CARD_PURCHASE) {
             throw new IllegalArgumentException("The transaction type is not correct");
         }
 

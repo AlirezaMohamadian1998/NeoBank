@@ -1,10 +1,13 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.exception.CardExpiredException;
-import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
+import com.neobank.neobank.card.exception.CardSpendingLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.InvalidCardLimitException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
+import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
 import com.neobank.neobank.card.support.TestCardLimits;
+import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.ledger.LedgerAccount;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -275,7 +278,7 @@ class CardTest {
         card.closeCard();
 
         assertThatThrownBy(() -> card.changeSpendingLimits(limits("10.00", "20.00"), MAXIMUM))
-                .isInstanceOf(CardLimitsNotChangeableException.class);
+                .isInstanceOf(CardSpendingLimitsNotChangeableException.class);
     }
 
     @Test
@@ -285,7 +288,7 @@ class CardTest {
         card.blockCard(now);
 
         assertThatThrownBy(() -> card.changeSpendingLimits(limits("10.00", "20.00"), MAXIMUM))
-                .isInstanceOf(CardLimitsNotChangeableException.class);
+                .isInstanceOf(CardSpendingLimitsNotChangeableException.class);
     }
 
     @Test
@@ -295,6 +298,67 @@ class CardTest {
         assertThatThrownBy(() -> card.changeSpendingLimits(null, MAXIMUM))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Spending limits cannot be null");
+    }
+
+    @Test
+    void changeStatusToActiveActivatesAnInactiveCard() {
+        YearMonth now = YearMonth.of(2026, 9);
+        Card card = createValidCard(now);
+
+        card.changeStatus(CardStatus.ACTIVE, now);
+
+        assertThat(card.getStatus()).isEqualTo(CardStatus.ACTIVE);
+    }
+
+    @Test
+    void changeStatusToActiveUnfreezesAFrozenCard() {
+        YearMonth now = YearMonth.of(2026, 9);
+        Card card = createValidCard(now);
+        card.activateCard(now);
+        card.freezeCard(now);
+
+        card.changeStatus(CardStatus.ACTIVE, now);
+
+        assertThat(card.getStatus()).isEqualTo(CardStatus.ACTIVE);
+    }
+
+    @Test
+    void changeStatusAppliesFreezeBlockAndClose() {
+        YearMonth now = YearMonth.of(2026, 9);
+        Card card = createValidCard(now);
+        card.activateCard(now);
+
+        card.changeStatus(CardStatus.FROZEN, now);
+        assertThat(card.getStatus()).isEqualTo(CardStatus.FROZEN);
+
+        card.changeStatus(CardStatus.BLOCKED, now);
+        assertThat(card.getStatus()).isEqualTo(CardStatus.BLOCKED);
+
+        card.changeStatus(CardStatus.CLOSED, now);
+        assertThat(card.getStatus()).isEqualTo(CardStatus.CLOSED);
+    }
+
+    @Test
+    void changeStatusToInactiveIsRejected() {
+        YearMonth now = YearMonth.of(2026, 9);
+        Card card = createValidCard(now);
+        card.activateCard(now);
+
+        assertThatThrownBy(() -> card.changeStatus(CardStatus.INACTIVE, now))
+                .isInstanceOf(UnsupportedCardStatusException.class)
+                .hasMessage("Cards cannot be changed back to inactive");
+
+        assertThat(card.getStatus()).isEqualTo(CardStatus.ACTIVE);
+    }
+
+    @Test
+    void changeStatusRejectsNullTarget() {
+        YearMonth now = YearMonth.of(2026, 9);
+        Card card = createValidCard(now);
+
+        assertThatThrownBy(() -> card.changeStatus(null, now))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Target status cannot be null");
     }
 
     private static final CardSpendingLimits MAXIMUM = limits("1000.00", "5000.00");
@@ -337,6 +401,21 @@ class CardTest {
                 CardSpendingLimits spendingLimits
         ) {
             super(cardReference, lastFourDigits, expirationYearMonth, currentYearMonth, spendingLimits);
+        }
+
+        @Override
+        public Customer getOwner() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public LedgerAccount getLinkedLedgerAccount() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public String getLinkedAccountNumber() {
+            throw new UnsupportedOperationException();
         }
     }
 

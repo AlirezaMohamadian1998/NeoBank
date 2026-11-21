@@ -68,10 +68,8 @@ class AccountServiceTest {
 
         given(customerRepository.findByEmailIgnoreCase("customer@example.com"))
                 .willReturn(Optional.of(customer));
-        given(accountNumberGenerator.generate())
+        given(accountNumberGenerator.generateUnique())
                 .willReturn(accountNumber);
-        given(accountRepository.existsByAccountNumber(accountNumber))
-                .willReturn(false);
         given(accountRepository.save(any(Account.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
         given(referenceGenerator.generate())
@@ -119,63 +117,9 @@ class AccountServiceTest {
                 .isEqualTo(savedAccount.getCurrency());
 
         verify(accountNumberGenerator, times(1))
-                .generate();
+                .generateUnique();
         verify(customerRepository)
                 .findByEmailIgnoreCase(customer.getEmail());
-        verify(accountRepository)
-                .existsByAccountNumber(accountNumber);
-        verify(accountRepository, times(1))
-                .save(any(Account.class));
-        verify(referenceGenerator, times(1))
-                .generate();
-    }
-
-    @Test
-    void createAccountRetriesWhenGeneratedAccountNumberAlreadyExists() {
-        CreateAccountRequest request = new CreateAccountRequest(
-                "  Private Account  ",
-                AccountType.CURRENT,
-                CurrencyCode.TRY
-        );
-
-        Customer customer = Customer.createNew(
-                "customer@example.com",
-                "{bcrypt}encoded-password",
-                "Ada Lovelace"
-        );
-
-        String accountNumber1 = "12345678900987";
-        String accountNumber2 = "09876543211234";
-        String ledgerAccountReference = "0123456789abcdef0123456789abcdef";
-
-        given(accountNumberGenerator.generate())
-                .willReturn(accountNumber1, accountNumber2);
-        given(accountRepository.existsByAccountNumber(accountNumber1))
-                .willReturn(true);
-        given(accountRepository.existsByAccountNumber(accountNumber2))
-                .willReturn(false);
-        given(customerRepository.findByEmailIgnoreCase("customer@example.com"))
-                .willReturn(Optional.of(customer));
-        given(accountRepository.save(any(Account.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
-        given(referenceGenerator.generate())
-                .willReturn(ledgerAccountReference);
-
-        AccountResponse response = accountService.createAccount(request, customer.getEmail());
-        verify(accountRepository).save(accountCaptor.capture());
-        Account savedAccount = accountCaptor.getValue();
-
-        assertThat(response.accountNumber())
-                .isEqualTo(accountNumber2);
-        assertThat(savedAccount.getAccountNumber())
-                .isEqualTo(accountNumber2);
-
-        verify(accountNumberGenerator, times(2))
-                .generate();
-        verify(accountRepository)
-                .existsByAccountNumber(accountNumber1);
-        verify(accountRepository)
-                .existsByAccountNumber(accountNumber2);
         verify(accountRepository, times(1))
                 .save(any(Account.class));
         verify(referenceGenerator, times(1))
@@ -201,43 +145,6 @@ class AccountServiceTest {
                 .findByEmailIgnoreCase("missing@example.com");
 
         verifyNoInteractions(accountNumberGenerator, accountRepository, referenceGenerator);
-    }
-
-    @Test
-    void createAccountThrowsIllegalStateExceptionAfterMaximumAccountNumberCollisions() {
-        Customer customer = Customer.createNew(
-                "customer@example.com",
-                "{bcrypt}encoded-password",
-                "Ada Lovelace"
-        );
-
-        CreateAccountRequest request = new CreateAccountRequest(
-                "  Private Account  ",
-                AccountType.CURRENT,
-                CurrencyCode.TRY
-        );
-
-        given(customerRepository.findByEmailIgnoreCase(any(String.class)))
-                .willReturn(Optional.of(customer));
-        given(accountNumberGenerator.generate())
-                .willReturn("12345678900987");
-        given(accountRepository.existsByAccountNumber(any(String.class)))
-                .willReturn(true);
-
-        assertThatThrownBy(() -> accountService.createAccount(request, customer.getEmail()))
-                .isExactlyInstanceOf(IllegalStateException.class)
-                .hasMessage("Failed to generate unique account number");
-
-        verify(accountNumberGenerator, times(10))
-                .generate();
-        verify(customerRepository)
-                .findByEmailIgnoreCase(customer.getEmail());
-        verify(accountRepository, times(10))
-                .existsByAccountNumber(any(String.class));
-        verify(accountRepository, never())
-                .save(any(Account.class));
-
-        verifyNoInteractions(referenceGenerator);
     }
 
     @Test
