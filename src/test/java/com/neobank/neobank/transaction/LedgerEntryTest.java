@@ -341,4 +341,24 @@ class LedgerEntryTest {
         assertThat(entry.getBalanceAfter())
                 .isEqualByComparingTo(new BigDecimal("60.00"));
     }
+
+    @Test
+    void negativeBalanceAfterIsAllowedWhenLedgerAccountAllowsNegativeBalance() {
+        LedgerAccount creditLedgerAccount = LedgerAccount.createNewWithNegativeBalanceAllowed(
+                "abcdef0123456789abcdef0123456789",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        );
+
+        LedgerEntry entry = LedgerEntry.createNew(
+                VALID_ENTRY_REFERENCE,
+                new BigDecimal("10.00"),
+                new BigDecimal("-10.00"),
+                EntryDirection.CREDIT,
+                creditLedgerAccount,
+                bankTransaction
+        );
+
+        assertThat(entry.getBalanceAfter()).isEqualByComparingTo(new BigDecimal("-10.00"));
+    }
 }

@@ -75,10 +75,6 @@ public class LedgerEntry extends BaseEntity {
             throw new IllegalArgumentException("Balance after must not be null");
         }
 
-        if(balanceAfter.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Balance after must not be less than zero");
-        }
-
         if(balanceAfter.compareTo(BigDecimal.ZERO) != 0 && balanceAfter.stripTrailingZeros().scale() > 2) {
             throw new IllegalArgumentException("Balance after must not have more than 2 decimal places");
         }
@@ -89,6 +85,10 @@ public class LedgerEntry extends BaseEntity {
 
         if(ledgerAccount == null) {
             throw new IllegalArgumentException("Ledger account cannot be null");
+        }
+
+        if(!ledgerAccount.isNegativeBalanceAllowed() && balanceAfter.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Balance after must not be less than zero");
         }
 
         if(bankTransaction == null) {
