@@ -107,7 +107,11 @@ public class CardRefundService {
                     cardRefundDetailsRepository.findByBankTransaction_Reference(idempotencyRecord.get().getResultReference())
                             .orElseThrow(() -> new IdempotencyResultNotFoundException("Idempotency result not found"));
 
-            return toResponse(existingRefund, merchantAccount);
+            return DebitCardMapper.toCardRefundResponse(
+                    existingRefund,
+                    getEntry(existingRefund.getBankTransaction(), EntryDirection.DEBIT),
+                    merchantAccount.getAccountNumber()
+            );
         }
 
         CardPurchaseDetails cardPurchaseDetails =
@@ -142,7 +146,11 @@ public class CardRefundService {
                 )
         );
 
-        return toResponse(cardRefundDetails, merchantAccount);
+        return DebitCardMapper.toCardRefundResponse(
+                cardRefundDetails,
+                getEntry(cardRefundDetails.getBankTransaction(), EntryDirection.DEBIT),
+                merchantAccount.getAccountNumber()
+        );
     }
 
     /**
@@ -204,14 +212,22 @@ public class CardRefundService {
                 refundTransaction,
                 sourceLedgerAccount,
                 EntryDirection.DEBIT,
-                convert(requestedAmount, fxInfo, CurrencyContext.SOURCE)
+                requestedAmount.multiply(
+                        fxInfo == null
+                                ? BigDecimal.ONE
+                                : fxInfo.getRate(CurrencyContext.SOURCE)
+                ).setScale(2, RoundingMode.HALF_EVEN)
         );
 
         ledgerPostingService.post(
                 refundTransaction,
                 destinationLedgerAccount,
                 EntryDirection.CREDIT,
-                convert(requestedAmount, fxInfo, CurrencyContext.DESTINATION)
+                requestedAmount.multiply(
+                        fxInfo == null
+                                ? BigDecimal.ONE
+                                : fxInfo.getRate(CurrencyContext.DESTINATION)
+                ).setScale(2, RoundingMode.HALF_EVEN)
         );
 
         refundTransaction.complete();
@@ -220,22 +236,6 @@ public class CardRefundService {
         return cardRefundDetailsRepository.save(
                 CardRefundDetails.createNew(refundTransaction, cardPurchaseDetails)
         );
-    }
-
-    private CardRefundResponse toResponse(CardRefundDetails cardRefundDetails, Account merchantAccount) {
-        return DebitCardMapper.toCardRefundResponse(
-                cardRefundDetails,
-                getEntry(cardRefundDetails.getBankTransaction(), EntryDirection.DEBIT),
-                merchantAccount.getAccountNumber()
-        );
-    }
-
-    private static BigDecimal convert(BigDecimal amount, FxInfo fxInfo, CurrencyContext context) {
-        return amount.multiply(
-                fxInfo == null
-                        ? BigDecimal.ONE
-                        : fxInfo.getRate(context)
-        ).setScale(2, RoundingMode.HALF_EVEN);
     }
 
     private static LedgerEntry getEntry(BankTransaction transaction, EntryDirection direction) {
