@@ -3,6 +3,7 @@ package com.neobank.neobank.card;
 import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.CardLimitsNotChangeableException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
+import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.shared.persistence.BaseEntity;
@@ -103,6 +104,26 @@ public abstract class Card extends BaseEntity {
         newLimits.ensureWithin(maximum);
 
         this.spendingLimits = newLimits;
+    }
+
+    public void changeStatus(CardStatus targetStatus, YearMonth now) {
+        if(targetStatus == null) {
+            throw new IllegalArgumentException("Target status cannot be null");
+        }
+
+        switch(targetStatus) {
+            case ACTIVE -> {
+                if(this.status == CardStatus.FROZEN) {
+                    unfreezeCard(now);
+                } else {
+                    activateCard(now);
+                }
+            }
+            case FROZEN -> freezeCard(now);
+            case BLOCKED -> blockCard(now);
+            case CLOSED -> closeCard();
+            case INACTIVE -> throw new UnsupportedCardStatusException("Cards cannot be changed back to inactive");
+        }
     }
 
     public void activateCard(YearMonth now) {

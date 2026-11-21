@@ -5,4 +5,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface CreditAccountRepository extends JpaRepository<CreditAccount, Long> {
+    boolean existsByAccountNumber(String accountNumber);
 }

@@ -14,8 +14,8 @@ import com.neobank.neobank.card.exception.DebitCardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCardLimitException;
 import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
 import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
-import com.neobank.neobank.card.issuing.DebitCardIssuer;
-import com.neobank.neobank.card.issuing.IssuedDebitCard;
+import com.neobank.neobank.card.issuing.CardIssuer;
+import com.neobank.neobank.card.issuing.IssuedCard;
 import com.neobank.neobank.card.limit.CardLimitProperties;
 import com.neobank.neobank.card.limit.TestCardLimitProperties;
 import com.neobank.neobank.card.support.TestCardLimits;
@@ -73,7 +73,7 @@ class DebitCardServiceTest {
     private RequestHasher requestHasher;
 
     @Mock
-    private DebitCardIssuer debitCardIssuer;
+    private CardIssuer cardIssuer;
 
     @Mock
     private CardDailySpendService cardDailySpendService;
@@ -93,7 +93,7 @@ class DebitCardServiceTest {
                 referenceGenerator,
                 requestHasher,
                 clock,
-                debitCardIssuer,
+                cardIssuer,
                 cardLimitProperties,
                 cardDailySpendService
         );
@@ -131,7 +131,7 @@ class DebitCardServiceTest {
                 ledgerAccount
         );
 
-        IssuedDebitCard issuedDebitCard = new IssuedDebitCard(
+        IssuedCard issuedCard = new IssuedCard(
                 "1234",
                 now.plusYears(5)
         );
@@ -147,8 +147,8 @@ class DebitCardServiceTest {
         given(idempotencyService.findAndValidateRecord(idempotencyKey, email, requestHash))
                 .willReturn(Optional.empty());
 
-        given(debitCardIssuer.issue(now))
-                .willReturn(issuedDebitCard);
+        given(cardIssuer.issue(now))
+                .willReturn(issuedCard);
 
         given(referenceGenerator.generate())
                 .willReturn(cardReference);
@@ -180,10 +180,10 @@ class DebitCardServiceTest {
                 .isEqualTo(cardReference);
 
         assertThat(debitCard.getLastFourDigits())
-                .isEqualTo(issuedDebitCard.lastFourDigits());
+                .isEqualTo(issuedCard.lastFourDigits());
 
         assertThat(debitCard.getExpirationYearMonth())
-                .isEqualTo(issuedDebitCard.expirationYearMonth());
+                .isEqualTo(issuedCard.expirationYearMonth());
 
         assertThat(debitCard.getStatus())
                 .isSameAs(CardStatus.INACTIVE);
@@ -207,7 +207,7 @@ class DebitCardServiceTest {
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email);
         verify(referenceGenerator, times(1)).generate();
         verify(requestHasher).hashRequest("ISSUE_DEBIT_CARD|%s|%s".formatted(email, accountNumber));
-        verify(debitCardIssuer).issue(now);
+        verify(cardIssuer).issue(now);
     }
 
     @Test
@@ -220,7 +220,7 @@ class DebitCardServiceTest {
                 .isInstanceOf(InvalidIdempotencyKeyException.class)
                 .hasMessage("Invalid idempotency key");
 
-        verifyNoInteractions(accountRepository, debitCardRepository, idempotencyService, referenceGenerator, requestHasher, debitCardIssuer);
+        verifyNoInteractions(accountRepository, debitCardRepository, idempotencyService, referenceGenerator, requestHasher, cardIssuer);
     }
 
     @Test
@@ -236,7 +236,7 @@ class DebitCardServiceTest {
                 .isInstanceOf(AccountNotFoundException.class)
                 .hasMessage("Account not found");
 
-        verifyNoInteractions(debitCardRepository, idempotencyService, referenceGenerator, requestHasher, debitCardIssuer);
+        verifyNoInteractions(debitCardRepository, idempotencyService, referenceGenerator, requestHasher, cardIssuer);
 
     }
 
@@ -311,7 +311,7 @@ class DebitCardServiceTest {
         assertThat(response.lastFourDigits())
                 .isEqualTo(debitCard.getLastFourDigits());
 
-        verifyNoInteractions(debitCardIssuer, referenceGenerator);
+        verifyNoInteractions(cardIssuer, referenceGenerator);
 
         verify(debitCardRepository, never()).save(any());
         verify(idempotencyService, never()).save(any());
@@ -368,7 +368,7 @@ class DebitCardServiceTest {
                 .isInstanceOf(IdempotencyResultNotFoundException.class)
                 .hasMessage("Couldn't find debit card with the given reference.");
 
-        verifyNoInteractions(debitCardIssuer, referenceGenerator);
+        verifyNoInteractions(cardIssuer, referenceGenerator);
 
         verify(debitCardRepository, never()).save(any());
         verify(idempotencyService, never()).save(any());

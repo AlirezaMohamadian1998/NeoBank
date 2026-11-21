@@ -58,3 +58,10 @@ card:
         default-daily: 50000.00
         max-per-transaction: 150000.00
         max-daily: 300000.00
+
+credit-account:
+  default-credit-limits:
+    USD: 5000.00
+    EUR: 5000.00
+    GBP: 5000.00
+    TRY: 150000.00
