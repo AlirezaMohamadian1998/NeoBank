@@ -1,5 +1,7 @@
 package com.neobank.neobank.ledger;
 
+import com.neobank.neobank.internalaccount.InternalAccount;
+import com.neobank.neobank.internalaccount.InternalAccountPurpose;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.TransactionIntegrationTestSupport;
@@ -58,5 +60,27 @@ class LedgerAccountPersistenceIntegrationTest extends TransactionIntegrationTest
 
         assertThat(ledgerAccountRepository.findById(saved.getId()).orElseThrow().getBalance())
                 .isEqualByComparingTo(new BigDecimal("0.00"));
+    }
+
+    @Test
+    void incomeLedgerAccountBacksInterestIncomeInternalAccount() {
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "abcdef0123456789abcdef0123456789",
+                LedgerAccountType.INCOME,
+                CurrencyCode.EUR
+        );
+        ledgerAccount.credit(new BigDecimal("3.21"));
+
+        InternalAccount saved = internalAccountRepository.save(
+                InternalAccount.createNew(InternalAccountPurpose.INTEREST_INCOME, ledgerAccount)
+        );
+
+        InternalAccount reloaded = internalAccountRepository
+                .findByPurposeAndCurrency(InternalAccountPurpose.INTEREST_INCOME, CurrencyCode.EUR)
+                .orElseThrow();
+
+        assertThat(reloaded.getId()).isEqualTo(saved.getId());
+        assertThat(reloaded.getLedgerAccount().getType()).isEqualTo(LedgerAccountType.INCOME);
+        assertThat(reloaded.getBalance()).isEqualByComparingTo(new BigDecimal("3.21"));
     }
 }

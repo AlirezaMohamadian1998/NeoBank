@@ -90,7 +90,7 @@ public class LedgerAccount extends BaseEntity {
         amount = validateAndNormalizeAmount(amount);
 
         return switch (type) {
-            case LIABILITY -> increase(amount);
+            case LIABILITY, INCOME -> increase(amount);
             case ASSET -> decrease(amount);
         };
     }
@@ -101,7 +101,7 @@ public class LedgerAccount extends BaseEntity {
 
         return switch (type) {
             case ASSET -> increase(amount);
-            case LIABILITY -> decrease(amount);
+            case LIABILITY, INCOME -> decrease(amount);
         };
     }
 
