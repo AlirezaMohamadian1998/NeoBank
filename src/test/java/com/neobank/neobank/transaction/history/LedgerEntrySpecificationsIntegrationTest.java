@@ -5,6 +5,7 @@ import com.neobank.neobank.ledger.LedgerAccountRepository;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
 import com.neobank.neobank.shared.config.JpaAuditingConfig;
+import com.neobank.neobank.shared.config.TimeConfig;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.*;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ import static org.assertj.core.api.AssertionsForClassTypes.tuple;
 import static org.mockito.BDDMockito.given;
 
 @DataJpaTest
-@Import({MySqlTestContainerConfiguration.class, JpaAuditingConfig.class})
+@Import({MySqlTestContainerConfiguration.class, JpaAuditingConfig.class, TimeConfig.class})
 class LedgerEntrySpecificationsIntegrationTest {
 
     @Autowired
@@ -776,7 +777,7 @@ class LedgerEntrySpecificationsIntegrationTest {
 }
 
 @DataJpaTest
-@Import({MySqlTestContainerConfiguration.class, JpaAuditingConfig.class})
+@Import({MySqlTestContainerConfiguration.class, JpaAuditingConfig.class, TimeConfig.class})
 class LedgerEntrySpecificationsDateIntegrationTest {
 
     @Autowired

@@ -5,6 +5,7 @@ import com.neobank.neobank.ledger.LedgerAccountRepository;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
 import com.neobank.neobank.shared.config.JpaAuditingConfig;
+import com.neobank.neobank.shared.config.TimeConfig;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
-@Import({MySqlTestContainerConfiguration.class, JpaAuditingConfig.class})
+@Import({MySqlTestContainerConfiguration.class, JpaAuditingConfig.class, TimeConfig.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class BankTransactionLockingIntegrationTest {
 
