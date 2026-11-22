@@ -102,7 +102,9 @@ public class CreditCardService {
                 referenceGenerator.generate(),
                 customer,
                 request.currency(),
-                creditAccountProperties.getDefaultCreditLimit(request.currency())
+                creditAccountProperties.getDefaultCreditLimit(request.currency()),
+                creditAccountProperties.getDefaultAnnualInterestRate(request.currency()),
+                LocalDate.now(clock)
         ));
 
         YearMonth currentYearMonth = YearMonth.now(clock);

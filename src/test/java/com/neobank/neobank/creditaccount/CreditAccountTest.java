@@ -11,6 +11,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,7 +32,9 @@ class CreditAccountTest {
                 LEDGER_REFERENCE,
                 customer,
                 CurrencyCode.TRY,
-                new BigDecimal("1000")
+                new BigDecimal("1000"),
+                new BigDecimal("0.2499"),
+                LocalDate.of(2026, 1, 15)
         );
 
         assertThat(creditAccount.getAccountNumber()).isEqualTo(ACCOUNT_NUMBER);
@@ -63,7 +66,9 @@ class CreditAccountTest {
                 LEDGER_REFERENCE,
                 customer,
                 CurrencyCode.TRY,
-                new BigDecimal("1000.00")
+                new BigDecimal("1000.00"),
+                new BigDecimal("0.2499"),
+                LocalDate.of(2026, 1, 15)
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Account number must be exactly 14 numeric characters");
@@ -76,7 +81,9 @@ class CreditAccountTest {
                 LEDGER_REFERENCE,
                 null,
                 CurrencyCode.TRY,
-                new BigDecimal("1000.00")
+                new BigDecimal("1000.00"),
+                new BigDecimal("0.2499"),
+                LocalDate.of(2026, 1, 15)
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Customer cannot be null");
@@ -89,7 +96,9 @@ class CreditAccountTest {
                 "not-a-reference",
                 customer,
                 CurrencyCode.TRY,
-                new BigDecimal("1000.00")
+                new BigDecimal("1000.00"),
+                new BigDecimal("0.2499"),
+                LocalDate.of(2026, 1, 15)
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Ledger reference must be exactly 32 hexadecimal characters");
@@ -102,7 +111,9 @@ class CreditAccountTest {
                 LEDGER_REFERENCE,
                 customer,
                 null,
-                new BigDecimal("1000.00")
+                new BigDecimal("1000.00"),
+                new BigDecimal("0.2499"),
+                LocalDate.of(2026, 1, 15)
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Currency cannot be null");
@@ -197,6 +208,73 @@ class CreditAccountTest {
         return Stream.of(null, "", "1234567890123", "123456789012345", "1234567890123a");
     }
 
+    @Test
+    void createNewNormalizesAnnualInterestRate() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("0.25"), LocalDate.of(2026, 1, 15));
+
+        assertThat(creditAccount.getAnnualInterestRate()).isEqualTo(new BigDecimal("0.2500"));
+    }
+
+    @Test
+    void createNewAcceptsZeroAnnualInterestRate() {
+        CreditAccount creditAccount = creditAccount(BigDecimal.ZERO, LocalDate.of(2026, 1, 15));
+
+        assertThat(creditAccount.getAnnualInterestRate()).isEqualTo(new BigDecimal("0.0000"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidAnnualInterestRates")
+    void createNewRejectsInvalidAnnualInterestRate(BigDecimal annualInterestRate, String message) {
+        assertThatThrownBy(() -> creditAccount(annualInterestRate, LocalDate.of(2026, 1, 15)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(message);
+    }
+
+    @Test
+    void createNewRejectsNullOpeningDate() {
+        assertThatThrownBy(() -> creditAccount(new BigDecimal("0.2499"), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Opening date cannot be null");
+    }
+
+    @ParameterizedTest
+    @MethodSource("firstStatementDates")
+    void createNewSetsFirstStatementDateOneMonthAfterOpeningCappedAtDay28(LocalDate openedOn, LocalDate expectedStatementDate) {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("0.2499"), openedOn);
+
+        assertThat(creditAccount.getNextStatementDate()).isEqualTo(expectedStatementDate);
+    }
+
+    @Test
+    void advanceStatementDateMovesOneMonthAndKeepsTheDay() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("0.2499"), LocalDate.of(2026, 1, 31));
+
+        creditAccount.advanceStatementDate();
+        creditAccount.advanceStatementDate();
+
+        assertThat(creditAccount.getNextStatementDate()).isEqualTo(LocalDate.of(2026, 4, 28));
+    }
+
+    private static Stream<Arguments> invalidAnnualInterestRates() {
+        return Stream.of(
+                Arguments.of(null, "Annual interest rate cannot be null"),
+                Arguments.of(new BigDecimal("-0.0001"), "Annual interest rate must be at least 0 and less than 1"),
+                Arguments.of(BigDecimal.ONE, "Annual interest rate must be at least 0 and less than 1"),
+                Arguments.of(new BigDecimal("0.12345"), "Annual interest rate must not have more than 4 decimal places")
+        );
+    }
+
+    private static Stream<Arguments> firstStatementDates() {
+        return Stream.of(
+                Arguments.of(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1)),
+                Arguments.of(LocalDate.of(2026, 1, 15), LocalDate.of(2026, 2, 15)),
+                Arguments.of(LocalDate.of(2026, 1, 28), LocalDate.of(2026, 2, 28)),
+                Arguments.of(LocalDate.of(2026, 1, 29), LocalDate.of(2026, 2, 28)),
+                Arguments.of(LocalDate.of(2026, 1, 31), LocalDate.of(2026, 2, 28)),
+                Arguments.of(LocalDate.of(2026, 12, 20), LocalDate.of(2027, 1, 20))
+        );
+    }
+
     private static Stream<Arguments> invalidCreditLimits() {
         return Stream.of(
                 Arguments.of(null, "Credit limit cannot be null"),
@@ -207,6 +285,18 @@ class CreditAccountTest {
     }
 
     private CreditAccount creditAccount(BigDecimal creditLimit) {
-        return CreditAccount.createNew(ACCOUNT_NUMBER, LEDGER_REFERENCE, customer, CurrencyCode.TRY, creditLimit);
+        return CreditAccount.createNew(ACCOUNT_NUMBER, LEDGER_REFERENCE, customer, CurrencyCode.TRY, creditLimit, new BigDecimal("0.2499"), LocalDate.of(2026, 1, 15));
+    }
+
+    private CreditAccount creditAccount(BigDecimal annualInterestRate, LocalDate openedOn) {
+        return CreditAccount.createNew(
+                ACCOUNT_NUMBER,
+                LEDGER_REFERENCE,
+                customer,
+                CurrencyCode.TRY,
+                new BigDecimal("1000.00"),
+                annualInterestRate,
+                openedOn
+        );
     }
 }

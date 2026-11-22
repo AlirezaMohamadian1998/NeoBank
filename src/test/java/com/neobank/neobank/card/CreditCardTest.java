@@ -7,6 +7,7 @@ import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.YearMonth;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,6 +78,6 @@ class CreditCardTest {
     }
 
     private CreditAccount createCreditAccount() {
-        return CreditAccount.createNew("55".repeat(7), "5".repeat(32), customer, CurrencyCode.TRY, new BigDecimal("1000.00"));
+        return CreditAccount.createNew("55".repeat(7), "5".repeat(32), customer, CurrencyCode.TRY, new BigDecimal("1000.00"), new BigDecimal("0.2499"), LocalDate.of(2026, 1, 15));
     }
 }

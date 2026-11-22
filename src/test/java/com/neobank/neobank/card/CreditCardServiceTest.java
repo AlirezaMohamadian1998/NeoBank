@@ -80,12 +80,28 @@ class CreditCardServiceTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-09-23T12:00:00Z"), Clock.systemUTC().getZone());
 
-    private final CreditAccountProperties creditAccountProperties = new CreditAccountProperties(Map.of(
-            CurrencyCode.USD, new BigDecimal("5000.00"),
-            CurrencyCode.EUR, new BigDecimal("5000.00"),
-            CurrencyCode.GBP, new BigDecimal("5000.00"),
-            CurrencyCode.TRY, new BigDecimal("150000.00")
-    ));
+    private final CreditAccountProperties creditAccountProperties = new CreditAccountProperties(
+            Map.of(
+                    CurrencyCode.USD, new BigDecimal("5000.00"),
+                    CurrencyCode.EUR, new BigDecimal("5000.00"),
+                    CurrencyCode.GBP, new BigDecimal("5000.00"),
+                    CurrencyCode.TRY, new BigDecimal("150000.00")
+            ),
+            Map.of(
+                    CurrencyCode.USD, new BigDecimal("0.2499"),
+                    CurrencyCode.EUR, new BigDecimal("0.2499"),
+                    CurrencyCode.GBP, new BigDecimal("0.2499"),
+                    CurrencyCode.TRY, new BigDecimal("0.5100")
+            ),
+            Map.of(
+                    CurrencyCode.USD, new BigDecimal("25.00"),
+                    CurrencyCode.EUR, new BigDecimal("25.00"),
+                    CurrencyCode.GBP, new BigDecimal("25.00"),
+                    CurrencyCode.TRY, new BigDecimal("750.00")
+            ),
+            new BigDecimal("0.03"),
+            25
+    );
 
     private final Customer customer = Customer.createNew(EMAIL, "{bcrypt}encoded-password", "Ada Lovelace");
 
@@ -142,6 +158,8 @@ class CreditCardServiceTest {
         assertThat(creditAccount.getAccountNumber()).isEqualTo("55".repeat(7));
         assertThat(creditAccount.getCustomer()).isSameAs(customer);
         assertThat(creditAccount.getCreditLimit()).isEqualByComparingTo("5000.00");
+        assertThat(creditAccount.getAnnualInterestRate()).isEqualByComparingTo("0.2499");
+        assertThat(creditAccount.getNextStatementDate()).isEqualTo(LocalDate.of(2026, 10, 23));
         assertThat(creditAccount.getLedgerAccount().getLedgerReference()).isEqualTo("5".repeat(32));
         assertThat(creditAccount.getLedgerAccount().getType()).isEqualTo(LedgerAccountType.ASSET);
         assertThat(creditAccount.getCurrency()).isEqualTo(CurrencyCode.USD);
@@ -288,7 +306,9 @@ class CreditCardServiceTest {
                 "5".repeat(32),
                 customer,
                 CurrencyCode.TRY,
-                new BigDecimal("1000.00")
+                new BigDecimal("1000.00"),
+                new BigDecimal("0.2499"),
+                LocalDate.of(2026, 1, 15)
         );
 
         YearMonth now = YearMonth.now(clock);

@@ -1581,7 +1581,9 @@ class CardPaymentServiceTest {
                 "5".repeat(32),
                 customer,
                 CurrencyCode.TRY,
-                creditLimit
+                creditLimit,
+                new BigDecimal("0.2499"),
+                LocalDate.of(2026, 1, 15)
         );
 
         ReflectionTestUtils.setField(creditAccount.getLedgerAccount(), "id", ledgerAccountId);

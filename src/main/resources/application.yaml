@@ -65,3 +65,15 @@ credit-account:
     EUR: 5000.00
     GBP: 5000.00
     TRY: 150000.00
+  default-annual-interest-rates:
+    USD: 0.2499
+    EUR: 0.2499
+    GBP: 0.2499
+    TRY: 0.5100
+  minimum-payment-floors:
+    USD: 25.00
+    EUR: 25.00
+    GBP: 25.00
+    TRY: 750.00
+  minimum-payment-percent: 0.03
+  payment-due-days: 25
