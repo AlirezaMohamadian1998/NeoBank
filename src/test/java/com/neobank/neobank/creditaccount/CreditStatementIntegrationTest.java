@@ -209,6 +209,12 @@ class CreditStatementIntegrationTest extends TransactionIntegrationTestSupport {
     }
 
     @Test
+    void accountIsDueOnItsStatementDate() {
+        assertThat(creditAccountRepository.findIdsWithStatementDueBy(LocalDate.of(2026, 2, 14))).doesNotContain(creditAccount.getId());
+        assertThat(creditAccountRepository.findIdsWithStatementDueBy(LocalDate.of(2026, 2, 15))).contains(creditAccount.getId());
+    }
+
+    @Test
     void closingTwiceCreatesOneStatement() {
         purchase("600.00", "2026-01-20T10:00:00Z");
 
