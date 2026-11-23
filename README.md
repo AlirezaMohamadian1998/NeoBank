@@ -14,7 +14,7 @@ NeoBank is a work-in-progress banking backend built as a personal portfolio proj
 - Monthly credit card statements with a minimum payment and interest on the average daily balance, with a grace period, closed by a daily scheduled job
 - Full refunds of card purchases by the merchant account's owner, at current FX rates for cross-currency purchases
 - Per-transaction and daily card spending limits, with bank defaults and maximums per currency that customers can adjust
-- Paginated and filterable transaction history
+- Paginated and filterable transaction history for current accounts, credit cards, and single cards, plus the lines of each credit card statement
 - Double-entry ledger postings with internal settlement accounts
 - Idempotent money-movement and card requests
 - Optimistic concurrency control with automatic retries and transactional rollback guarantees, plus a pessimistic lock so a purchase can be refunded only once
@@ -40,6 +40,7 @@ NeoBank is a Spring Boot monolith organized by feature.
 - A daily scheduled job closes credit card statements. Each credit account is closed in its own transaction under a pessimistic row lock, and a unique constraint on the account and statement date backs it up, so several application instances can run the job at once without creating a statement twice.
 - Interest is a `CREDIT_CARD_INTEREST` transaction that debits the credit account and credits an internal interest income account, a new `INCOME` ledger type.
 - Audit timestamps come from the application's `Clock` bean, so tests can move time.
+- Every transaction list is a page of ledger entries mapped to the same row types, so a purchase, refund, or repayment looks the same whichever list it appears in. Card details for purchase and refund rows are loaded with one query per page for each.
 
 ## Technology stack
 
@@ -91,7 +92,7 @@ On Windows, use `mvnw.cmd` instead of `bash mvnw`.
 | Deposits | `POST /api/accounts/{accountNumber}/deposits` |
 | Withdrawals | `POST /api/accounts/{accountNumber}/withdrawals` |
 | Transfers | `POST /api/accounts/{accountNumber}/transfers` |
-| Transaction history | `GET /api/transactions` |
+| Transaction history | `GET /api/transactions`, `GET /api/credit-cards/{cardReference}/transactions`, `GET /api/cards/{cardReference}/transactions` |
 | FX rate locks | `POST /api/fx/rate-locks?base=USD` |
 | Debit cards | `POST /api/debit-cards/{accountNumber}`, `GET /api/debit-cards`, `GET /api/debit-cards/{cardReference}` |
 | Credit cards | `POST /api/credit-cards`, `GET /api/credit-cards`, `GET /api/credit-cards/{cardReference}` |
@@ -100,11 +101,11 @@ On Windows, use `mvnw.cmd` instead of `bash mvnw`.
 | Card purchases | `POST /api/cards/{cardReference}/payments` |
 | Card refunds | `POST /api/accounts/{merchantAccountNumber}/card-refunds/{purchaseReference}` |
 | Credit card repayments | `POST /api/credit-cards/{cardReference}/repayments` |
-| Credit card statements | `GET /api/credit-cards/{cardReference}/statements`, `GET /api/credit-cards/{cardReference}/statements/{statementReference}` |
+| Credit card statements | `GET /api/credit-cards/{cardReference}/statements`, `GET /api/credit-cards/{cardReference}/statements/{statementReference}`, `GET /api/credit-cards/{cardReference}/statements/{statementReference}/lines` |
 
 Protected endpoints require a bearer token. Money-movement, card issuance, card purchase, card refund, and credit card repayment requests require an `Idempotency-Key` header. Cross-currency deposits, withdrawals, transfers, and credit card repayments can reference an FX rate lock, which expires after five minutes.
 
-Every transaction-history row includes the `transactionReference` of the movement it belongs to. Merchants use it as the `purchaseReference` when refunding, and a cardholder's refund row carries the `purchaseReference` of the purchase it reverses.
+Every row in a transaction list includes the `transactionReference` of the movement it belongs to. Merchants use it as the `purchaseReference` when refunding, and a cardholder's refund row carries the `purchaseReference` of the purchase it reverses.
 
 ### Accounts
 
@@ -166,7 +167,7 @@ New cards start as `INACTIVE`. `PATCH /api/debit-cards/{cardReference}/status/{s
 - `POST /api/credit-cards/{cardReference}/repayments` moves money from one of the customer's current accounts to the credit account. The `amount` is in the card's currency. It works whatever the card's status.
 - If the current account is in another currency, the request must include an FX rate lock whose base is the card's currency, and the account is debited the converted amount. A lock sent for a same-currency repayment is rejected.
 - A repayment larger than the outstanding balance is rejected with `409 Conflict`, as is one larger than the current account's balance.
-- Repayments appear in the current account's transaction history as `CREDIT_CARD_REPAYMENT`.
+- Repayments appear as `CREDIT_CARD_REPAYMENT` in both the current account's history and the credit card's transactions.
 
 ### Credit card statements
 
@@ -185,6 +186,8 @@ New cards start as `INACTIVE`. `PATCH /api/debit-cards/{cardReference}/status/{s
 - **Interest can take the balance over the credit limit.**
 - **Minimum payment** = 3% of the closing balance (`minimum-payment-percent`), at least the currency's floor (`minimum-payment-floors`, for example 25 USD), and at most the closing balance. It's 0 when the closing balance is 0 or less.
 - A statement shows the period, statement date, due date, opening and closing balance, average daily balance, interest charged, minimum payment, and currency. `GET /api/credit-cards/{cardReference}/statements` lists them newest first, with pagination.
+- **Lines.** `GET /api/credit-cards/{cardReference}/statements/{statementReference}/lines` lists the movements of the cycle, oldest first, with pagination: purchases, refunds, repayments, and the statement's own interest charge as the last line. The opening balance plus the lines always equals the closing balance.
+- A statement's interest is posted just after its statement date (when the job runs), so by date it falls in the next cycle. The lines put it on the statement that charged it, and leave the previous statement's interest out.
 
 #### Worked example
 
@@ -239,11 +242,30 @@ How statement 3 is closed on April 15:
 9. **Minimum payment:** 3% of 6.28 is 0.19, raised to the 25 floor, then capped at the closing balance: 6.28.
 10. **Due date:** Apr 15 + 25 days = May 10. **Next statement date:** May 15.
 
+#### Statement lines
+
+The lines of statements 2 and 3 from the example:
+
+| Statement | Opening | Lines | Closing |
+|---|---|---|---|
+| Statement 2 (Feb 15 – Mar 15) | 600.00 | `CREDIT_CARD_INTEREST` 11.50 DEBIT (posted Mar 15) | 611.50 |
+| Statement 3 (Mar 15 – Apr 15) | 611.50 | `CREDIT_CARD_REPAYMENT` 611.50 CREDIT (Mar 30), `CREDIT_CARD_INTEREST` 6.28 DEBIT (posted Apr 15) | 6.28 |
+
+On the credit account, DEBIT raises what the customer owes and CREDIT lowers it. The 11.50 posted on Mar 15 falls inside statement 3's period by date, but it belongs to statement 2, so it is listed only there.
+
 ### Transaction history
 
-- `GET /api/transactions` returns a page of ledger entries for one of the customer's accounts (`accountNumber`), or for all of them.
-- Filters: `type`, `requestedCurrency`, `dateFrom` and `dateTo`, and `appliedMin` and `appliedMax`.
-- Results are newest first by default. They can be sorted by `createdAt` or `appliedAmount`, one field at a time.
+| Endpoint | Lists | Filters |
+|---|---|---|
+| `GET /api/transactions` | The customer's current and savings accounts, or one of them: deposits, withdrawals, transfers, debit card purchases and refunds, and credit card repayments from the account | `accountNumber`, `type`, `requestedCurrency`, `dateFrom`/`dateTo`, `appliedMin`/`appliedMax` |
+| `GET /api/credit-cards/{cardReference}/transactions` | The whole credit account, for any period including the open cycle: purchases, refunds, repayments, and interest | `type`, `dateFrom`/`dateTo` |
+| `GET /api/cards/{cardReference}/transactions` | Purchases and refunds made with one card, debit or credit. Other cards on the same account and other movements are left out | `dateFrom`/`dateTo` |
+| `GET /api/credit-cards/{cardReference}/statements/{statementReference}/lines` | One closed statement, see [Credit card statements](#credit-card-statements) | none |
+
+- Results are paginated. They are newest first by default, except statement lines, which are oldest first.
+- They can be sorted by `createdAt` or `appliedAmount`, one field at a time. Rows with the same value are ordered by their ID in the same direction.
+- `dateFrom` is inclusive and `dateTo` exclusive.
+- A card that doesn't exist or belongs to another customer gives `404 Not Found`.
 
 ### Card spending limits
 
@@ -265,14 +287,13 @@ How statement 3 is closed on April 15:
 - A purchase already in progress uses the limits it read. A limit change made at the same moment applies from the next purchase.
 - A missed minimum payment has no late fee and doesn't change the account; it only leaves the grace period off.
 - Interest is posted when the job closes the cycle. If the job was down, the catch-up posts it late, though the amounts are the same.
-- Statements show totals only, without the transactions of the cycle.
 - The interest rate is the bank default per currency and can't be changed per account.
 - A credit balance can only be used up by later purchases; it can't be paid out to a current account. Repaying more than the outstanding balance is rejected rather than turned into a credit balance.
 - Each credit card has its own credit account. Supplementary cards on a shared credit account are not supported, and a credit account can't be closed through the API.
 
 ## Tests
 
-The test suite includes domain and service tests, controller tests, REST-client tests, and MySQL integration tests for rollback, idempotency, and concurrent money movement, card purchases, card refunds, card spending limits, credit limits, credit card repayments, and credit card statements, including concurrent closings of the same statement.
+The test suite includes domain and service tests, controller tests, REST-client tests, and MySQL integration tests for rollback, idempotency, and concurrent money movement, card purchases, card refunds, card spending limits, credit limits, credit card repayments, credit card statements (including concurrent closings of the same statement), and the transaction lists.
 
 ```bash
 bash mvnw test
