@@ -1,8 +1,13 @@
 package com.neobank.neobank.transaction.history;
 
+import com.neobank.neobank.card.CardPurchaseDetails;
+import com.neobank.neobank.card.CardRefundDetails;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.TransactionType;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
@@ -14,6 +19,26 @@ public class LedgerEntrySpecifications {
     public static Specification<LedgerEntry> belongsToAccount(List<Long> ledgerAccountId) {
         return (root, query, cb) ->
                 root.get("ledgerAccount").get("id").in(ledgerAccountId);
+    }
+
+    public static Specification<LedgerEntry> madeWithCard(String cardReference) {
+        return (root, query, cb) -> {
+            Subquery<Long> purchaseTransactionIds = query.subquery(Long.class);
+            Root<CardPurchaseDetails> purchase = purchaseTransactionIds.from(CardPurchaseDetails.class);
+            purchaseTransactionIds
+                    .select(purchase.get("bankTransaction").get("id"))
+                    .where(cb.equal(purchase.get("cardReference"), cardReference));
+
+            Subquery<Long> refundTransactionIds = query.subquery(Long.class);
+            Root<CardRefundDetails> refund = refundTransactionIds.from(CardRefundDetails.class);
+            refundTransactionIds
+                    .select(refund.get("bankTransaction").get("id"))
+                    .where(cb.equal(refund.get("cardPurchaseDetails").get("cardReference"), cardReference));
+
+            Path<Long> transactionId = root.get("bankTransaction").get("id");
+
+            return cb.or(transactionId.in(purchaseTransactionIds), transactionId.in(refundTransactionIds));
+        };
     }
 
     public static Specification<LedgerEntry> hasTransactionType(TransactionType type) {

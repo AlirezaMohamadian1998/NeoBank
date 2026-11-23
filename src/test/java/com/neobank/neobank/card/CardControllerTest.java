@@ -4,6 +4,7 @@ import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.auth.SecurityConfig;
 import com.neobank.neobank.card.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.dto.CardPurchaseResponse;
+import com.neobank.neobank.card.dto.CardTransactionFilter;
 import com.neobank.neobank.card.exception.CardExpiredException;
 import com.neobank.neobank.card.exception.CardNotActiveException;
 import com.neobank.neobank.card.exception.CardNotFoundException;
@@ -16,11 +17,15 @@ import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -31,6 +36,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -49,6 +57,9 @@ class CardControllerTest {
 
     @MockitoBean
     private CardPaymentService cardPaymentService;
+
+    @MockitoBean
+    private CardTransactionService cardTransactionService;
 
     @MockitoBean
     private JwtDecoder jwtDecoder;
@@ -255,6 +266,60 @@ class CardControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
 
         verifyNoInteractions(cardPaymentService);
+    }
+
+    @Test
+    void getTransactionsPassesFilterAndNewestFirstSortByDefault() throws Exception {
+        String cardReference = "2".repeat(32);
+        ArgumentCaptor<CardTransactionFilter> filterCaptor = ArgumentCaptor.forClass(CardTransactionFilter.class);
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+
+        given(cardTransactionService.getTransactions(any(), any(), any(), any())).willReturn(Page.empty());
+
+        mockMvc.perform(get("/api/cards/{cardReference}/transactions", cardReference)
+                        .param("dateFrom", "2026-08-01T00:00:00Z")
+                        .param("dateTo", "2026-09-01T00:00:00Z")
+                        .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(0));
+
+        verify(cardTransactionService).getTransactions(
+                eq(cardReference), filterCaptor.capture(), eq("customer@example.com"), pageableCaptor.capture());
+        assertThat(filterCaptor.getValue())
+                .isEqualTo(new CardTransactionFilter(Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-09-01T00:00:00Z")));
+        assertThat(pageableCaptor.getValue().getSort()).containsExactly(Sort.Order.desc("createdAt"));
+    }
+
+    @Test
+    void getTransactionsRejectsDateFromAfterDateTo() throws Exception {
+        mockMvc.perform(get("/api/cards/{cardReference}/transactions", "2".repeat(32))
+                        .param("dateFrom", "2026-09-01T00:00:00Z")
+                        .param("dateTo", "2026-08-01T00:00:00Z")
+                        .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(cardTransactionService);
+    }
+
+    @Test
+    void getTransactionsRejectsInvalidCardReference() throws Exception {
+        mockMvc.perform(get("/api/cards/{cardReference}/transactions", "Z".repeat(32))
+                        .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.cardReference").value("Card reference must be 32 hexadecimal characters"));
+
+        verifyNoInteractions(cardTransactionService);
+    }
+
+    @Test
+    void getTransactionsReturnsNotFoundProblem() throws Exception {
+        given(cardTransactionService.getTransactions(any(), any(), any(), any()))
+                .willThrow(new CardNotFoundException("Card not found"));
+
+        mockMvc.perform(get("/api/cards/{cardReference}/transactions", "2".repeat(32))
+                        .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Card not found"));
     }
 
     @ParameterizedTest

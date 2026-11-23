@@ -14,6 +14,7 @@ import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.creditaccount.CreditAccount;
 import com.neobank.neobank.creditaccount.CreditAccountProperties;
 import com.neobank.neobank.creditaccount.CreditAccountRepository;
+import com.neobank.neobank.creditaccount.CreditStatement;
 import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
 import com.neobank.neobank.creditaccount.CreditStatementRepository;
 import com.neobank.neobank.customer.Customer;
@@ -26,12 +27,22 @@ import com.neobank.neobank.idempotency.RequestHasher;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
+import com.neobank.neobank.transaction.BankTransaction;
+import com.neobank.neobank.transaction.LedgerEntry;
+import com.neobank.neobank.transaction.LedgerEntryRepository;
+import com.neobank.neobank.transaction.TransactionType;
+import com.neobank.neobank.transaction.history.TransactionHistoryItemAssembler;
+import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -62,6 +73,12 @@ class CreditCardServiceTest {
 
     @Mock
     private CreditStatementRepository creditStatementRepository;
+
+    @Mock
+    private LedgerEntryRepository ledgerEntryRepository;
+
+    @Mock
+    private TransactionHistoryItemAssembler transactionHistoryItemAssembler;
 
     @Mock
     private CustomerRepository customerRepository;
@@ -118,6 +135,8 @@ class CreditCardServiceTest {
                 creditCardRepository,
                 creditAccountRepository,
                 creditStatementRepository,
+                ledgerEntryRepository,
+                transactionHistoryItemAssembler,
                 customerRepository,
                 idempotencyService,
                 requestHasher,
@@ -321,6 +340,57 @@ class CreditCardServiceTest {
         assertThatThrownBy(() -> creditCardService.getStatement(creditCard.getCardReference(), statementReference, EMAIL))
                 .isInstanceOf(CreditStatementNotFoundException.class)
                 .hasMessage("Credit statement not found");
+    }
+
+    @Test
+    void getStatementLinesQueriesTheStatementWindowAndItsOwnInterest() {
+        CreditCard creditCard = createCreditCard();
+        String statementReference = "3".repeat(32);
+        BankTransaction interestTransaction = BankTransaction.createNew(
+                new BigDecimal("10.27"),
+                CurrencyCode.TRY,
+                TransactionType.CREDIT_CARD_INTEREST,
+                "4".repeat(32),
+                null
+        );
+        ReflectionTestUtils.setField(interestTransaction, "id", 42L);
+        CreditStatement statement = CreditStatement.createNew(
+                statementReference,
+                creditCard.getCreditAccount(),
+                LocalDate.of(2026, 8, 15),
+                LocalDate.of(2026, 9, 15),
+                LocalDate.of(2026, 10, 10),
+                new BigDecimal("600.00"),
+                new BigDecimal("510.27"),
+                new BigDecimal("535.71"),
+                new BigDecimal("10.27"),
+                new BigDecimal("25.00"),
+                interestTransaction
+        );
+        Page<LedgerEntry> entries = Page.empty();
+        Page<TransactionHistoryItem> items = Page.empty();
+
+        given(creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase(creditCard.getCardReference(), EMAIL))
+                .willReturn(Optional.of(creditCard));
+        given(creditStatementRepository.findByStatementReferenceAndCreditAccount(statementReference, creditCard.getCreditAccount()))
+                .willReturn(Optional.of(statement));
+        given(ledgerEntryRepository.findStatementLines(
+                creditCard.getCreditAccount().getLedgerAccount(),
+                Instant.parse("2026-08-15T00:00:00Z"),
+                Instant.parse("2026-09-15T00:00:00Z"),
+                42L,
+                PageRequest.of(0, 20, Sort.by(Sort.Order.asc("createdAt"), Sort.Order.asc("id")))
+        )).willReturn(entries);
+        given(transactionHistoryItemAssembler.toItems(eq(entries), any())).willReturn(items);
+
+        Page<TransactionHistoryItem> result = creditCardService.getStatementLines(
+                creditCard.getCardReference(),
+                statementReference,
+                EMAIL,
+                PageRequest.of(0, 20, Sort.by(Sort.Order.asc("createdAt")))
+        );
+
+        assertThat(result).isSameAs(items);
     }
 
     private CreditCard createCreditCard() {

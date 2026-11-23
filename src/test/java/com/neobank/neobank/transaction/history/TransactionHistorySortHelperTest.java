@@ -34,14 +34,14 @@ class TransactionHistorySortHelperTest {
             "appliedAmount, amount, ASC",
             "appliedAmount, amount, DESC"
     })
-    void mapsPublicFieldsAndPreservesDirection(String publicField, String entityField, Sort.Direction direction) {
+    void mapsPublicFieldsAndAppliesDirectionToIdTiebreak(String publicField, String entityField, Sort.Direction direction) {
         Pageable input = PageRequest.of(1, 20, Sort.by(direction, publicField));
 
         Pageable result = TransactionHistorySortHelper.normalize(input);
 
         assertThat(result.getPageNumber()).isEqualTo(1);
         assertThat(result.getPageSize()).isEqualTo(20);
-        assertThat(result.getSort()).containsExactly(new Sort.Order(direction, entityField), Sort.Order.desc("id"));
+        assertThat(result.getSort()).containsExactly(new Sort.Order(direction, entityField), new Sort.Order(direction, "id"));
     }
 
     @Test
@@ -87,6 +87,6 @@ class TransactionHistorySortHelperTest {
                 Pageable.unpaged(Sort.by(Sort.Order.asc("appliedAmount"))));
 
         assertThat(result.isUnpaged()).isTrue();
-        assertThat(result.getSort()).containsExactly(Sort.Order.asc("amount"), Sort.Order.desc("id"));
+        assertThat(result.getSort()).containsExactly(Sort.Order.asc("amount"), Sort.Order.asc("id"));
     }
 }

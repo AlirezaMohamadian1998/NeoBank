@@ -3,10 +3,6 @@ package com.neobank.neobank.transaction.history;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.card.CardPurchaseDetails;
-import com.neobank.neobank.card.CardPurchaseDetailsRepository;
-import com.neobank.neobank.card.CardRefundDetails;
-import com.neobank.neobank.card.CardRefundDetailsRepository;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.LedgerEntryRepository;
@@ -21,8 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -32,9 +26,7 @@ public class TransactionHistoryService {
 
     private final AccountRepository accountRepository;
 
-    private final CardPurchaseDetailsRepository cardPurchaseDetailsRepository;
-
-    private final CardRefundDetailsRepository cardRefundDetailsRepository;
+    private final TransactionHistoryItemAssembler transactionHistoryItemAssembler;
 
     @Transactional(readOnly = true)
     public Page<TransactionHistoryItem> getHistoryByAccount(
@@ -70,53 +62,18 @@ public class TransactionHistoryService {
 
         Page<LedgerEntry> entries = ledgerEntryRepository.findAll(spec, historyPageable);
 
-        List<Long> cardPurchaseTransactionIds = entries.stream()
-                .filter(TransactionHistoryMapper::isCardPurchasePayerEntry)
-                .map(entry -> entry.getBankTransaction().getId())
-                .toList();
-
-        Map<Long, CardPurchaseDetails> cardPurchaseDetailsByTransactionId =
-                cardPurchaseTransactionIds.isEmpty()
-                        ? Map.of()
-                        : cardPurchaseDetailsRepository.findAllByBankTransaction_IdIn(cardPurchaseTransactionIds)
-                        .stream()
-                        .collect(Collectors.toMap(
-                                details -> details.getBankTransaction().getId(),
-                                details -> details
-                        ));
-
-        List<Long> cardRefundTransactionIds = entries.stream()
-                .filter(TransactionHistoryMapper::isCardRefundReceiverEntry)
-                .map(entry -> entry.getBankTransaction().getId())
-                .toList();
-
-        Map<Long, CardRefundDetails> cardRefundDetailsByTransactionId =
-                cardRefundTransactionIds.isEmpty()
-                        ? Map.of()
-                        : cardRefundDetailsRepository.findAllByBankTransaction_IdIn(cardRefundTransactionIds)
-                        .stream()
-                        .collect(Collectors.toMap(
-                                details -> details.getBankTransaction().getId(),
-                                details -> details
-                        ));
-
-        return entries
-                .map(entry ->
-                        TransactionHistoryMapper.toResponse(
-                                entry,
-                                filter.accountNumber() != null
-                                        ? filter.accountNumber()
-                                        : accounts.stream()
-                                        .filter(acc ->
-                                                acc.getLedgerAccount().getId()
-                                                        .equals(entry.getLedgerAccount().getId())
-                                        )
-                                        .map(Account::getAccountNumber)
-                                        .findFirst()
-                                        .orElseThrow(),
-                                cardPurchaseDetailsByTransactionId,
-                                cardRefundDetailsByTransactionId
+        return transactionHistoryItemAssembler.toItems(
+                entries,
+                entry -> filter.accountNumber() != null
+                        ? filter.accountNumber()
+                        : accounts.stream()
+                        .filter(acc ->
+                                acc.getLedgerAccount().getId()
+                                        .equals(entry.getLedgerAccount().getId())
                         )
-                );
+                        .map(Account::getAccountNumber)
+                        .findFirst()
+                        .orElseThrow()
+        );
     }
 }

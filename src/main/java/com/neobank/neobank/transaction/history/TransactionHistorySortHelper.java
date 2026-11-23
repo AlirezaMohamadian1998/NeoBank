@@ -32,7 +32,7 @@ public final class TransactionHistorySortHelper {
             throw new InvalidHistorySortException("Ignore-case sorting is not supported for history.");
         }
 
-        Sort sort = Sort.by(order.withProperty(entityProperty), Sort.Order.desc("id"));
+        Sort sort = Sort.by(order.withProperty(entityProperty), new Sort.Order(order.getDirection(), "id"));
 
         return pageable.isPaged()
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort)

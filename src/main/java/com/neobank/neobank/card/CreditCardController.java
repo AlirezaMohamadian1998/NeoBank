@@ -6,11 +6,15 @@ import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
 import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
+import com.neobank.neobank.card.dto.CreditCardTransactionFilter;
 import com.neobank.neobank.card.dto.CreditStatementResponse;
+import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.PagedModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -90,6 +94,19 @@ public class CreditCardController {
                 .body(creditCardRepaymentService.repay(cardReference, request, idempotencyKey, jwt.getSubject()));
     }
 
+    @GetMapping("/{cardReference}/transactions")
+    public ResponseEntity<PagedModel<TransactionHistoryItem>> getTransactions(
+            @PathVariable
+            @Pattern(regexp = "[a-f0-9]{32}", message = "Card reference must be 32 hexadecimal characters")
+            String cardReference,
+            @Valid @ModelAttribute CreditCardTransactionFilter filter,
+            @AuthenticationPrincipal Jwt jwt,
+            @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return ResponseEntity.ok(new PagedModel<>(
+                creditCardService.getTransactions(cardReference, filter, jwt.getSubject(), pageable)));
+    }
+
     @GetMapping("/{cardReference}/statements")
     public ResponseEntity<PagedModel<CreditStatementResponse>> getStatements(
             @PathVariable
@@ -112,5 +129,20 @@ public class CreditCardController {
             @AuthenticationPrincipal Jwt jwt
     ) {
         return ResponseEntity.ok(creditCardService.getStatement(cardReference, statementReference, jwt.getSubject()));
+    }
+
+    @GetMapping("/{cardReference}/statements/{statementReference}/lines")
+    public ResponseEntity<PagedModel<TransactionHistoryItem>> getStatementLines(
+            @PathVariable
+            @Pattern(regexp = "[a-f0-9]{32}", message = "Card reference must be 32 hexadecimal characters")
+            String cardReference,
+            @PathVariable
+            @Pattern(regexp = "[a-f0-9]{32}", message = "Statement reference must be 32 hexadecimal characters")
+            String statementReference,
+            @AuthenticationPrincipal Jwt jwt,
+            @PageableDefault(sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable
+    ) {
+        return ResponseEntity.ok(new PagedModel<>(
+                creditCardService.getStatementLines(cardReference, statementReference, jwt.getSubject(), pageable)));
     }
 }
