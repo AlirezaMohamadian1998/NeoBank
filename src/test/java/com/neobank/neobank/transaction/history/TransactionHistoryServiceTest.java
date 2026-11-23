@@ -18,10 +18,10 @@ import com.neobank.neobank.transaction.history.dto.CardRefundHistoryResponse;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryFilter;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentMatchers;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.*;
@@ -56,8 +56,16 @@ class TransactionHistoryServiceTest {
     @Mock
     private CardRefundDetailsRepository cardRefundDetailsRepository;
 
-    @InjectMocks
     private TransactionHistoryService transactionHistoryService;
+
+    @BeforeEach
+    void setUp() {
+        transactionHistoryService = new TransactionHistoryService(
+                ledgerEntryRepository,
+                accountRepository,
+                new TransactionHistoryItemAssembler(cardPurchaseDetailsRepository, cardRefundDetailsRepository)
+        );
+    }
 
     @Test
     void historyResolvesRequestedAccountUsingCustomerEmail() {
