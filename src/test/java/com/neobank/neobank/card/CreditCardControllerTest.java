@@ -14,12 +14,17 @@ import com.neobank.neobank.card.exception.InvalidCreditCardRepaymentException;
 import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
 import com.neobank.neobank.creditaccount.RepaymentExceedsBalanceException;
 import com.neobank.neobank.shared.money.CurrencyCode;
+import com.neobank.neobank.transaction.EntryDirection;
+import com.neobank.neobank.transaction.TransactionType;
+import com.neobank.neobank.transaction.history.dto.TransactionHistoryResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -32,7 +37,9 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -323,6 +330,60 @@ class CreditCardControllerTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(creditCardService);
+    }
+
+    @Test
+    void getStatementLinesReturnsPagedLinesOldestFirstByDefault() throws Exception {
+        given(creditCardService.getStatementLines(any(String.class), any(String.class), any(String.class), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(statementLine())));
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements/{statementReference}/lines", CARD_REFERENCE, STATEMENT_REFERENCE)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].transactionType").value("CREDIT_CARD_REPAYMENT"))
+                .andExpect(jsonPath("$.content[0].direction").value("CREDIT"))
+                .andExpect(jsonPath("$.content[0].appliedAmount").value(400.00))
+                .andExpect(jsonPath("$.page.totalElements").value(1));
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(creditCardService).getStatementLines(eq(CARD_REFERENCE), eq(STATEMENT_REFERENCE), eq(EMAIL), pageableCaptor.capture());
+        assertThat(pageableCaptor.getValue().getSort()).containsExactly(Sort.Order.asc("createdAt"));
+    }
+
+    @Test
+    void getStatementLinesReturnsNotFoundProblem() throws Exception {
+        given(creditCardService.getStatementLines(any(String.class), any(String.class), any(String.class), any(Pageable.class)))
+                .willThrow(new CreditStatementNotFoundException("Credit statement not found"));
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements/{statementReference}/lines", CARD_REFERENCE, STATEMENT_REFERENCE)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Credit statement not found"));
+    }
+
+    @Test
+    void getStatementLinesRejectsInvalidStatementReference() throws Exception {
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements/{statementReference}/lines", CARD_REFERENCE, "not-a-reference")
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(creditCardService);
+    }
+
+    private static TransactionHistoryResponse statementLine() {
+        return new TransactionHistoryResponse(
+                "55".repeat(7),
+                "6".repeat(32),
+                "7".repeat(32),
+                TransactionType.CREDIT_CARD_REPAYMENT,
+                EntryDirection.CREDIT,
+                new BigDecimal("400.00"),
+                CurrencyCode.USD,
+                new BigDecimal("400.00"),
+                CurrencyCode.USD,
+                new BigDecimal("600.00"),
+                Instant.parse("2026-09-01T10:00:00Z")
+        );
     }
 
     private static CreditStatementResponse statementResponse() {

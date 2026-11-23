@@ -47,4 +47,21 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long>,
             @Param("from") Instant from,
             @Param("to") Instant to
     );
+
+    @EntityGraph(attributePaths = "bankTransaction")
+    @Query("""
+            select e from LedgerEntry e
+            where e.ledgerAccount = :ledgerAccount
+              and ((e.createdAt >= :from
+                    and e.createdAt < :to
+                    and e.bankTransaction.transactionType <> com.neobank.neobank.transaction.TransactionType.CREDIT_CARD_INTEREST)
+                   or e.bankTransaction.id = :interestTransactionId)
+            """)
+    Page<LedgerEntry> findStatementLines(
+            @Param("ledgerAccount") LedgerAccount ledgerAccount,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("interestTransactionId") Long interestTransactionId,
+            Pageable pageable
+    );
 }
