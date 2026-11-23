@@ -7,6 +7,8 @@ import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
 import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.creditaccount.CreditAccount;
+import com.neobank.neobank.creditaccount.CreditStatementService;
 import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.fx.ProviderRateCache;
@@ -35,6 +37,12 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
 
     @Autowired
     private FxRateService fxRateService;
+
+    @Autowired
+    private CreditCardRepository creditCardRepository;
+
+    @Autowired
+    private CreditStatementService creditStatementService;
 
     @Test
     void issuingTwiceWithSameIdempotencyKeyCreatesOneCreditCardAndAccount() throws Exception {
@@ -89,6 +97,63 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
                         .with(jwt().jwt(jwt -> jwt.subject("other@example.com"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Credit card not found"));
+    }
+
+    @Test
+    void ownerCanListAndGetTheStatementsOfTheirCard() throws Exception {
+        CreditCardIssueResponse issued = issueCreditCard(CurrencyCode.TRY, "1".repeat(32));
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements", issued.cardReference())
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(0));
+
+        CreditAccount creditAccount = generateFirstStatement(issued.cardReference());
+        String statementReference = creditStatementRepository.findAll().getFirst().getStatementReference();
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements", issued.cardReference())
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].statementReference").value(statementReference));
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements/{statementReference}", issued.cardReference(), statementReference)
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.statementDate").value(creditAccount.getNextStatementDate().toString()))
+                .andExpect(jsonPath("$.closingBalance").value(0.00))
+                .andExpect(jsonPath("$.interestCharged").value(0.00))
+                .andExpect(jsonPath("$.currency").value("TRY"));
+    }
+
+    @Test
+    void customerCannotSeeAnotherCustomersStatements() throws Exception {
+        CreditCardIssueResponse issued = issueCreditCard(CurrencyCode.TRY, "1".repeat(32));
+        generateFirstStatement(issued.cardReference());
+        String statementReference = creditStatementRepository.findAll().getFirst().getStatementReference();
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements", issued.cardReference())
+                        .with(jwt().jwt(jwt -> jwt.subject("other@example.com"))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Credit card not found"));
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements/{statementReference}", issued.cardReference(), statementReference)
+                        .with(jwt().jwt(jwt -> jwt.subject("other@example.com"))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Credit card not found"));
+    }
+
+    @Test
+    void statementOfAnotherCardIsNotFound() throws Exception {
+        CreditCardIssueResponse first = issueCreditCard(CurrencyCode.TRY, "1".repeat(32));
+        CreditCardIssueResponse second = issueCreditCard(CurrencyCode.TRY, "2".repeat(32));
+        generateFirstStatement(first.cardReference());
+        String statementReference = creditStatementRepository.findAll().getFirst().getStatementReference();
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements/{statementReference}", second.cardReference(), statementReference)
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Credit statement not found"));
     }
 
     @Test
@@ -284,6 +349,13 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
                 ))
                 .header("Idempotency-Key", idempotencyKey)
                 .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))));
+    }
+
+    private CreditAccount generateFirstStatement(String cardReference) {
+        CreditAccount creditAccount = creditCardRepository.findByCardReference(cardReference).orElseThrow().getCreditAccount();
+        creditStatementService.generateStatementsUpTo(creditAccount.getId(), creditAccount.getNextStatementDate());
+
+        return creditAccount;
     }
 
     private CreditCardIssueResponse issueCreditCard(CurrencyCode currency, String idempotencyKey) throws Exception {

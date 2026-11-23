@@ -4,6 +4,7 @@ import com.neobank.neobank.card.CardStatus;
 import com.neobank.neobank.shared.money.CurrencyCode;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.YearMonth;
 
 public record CreditCardRetrieveResponse(
@@ -15,6 +16,8 @@ public record CreditCardRetrieveResponse(
         BigDecimal creditLimit,
         BigDecimal balance,
         BigDecimal availableCredit,
+        BigDecimal annualInterestRate,
+        LocalDate nextStatementDate,
         CurrencyCode currency,
         CardSpendingLimitsResponse spendingLimits
 ) {

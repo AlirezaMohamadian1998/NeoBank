@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 
 @Entity
 @Getter
@@ -33,11 +34,26 @@ public class CreditAccount extends BaseEntity {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal creditLimit;
 
-    private CreditAccount(String accountNumber, Customer customer, LedgerAccount ledgerAccount, BigDecimal creditLimit) {
+    @Column(nullable = false, updatable = false, precision = 6, scale = 4)
+    private BigDecimal annualInterestRate;
+
+    @Column(nullable = false)
+    private LocalDate nextStatementDate;
+
+    private CreditAccount(
+            String accountNumber,
+            Customer customer,
+            LedgerAccount ledgerAccount,
+            BigDecimal creditLimit,
+            BigDecimal annualInterestRate,
+            LocalDate nextStatementDate
+    ) {
         this.accountNumber = accountNumber;
         this.customer = customer;
         this.ledgerAccount = ledgerAccount;
         this.creditLimit = creditLimit;
+        this.annualInterestRate = annualInterestRate;
+        this.nextStatementDate = nextStatementDate;
     }
 
     public static CreditAccount createNew(
@@ -45,7 +61,9 @@ public class CreditAccount extends BaseEntity {
             String ledgerReference,
             Customer customer,
             CurrencyCode currency,
-            BigDecimal creditLimit
+            BigDecimal creditLimit,
+            BigDecimal annualInterestRate,
+            LocalDate openedOn
     ) {
         if(accountNumber == null || !accountNumber.matches("[0-9]{14}")) {
             throw new IllegalArgumentException("Account number must be exactly 14 numeric characters");
@@ -67,6 +85,22 @@ public class CreditAccount extends BaseEntity {
             throw new IllegalArgumentException("Credit limit must not have more than 2 decimal places");
         }
 
+        if(annualInterestRate == null) {
+            throw new IllegalArgumentException("Annual interest rate cannot be null");
+        }
+
+        if(annualInterestRate.compareTo(BigDecimal.ZERO) < 0 || annualInterestRate.compareTo(BigDecimal.ONE) >= 0) {
+            throw new IllegalArgumentException("Annual interest rate must be at least 0 and less than 1");
+        }
+
+        if(annualInterestRate.stripTrailingZeros().scale() > 4) {
+            throw new IllegalArgumentException("Annual interest rate must not have more than 4 decimal places");
+        }
+
+        if(openedOn == null) {
+            throw new IllegalArgumentException("Opening date cannot be null");
+        }
+
         LedgerAccount ledgerAccount = LedgerAccount.createNewWithNegativeBalanceAllowed(
                 ledgerReference,
                 LedgerAccountType.ASSET,
@@ -77,8 +111,14 @@ public class CreditAccount extends BaseEntity {
                 accountNumber,
                 customer,
                 ledgerAccount,
-                creditLimit.setScale(2, RoundingMode.UNNECESSARY)
+                creditLimit.setScale(2, RoundingMode.UNNECESSARY),
+                annualInterestRate.setScale(4, RoundingMode.UNNECESSARY),
+                openedOn.withDayOfMonth(Math.min(openedOn.getDayOfMonth(), 28)).plusMonths(1)
         );
+    }
+
+    public void advanceStatementDate() {
+        nextStatementDate = nextStatementDate.plusMonths(1);
     }
 
     public CurrencyCode getCurrency() {

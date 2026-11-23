@@ -37,6 +37,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.util.Map;
@@ -341,7 +342,9 @@ class CreditCardRepaymentServiceTest {
                 "5".repeat(32),
                 customer,
                 currency,
-                new BigDecimal("1000.00")
+                new BigDecimal("1000.00"),
+                new BigDecimal("0.2499"),
+                LocalDate.of(2026, 1, 15)
         );
 
         creditAccount.getLedgerAccount().debit(new BigDecimal(owed));

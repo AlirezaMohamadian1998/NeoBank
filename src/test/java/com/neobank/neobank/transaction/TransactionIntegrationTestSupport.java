@@ -9,6 +9,7 @@ import com.neobank.neobank.card.CardRefundDetailsRepository;
 import com.neobank.neobank.card.CardRepository;
 import com.neobank.neobank.card.DebitCardRepository;
 import com.neobank.neobank.creditaccount.CreditAccountRepository;
+import com.neobank.neobank.creditaccount.CreditStatementRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerRepository;
 import com.neobank.neobank.idempotency.IdempotencyRecordRepository;
@@ -59,6 +60,9 @@ public abstract class TransactionIntegrationTestSupport {
     protected CreditAccountRepository creditAccountRepository;
 
     @Autowired
+    protected CreditStatementRepository creditStatementRepository;
+
+    @Autowired
     protected CardDailySpendRepository cardDailySpendRepository;
 
     @Autowired
@@ -75,6 +79,7 @@ public abstract class TransactionIntegrationTestSupport {
     @BeforeEach
     protected void setUpTransactionIntegrationFixture() {
         idempotencyRecordRepository.deleteAll();
+        creditStatementRepository.deleteAll();
         cardRefundDetailsRepository.deleteAll();
         cardPurchaseDetailsRepository.deleteAll();
         cardDailySpendRepository.deleteAll();

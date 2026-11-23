@@ -484,4 +484,56 @@ class LedgerAccountTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Ledger account cannot be closed with a non-zero balance");
     }
+
+    @Test
+    void incomeCreditIncreasesBalance() {
+        LedgerAccount incomeAccount = LedgerAccount.createNew(
+                "33333333333333333333333333333333",
+                LedgerAccountType.INCOME,
+                CurrencyCode.TRY
+        );
+
+        BigDecimal result = incomeAccount.credit(new BigDecimal("12.34"));
+
+        assertThat(incomeAccount.getBalance())
+                .isEqualByComparingTo(new BigDecimal("12.34"));
+
+        assertThat(result)
+                .isEqualByComparingTo(new BigDecimal("12.34"));
+    }
+
+    @Test
+    void incomeDebitDecreasesBalance() {
+        LedgerAccount incomeAccount = LedgerAccount.createNew(
+                "44444444444444444444444444444444",
+                LedgerAccountType.INCOME,
+                CurrencyCode.TRY
+        );
+
+        incomeAccount.credit(new BigDecimal("100.00"));
+        BigDecimal result = incomeAccount.debit(new BigDecimal("40.00"));
+
+        assertThat(incomeAccount.getBalance())
+                .isEqualByComparingTo(new BigDecimal("60.00"));
+
+        assertThat(result)
+                .isEqualByComparingTo(new BigDecimal("60.00"));
+    }
+
+    @Test
+    void incomeDebitBelowZeroThrowsAndLeavesBalanceUnchanged() {
+        LedgerAccount incomeAccount = LedgerAccount.createNew(
+                "55555555555555555555555555555555",
+                LedgerAccountType.INCOME,
+                CurrencyCode.TRY
+        );
+
+        incomeAccount.credit(new BigDecimal("10.00"));
+
+        assertThatThrownBy(() -> incomeAccount.debit(new BigDecimal("10.01")))
+                .isInstanceOf(InsufficientFundsException.class);
+
+        assertThat(incomeAccount.getBalance())
+                .isEqualByComparingTo(new BigDecimal("10.00"));
+    }
 }

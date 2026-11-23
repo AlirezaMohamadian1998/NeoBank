@@ -5,6 +5,7 @@ import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
+import com.neobank.neobank.card.dto.CreditStatementResponse;
 import com.neobank.neobank.card.exception.CreditCardNotFoundException;
 import com.neobank.neobank.card.issuing.CardIssuer;
 import com.neobank.neobank.card.issuing.IssuedCard;
@@ -12,6 +13,8 @@ import com.neobank.neobank.card.limit.CardLimitProperties;
 import com.neobank.neobank.creditaccount.CreditAccount;
 import com.neobank.neobank.creditaccount.CreditAccountProperties;
 import com.neobank.neobank.creditaccount.CreditAccountRepository;
+import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
+import com.neobank.neobank.creditaccount.CreditStatementRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.CustomerRepository;
@@ -39,6 +42,8 @@ public class CreditCardService {
     private final CreditCardRepository creditCardRepository;
 
     private final CreditAccountRepository creditAccountRepository;
+
+    private final CreditStatementRepository creditStatementRepository;
 
     private final CustomerRepository customerRepository;
 
@@ -102,7 +107,9 @@ public class CreditCardService {
                 referenceGenerator.generate(),
                 customer,
                 request.currency(),
-                creditAccountProperties.getDefaultCreditLimit(request.currency())
+                creditAccountProperties.getDefaultCreditLimit(request.currency()),
+                creditAccountProperties.getDefaultAnnualInterestRate(request.currency()),
+                LocalDate.now(clock)
         ));
 
         YearMonth currentYearMonth = YearMonth.now(clock);
@@ -174,6 +181,23 @@ public class CreditCardService {
         BigDecimal spentToday = cardDailySpendService.getAmountSpent(savedCreditCard, LocalDate.now(clock));
 
         return CreditCardMapper.toRetrieveResponse(savedCreditCard, spentToday);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CreditStatementResponse> getStatements(String cardReference, String email, Pageable pageable) {
+        CreditAccount creditAccount = findOwnedCreditCard(cardReference, email).getCreditAccount();
+
+        return creditStatementRepository.findByCreditAccountOrderByStatementDateDesc(creditAccount, pageable)
+                .map(CreditCardMapper::toStatementResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public CreditStatementResponse getStatement(String cardReference, String statementReference, String email) {
+        CreditAccount creditAccount = findOwnedCreditCard(cardReference, email).getCreditAccount();
+
+        return creditStatementRepository.findByStatementReferenceAndCreditAccount(statementReference, creditAccount)
+                .map(CreditCardMapper::toStatementResponse)
+                .orElseThrow(() -> new CreditStatementNotFoundException("Credit statement not found"));
     }
 
     private CreditCard findOwnedCreditCard(String cardReference, String email) {

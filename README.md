@@ -11,6 +11,7 @@ NeoBank is a work-in-progress banking backend built as a personal portfolio proj
 - Debit and credit card issuance, retrieval, and lifecycle management (activate, freeze, block, close)
 - Card purchases at internal merchants and external merchants through settlement accounts, through one endpoint for both card types
 - Credit cards backed by a credit account with a credit limit, repayments from current accounts (cross-currency with an FX rate lock), and credit balances after refunds
+- Monthly credit card statements with a minimum payment and interest on the average daily balance, with a grace period, closed by a daily scheduled job
 - Full refunds of card purchases by the merchant account's owner, at current FX rates for cross-currency purchases
 - Per-transaction and daily card spending limits, with bank defaults and maximums per currency that customers can adjust
 - Paginated and filterable transaction history
@@ -36,6 +37,9 @@ NeoBank is a Spring Boot monolith organized by feature.
 - A credit account owns an `ASSET` ledger account: the bank is owed what the customer spends. That ledger account is flagged to allow a negative balance, which is how a credit balance is stored; every other ledger account still rejects one.
 - Card spending limits live on the card, while daily usage is a separate running total per card and day. That total uses `@Version` and the same retries as ledger accounts, so concurrent purchases can't exceed the daily limit.
 - FX provider responses are validated, cached with Caffeine, and normalized to the requested base currency.
+- A daily scheduled job closes credit card statements. Each credit account is closed in its own transaction under a pessimistic row lock, and a unique constraint on the account and statement date backs it up, so several application instances can run the job at once without creating a statement twice.
+- Interest is a `CREDIT_CARD_INTEREST` transaction that debits the credit account and credits an internal interest income account, a new `INCOME` ledger type.
+- Audit timestamps come from the application's `Clock` bean, so tests can move time.
 
 ## Technology stack
 
@@ -96,6 +100,7 @@ On Windows, use `mvnw.cmd` instead of `bash mvnw`.
 | Card purchases | `POST /api/cards/{cardReference}/payments` |
 | Card refunds | `POST /api/accounts/{merchantAccountNumber}/card-refunds/{purchaseReference}` |
 | Credit card repayments | `POST /api/credit-cards/{cardReference}/repayments` |
+| Credit card statements | `GET /api/credit-cards/{cardReference}/statements`, `GET /api/credit-cards/{cardReference}/statements/{statementReference}` |
 
 Protected endpoints require a bearer token. Money-movement, card issuance, card purchase, card refund, and credit card repayment requests require an `Idempotency-Key` header. Cross-currency deposits, withdrawals, transfers, and credit card repayments can reference an FX rate lock, which expires after five minutes.
 
@@ -155,13 +160,84 @@ New cards start as `INACTIVE`. `PATCH /api/debit-cards/{cardReference}/status/{s
 
 - `POST /api/credit-cards` with a `currency` issues a credit card together with a new credit account in that currency. The credit limit is the bank default for the currency, configured under `credit-account.default-credit-limits`. Customers can't change it.
 - The credit account holds the debt, so it carries on when a card is frozen, blocked, or closed. Closing a card doesn't require a zero balance.
-- Card responses include `creditLimit`, `balance` (what the customer owes), and `availableCredit` (limit minus balance).
+- Card responses include `creditLimit`, `balance` (what the customer owes), `availableCredit` (limit minus balance), `annualInterestRate`, and `nextStatementDate`.
 - A purchase that would take the balance over the credit limit is rejected with `409 Conflict`. The check uses the amount actually debited, after any FX conversion.
 - A refund lowers the balance. A refund after the purchase was already repaid leaves a negative balance, a credit balance: the bank owes the customer, and the available credit is higher than the limit until it is spent.
 - `POST /api/credit-cards/{cardReference}/repayments` moves money from one of the customer's current accounts to the credit account. The `amount` is in the card's currency. It works whatever the card's status.
 - If the current account is in another currency, the request must include an FX rate lock whose base is the card's currency, and the account is debited the converted amount. A lock sent for a same-currency repayment is rejected.
 - A repayment larger than the outstanding balance is rejected with `409 Conflict`, as is one larger than the current account's balance.
 - Repayments appear in the current account's transaction history as `CREDIT_CARD_REPAYMENT`.
+
+### Credit card statements
+
+- **Cycle.** Each credit account gets a statement once a month, on the day of the month it was opened, capped at the 28th. An account opened on January 31 gets statements on the 28th. A cycle runs from the previous statement date (or the opening date) up to, but not including, the next statement date.
+- **Job.** A job runs every day at 00:15 UTC and closes every account whose statement date has come. If the job missed days, it catches up and closes each missed cycle in order. The schedule can be changed with `credit-statements.cron`, and `scheduling.enabled: false` turns scheduling off. Days are UTC.
+- **Due date.** 25 days after the statement date (`credit-account.payment-due-days`). It matters twice:
+  - Paying the statement's closing balance in full by the due date keeps the grace period.
+  - The minimum payment is due by then. Missing it has no consequence yet beyond the interest.
+- **Paid in full** means that repayments and refunds between the statement date and the due date (inclusive) add up to at least the closing balance. A statement with a closing balance of 0 or less is always paid in full. New purchases made in that time don't have to be paid.
+- **Grace period.** It works like a switch:
+  - It starts ON. While it's ON, a cycle has no interest.
+  - It turns OFF when a statement isn't paid in full by its due date. That cycle and the following ones are charged interest.
+  - It turns back ON after a statement is paid in full by its due date, but only from the next cycle. The cycle in which the customer paid still has interest, up to the day of the payment.
+  - When a cycle closes, it has no interest only if both the previous statement and the one before it were paid in full.
+- **Interest** = the sum of the daily balances × annual rate / 365, rounded to 2 decimals. The daily balance is the balance at the end of each day. A day with a credit balance counts as 0. The rate is the bank default per currency (`credit-account.default-annual-interest-rates`). Interest is added to the balance, so unpaid interest is charged interest in later cycles.
+- **Interest can take the balance over the credit limit.**
+- **Minimum payment** = 3% of the closing balance (`minimum-payment-percent`), at least the currency's floor (`minimum-payment-floors`, for example 25 USD), and at most the closing balance. It's 0 when the closing balance is 0 or less.
+- A statement shows the period, statement date, due date, opening and closing balance, average daily balance, interest charged, minimum payment, and currency. `GET /api/credit-cards/{cardReference}/statements` lists them newest first, with pagination.
+
+#### Worked example
+
+A USD card with a 24.99% annual rate, opened on January 15. Statements come on the 15th and are due 25 days later.
+
+| Date | What happens | Grace period |
+|---|---|---|
+| Jan 20 | Buys 600 | ON |
+| **Feb 15** | **Statement 1**: closing 600, minimum 25, due Mar 12. First cycle, no interest. | ON |
+| Mar 12 | Due date of statement 1. Nothing paid. | turns OFF |
+| **Mar 15** | **Statement 2**: interest 11.50 (600 for 28 days), closing 611.50, minimum 25, due Apr 9. | OFF |
+| Mar 30 | Pays 611.50, statement 2 in full, before its due date. | stays OFF until the next cycle |
+| **Apr 15** | **Statement 3**: residual interest 6.28 (611.50 for the 15 days until the payment, 0 after), closing 6.28, minimum 6.28, due May 10. | turns ON |
+| Apr 20 | Pays 6.28, statement 3 in full. | ON |
+| Apr 25 | Buys 100 | ON |
+| **May 15** | **Statement 4**: no interest, closing 100, due Jun 9. The Apr 25 purchase is interest-free if paid by Jun 9. | ON |
+
+If the customer hadn't paid the 6.28 by May 10, statement 4 would have charged interest on the whole cycle again, including the new 100 purchase.
+
+Each case in one table:
+
+| Cycle closing | Before previous paid in full? | Previous paid in full? | Interest |
+|---|---|---|---|
+| Statement 1 (Feb 15) | none | none | no |
+| Statement 2 (Mar 15) | none | no (statement 1 missed) | yes |
+| Statement 3 (Apr 15) | no (statement 1) | yes (statement 2) | yes, residual |
+| Statement 4 (May 15) | yes (statement 2) | yes (statement 3) | no |
+
+#### One closing, step by step
+
+How statement 3 is closed on April 15:
+
+1. The job finds the account, because its next statement date (Apr 15) has come, and locks the account row.
+2. **Period:** Mar 15, the date of statement 2, up to Apr 15. That's 31 days.
+3. **Opening balance:** 611.50, the closing balance of statement 2.
+4. **Entries in the period:** the Mar 30 repayment of 611.50. The 11.50 interest of statement 2 was also posted on Mar 15, but interest entries are skipped, because the 611.50 already includes it.
+5. **Daily balances:**
+
+   | Days | Balance | Days × balance |
+   |---|---|---|
+   | Mar 15 – Mar 29 (15 days) | 611.50 | 9,172.50 |
+   | Mar 30 – Apr 14 (16 days) | 0.00 | 0.00 |
+   | **Sum** | | **9,172.50** |
+
+   Average daily balance = 9,172.50 / 31 = 295.89.
+6. **Grace checks:**
+   - Statement 1 (before the previous one): repaid between Feb 15 and Mar 12 = 0, less than 600. Not paid in full, so the grace period was OFF when this cycle started.
+   - Statement 2 (previous): repaid between Mar 15 and Apr 9 = 611.50. Paid in full, so the grace period comes back next cycle.
+   - One of them wasn't paid in full, so interest is charged.
+7. **Interest:** 9,172.50 × 0.2499 / 365 = 6.28, posted as a `CREDIT_CARD_INTEREST` transaction.
+8. **Closing balance:** 0.00 + 6.28 = 6.28.
+9. **Minimum payment:** 3% of 6.28 is 0.19, raised to the 25 floor, then capped at the closing balance: 6.28.
+10. **Due date:** Apr 15 + 25 days = May 10. **Next statement date:** May 15.
 
 ### Transaction history
 
@@ -187,13 +263,16 @@ New cards start as `INACTIVE`. `PATCH /api/debit-cards/{cardReference}/status/{s
 - FX rate locks are kept in memory, so they are lost on restart and are not shared between application instances.
 - The daily card limit resets at midnight UTC for every customer; there is no per-customer time zone.
 - A purchase already in progress uses the limits it read. A limit change made at the same moment applies from the next purchase.
-- Credit cards have no statements, minimum payments, or interest yet.
+- A missed minimum payment has no late fee and doesn't change the account; it only leaves the grace period off.
+- Interest is posted when the job closes the cycle. If the job was down, the catch-up posts it late, though the amounts are the same.
+- Statements show totals only, without the transactions of the cycle.
+- The interest rate is the bank default per currency and can't be changed per account.
 - A credit balance can only be used up by later purchases; it can't be paid out to a current account. Repaying more than the outstanding balance is rejected rather than turned into a credit balance.
 - Each credit card has its own credit account. Supplementary cards on a shared credit account are not supported, and a credit account can't be closed through the API.
 
 ## Tests
 
-The test suite includes domain and service tests, controller tests, REST-client tests, and MySQL integration tests for rollback, idempotency, and concurrent money movement, card purchases, card refunds, card spending limits, credit limits, and credit card repayments.
+The test suite includes domain and service tests, controller tests, REST-client tests, and MySQL integration tests for rollback, idempotency, and concurrent money movement, card purchases, card refunds, card spending limits, credit limits, credit card repayments, and credit card statements, including concurrent closings of the same statement.
 
 ```bash
 bash mvnw test

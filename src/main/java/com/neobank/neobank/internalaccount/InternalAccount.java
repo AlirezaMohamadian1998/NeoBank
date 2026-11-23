@@ -2,7 +2,6 @@ package com.neobank.neobank.internalaccount;
 
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountStatus;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.persistence.BaseEntity;
 import jakarta.persistence.*;
@@ -33,8 +32,10 @@ public class InternalAccount extends BaseEntity {
             @NonNull InternalAccountPurpose internalAccountPurpose,
             @NonNull LedgerAccount ledgerAccount
     ) {
-        if (ledgerAccount.getType() != LedgerAccountType.ASSET) {
-            throw new IllegalArgumentException("Internal account must use an asset ledger account");
+        if (ledgerAccount.getType() != internalAccountPurpose.getLedgerType()) {
+            throw new IllegalArgumentException(
+                    internalAccountPurpose + " internal account requires a ledger account of type " + internalAccountPurpose.getLedgerType()
+            );
         }
 
         if (ledgerAccount.getStatus() != LedgerAccountStatus.ACTIVE) {

@@ -8,8 +8,10 @@ import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
 import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
+import com.neobank.neobank.card.dto.CreditStatementResponse;
 import com.neobank.neobank.card.exception.CreditCardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCreditCardRepaymentException;
+import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
 import com.neobank.neobank.creditaccount.RepaymentExceedsBalanceException;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 
@@ -46,6 +49,8 @@ class CreditCardControllerTest {
     private static final String CARD_REFERENCE = "2".repeat(32);
 
     private static final String IDEMPOTENCY_KEY = "1".repeat(32);
+
+    private static final String STATEMENT_REFERENCE = "3".repeat(32);
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -127,6 +132,8 @@ class CreditCardControllerTest {
                 .andExpect(jsonPath("$.creditLimit").value(5000.00))
                 .andExpect(jsonPath("$.balance").value(400.00))
                 .andExpect(jsonPath("$.availableCredit").value(4600.00))
+                .andExpect(jsonPath("$.annualInterestRate").value(0.2499))
+                .andExpect(jsonPath("$.nextStatementDate").value("2026-10-15"))
                 .andExpect(jsonPath("$.spendingLimits.dailyLimit").value(2500.00));
     }
 
@@ -267,6 +274,72 @@ class CreditCardControllerTest {
                 .andExpect(jsonPath("$.detail").value("Lock ID is not required for same currency repayment"));
     }
 
+    @Test
+    void getStatementsReturnsPagedStatements() throws Exception {
+        given(creditCardService.getStatements(any(String.class), any(String.class), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(statementResponse())));
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements", CARD_REFERENCE)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].statementReference").value(STATEMENT_REFERENCE))
+                .andExpect(jsonPath("$.page.totalElements").value(1));
+    }
+
+    @Test
+    void getStatementReturnsStatement() throws Exception {
+        given(creditCardService.getStatement(CARD_REFERENCE, STATEMENT_REFERENCE, EMAIL)).willReturn(statementResponse());
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements/{statementReference}", CARD_REFERENCE, STATEMENT_REFERENCE)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.statementReference").value(STATEMENT_REFERENCE))
+                .andExpect(jsonPath("$.periodStart").value("2026-08-15"))
+                .andExpect(jsonPath("$.statementDate").value("2026-09-15"))
+                .andExpect(jsonPath("$.dueDate").value("2026-10-10"))
+                .andExpect(jsonPath("$.openingBalance").value(600.00))
+                .andExpect(jsonPath("$.closingBalance").value(510.27))
+                .andExpect(jsonPath("$.averageDailyBalance").value(535.71))
+                .andExpect(jsonPath("$.interestCharged").value(10.27))
+                .andExpect(jsonPath("$.minimumPayment").value(25.00))
+                .andExpect(jsonPath("$.currency").value("USD"));
+    }
+
+    @Test
+    void getStatementReturnsNotFoundProblem() throws Exception {
+        given(creditCardService.getStatement(CARD_REFERENCE, STATEMENT_REFERENCE, EMAIL))
+                .willThrow(new CreditStatementNotFoundException("Credit statement not found"));
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements/{statementReference}", CARD_REFERENCE, STATEMENT_REFERENCE)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Credit statement not found"));
+    }
+
+    @Test
+    void getStatementRejectsInvalidStatementReference() throws Exception {
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements/{statementReference}", CARD_REFERENCE, "not-a-reference")
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(creditCardService);
+    }
+
+    private static CreditStatementResponse statementResponse() {
+        return new CreditStatementResponse(
+                STATEMENT_REFERENCE,
+                LocalDate.of(2026, 8, 15),
+                LocalDate.of(2026, 9, 15),
+                LocalDate.of(2026, 10, 10),
+                new BigDecimal("600.00"),
+                new BigDecimal("510.27"),
+                new BigDecimal("535.71"),
+                new BigDecimal("10.27"),
+                new BigDecimal("25.00"),
+                CurrencyCode.USD
+        );
+    }
+
     private static CreditCardRetrieveResponse retrieveResponse(CardStatus status) {
         return new CreditCardRetrieveResponse(
                 CARD_REFERENCE,
@@ -277,6 +350,8 @@ class CreditCardControllerTest {
                 new BigDecimal("5000.00"),
                 new BigDecimal("400.00"),
                 new BigDecimal("4600.00"),
+                new BigDecimal("0.2499"),
+                LocalDate.of(2026, 10, 15),
                 CurrencyCode.USD,
                 new CardSpendingLimitsResponse(
                         new BigDecimal("1000.00"),

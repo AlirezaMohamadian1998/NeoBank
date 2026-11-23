@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.YearMonth;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,6 +49,6 @@ class CreditCardPersistenceIntegrationTest extends DebitCardIntegrationTestSuppo
     }
 
     private CreditAccount createCreditAccount(String accountNumber, String ledgerReference) {
-        return CreditAccount.createNew(accountNumber, ledgerReference, customer, CurrencyCode.TRY, new BigDecimal("1000.00"));
+        return CreditAccount.createNew(accountNumber, ledgerReference, customer, CurrencyCode.TRY, new BigDecimal("1000.00"), new BigDecimal("0.2499"), LocalDate.of(2026, 1, 15));
     }
 }

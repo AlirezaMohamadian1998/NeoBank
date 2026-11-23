@@ -37,7 +37,7 @@ class InternalAccountTest {
     }
 
     @Test
-    void liabilityTypeLedgerAccountIsRejected() {
+    void settlementRejectsLiabilityLedgerAccount() {
         LedgerAccount ledgerAccount = LedgerAccount.createNew(
                 "11111111111111111111111111111111",
                 LedgerAccountType.LIABILITY,
@@ -46,7 +46,67 @@ class InternalAccountTest {
 
         assertThatThrownBy(() -> InternalAccount.createNew(InternalAccountPurpose.SETTLEMENT, ledgerAccount))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Internal account must use an asset ledger account");
+                .hasMessage("SETTLEMENT internal account requires a ledger account of type ASSET");
+    }
+
+    @Test
+    void settlementRejectsIncomeLedgerAccount() {
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "11111111111111111111111111111111",
+                LedgerAccountType.INCOME,
+                CurrencyCode.TRY
+        );
+
+        assertThatThrownBy(() -> InternalAccount.createNew(InternalAccountPurpose.SETTLEMENT, ledgerAccount))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("SETTLEMENT internal account requires a ledger account of type ASSET");
+    }
+
+    @Test
+    void interestIncomeAcceptsIncomeLedgerAccount() {
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "11111111111111111111111111111111",
+                LedgerAccountType.INCOME,
+                CurrencyCode.USD
+        );
+
+        InternalAccount internalAccount =
+                InternalAccount.createNew(InternalAccountPurpose.INTEREST_INCOME, ledgerAccount);
+
+        assertThat(internalAccount.getPurpose())
+                .isSameAs(InternalAccountPurpose.INTEREST_INCOME);
+
+        assertThat(internalAccount.getCurrency())
+                .isSameAs(CurrencyCode.USD);
+
+        assertThat(internalAccount.getLedgerAccount())
+                .isEqualTo(ledgerAccount);
+    }
+
+    @Test
+    void interestIncomeRejectsAssetLedgerAccount() {
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "11111111111111111111111111111111",
+                LedgerAccountType.ASSET,
+                CurrencyCode.TRY
+        );
+
+        assertThatThrownBy(() -> InternalAccount.createNew(InternalAccountPurpose.INTEREST_INCOME, ledgerAccount))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("INTEREST_INCOME internal account requires a ledger account of type INCOME");
+    }
+
+    @Test
+    void interestIncomeRejectsLiabilityLedgerAccount() {
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                "11111111111111111111111111111111",
+                LedgerAccountType.LIABILITY,
+                CurrencyCode.TRY
+        );
+
+        assertThatThrownBy(() -> InternalAccount.createNew(InternalAccountPurpose.INTEREST_INCOME, ledgerAccount))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("INTEREST_INCOME internal account requires a ledger account of type INCOME");
     }
 
     @Test

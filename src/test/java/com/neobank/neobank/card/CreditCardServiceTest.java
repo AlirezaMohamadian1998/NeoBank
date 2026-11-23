@@ -14,6 +14,8 @@ import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.creditaccount.CreditAccount;
 import com.neobank.neobank.creditaccount.CreditAccountProperties;
 import com.neobank.neobank.creditaccount.CreditAccountRepository;
+import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
+import com.neobank.neobank.creditaccount.CreditStatementRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.CustomerRepository;
@@ -59,6 +61,9 @@ class CreditCardServiceTest {
     private CreditAccountRepository creditAccountRepository;
 
     @Mock
+    private CreditStatementRepository creditStatementRepository;
+
+    @Mock
     private CustomerRepository customerRepository;
 
     @Mock
@@ -80,12 +85,28 @@ class CreditCardServiceTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-09-23T12:00:00Z"), Clock.systemUTC().getZone());
 
-    private final CreditAccountProperties creditAccountProperties = new CreditAccountProperties(Map.of(
-            CurrencyCode.USD, new BigDecimal("5000.00"),
-            CurrencyCode.EUR, new BigDecimal("5000.00"),
-            CurrencyCode.GBP, new BigDecimal("5000.00"),
-            CurrencyCode.TRY, new BigDecimal("150000.00")
-    ));
+    private final CreditAccountProperties creditAccountProperties = new CreditAccountProperties(
+            Map.of(
+                    CurrencyCode.USD, new BigDecimal("5000.00"),
+                    CurrencyCode.EUR, new BigDecimal("5000.00"),
+                    CurrencyCode.GBP, new BigDecimal("5000.00"),
+                    CurrencyCode.TRY, new BigDecimal("150000.00")
+            ),
+            Map.of(
+                    CurrencyCode.USD, new BigDecimal("0.2499"),
+                    CurrencyCode.EUR, new BigDecimal("0.2499"),
+                    CurrencyCode.GBP, new BigDecimal("0.2499"),
+                    CurrencyCode.TRY, new BigDecimal("0.5100")
+            ),
+            Map.of(
+                    CurrencyCode.USD, new BigDecimal("25.00"),
+                    CurrencyCode.EUR, new BigDecimal("25.00"),
+                    CurrencyCode.GBP, new BigDecimal("25.00"),
+                    CurrencyCode.TRY, new BigDecimal("750.00")
+            ),
+            new BigDecimal("0.03"),
+            25
+    );
 
     private final Customer customer = Customer.createNew(EMAIL, "{bcrypt}encoded-password", "Ada Lovelace");
 
@@ -96,6 +117,7 @@ class CreditCardServiceTest {
         creditCardService = new CreditCardService(
                 creditCardRepository,
                 creditAccountRepository,
+                creditStatementRepository,
                 customerRepository,
                 idempotencyService,
                 requestHasher,
@@ -142,6 +164,8 @@ class CreditCardServiceTest {
         assertThat(creditAccount.getAccountNumber()).isEqualTo("55".repeat(7));
         assertThat(creditAccount.getCustomer()).isSameAs(customer);
         assertThat(creditAccount.getCreditLimit()).isEqualByComparingTo("5000.00");
+        assertThat(creditAccount.getAnnualInterestRate()).isEqualByComparingTo("0.2499");
+        assertThat(creditAccount.getNextStatementDate()).isEqualTo(LocalDate.of(2026, 10, 23));
         assertThat(creditAccount.getLedgerAccount().getLedgerReference()).isEqualTo("5".repeat(32));
         assertThat(creditAccount.getLedgerAccount().getType()).isEqualTo(LedgerAccountType.ASSET);
         assertThat(creditAccount.getCurrency()).isEqualTo(CurrencyCode.USD);
@@ -217,6 +241,8 @@ class CreditCardServiceTest {
         assertThat(response.creditLimit()).isEqualByComparingTo("1000.00");
         assertThat(response.balance()).isEqualByComparingTo("400.00");
         assertThat(response.availableCredit()).isEqualByComparingTo("600.00");
+        assertThat(response.annualInterestRate()).isEqualByComparingTo("0.2499");
+        assertThat(response.nextStatementDate()).isEqualTo(LocalDate.of(2026, 2, 15));
         assertThat(response.currency()).isEqualTo(CurrencyCode.TRY);
         assertThat(response.creditAccountNumber()).isEqualTo("55".repeat(7));
         assertThat(response.spendingLimits().spentToday()).isEqualByComparingTo("400.00");
@@ -282,13 +308,30 @@ class CreditCardServiceTest {
         assertThat(response.spendingLimits().currency()).isEqualTo(CurrencyCode.TRY);
     }
 
+    @Test
+    void getStatementThrowsWhenStatementIsNotOnThisCardsAccount() {
+        CreditCard creditCard = createCreditCard();
+        String statementReference = "3".repeat(32);
+
+        given(creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase(creditCard.getCardReference(), EMAIL))
+                .willReturn(Optional.of(creditCard));
+        given(creditStatementRepository.findByStatementReferenceAndCreditAccount(statementReference, creditCard.getCreditAccount()))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> creditCardService.getStatement(creditCard.getCardReference(), statementReference, EMAIL))
+                .isInstanceOf(CreditStatementNotFoundException.class)
+                .hasMessage("Credit statement not found");
+    }
+
     private CreditCard createCreditCard() {
         CreditAccount creditAccount = CreditAccount.createNew(
                 "55".repeat(7),
                 "5".repeat(32),
                 customer,
                 CurrencyCode.TRY,
-                new BigDecimal("1000.00")
+                new BigDecimal("1000.00"),
+                new BigDecimal("0.2499"),
+                LocalDate.of(2026, 1, 15)
         );
 
         YearMonth now = YearMonth.now(clock);

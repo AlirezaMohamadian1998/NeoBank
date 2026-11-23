@@ -3,6 +3,7 @@ package com.neobank.neobank.shared.exception;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.card.exception.*;
 import com.neobank.neobank.creditaccount.CreditLimitExceededException;
+import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
 import com.neobank.neobank.creditaccount.RepaymentExceedsBalanceException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
@@ -311,6 +312,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problemDetail.setInstance(URI.create(request.getRequestURI()));
         problemDetail.setTitle("Credit card not found");
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
+    }
+
+    @ExceptionHandler(CreditStatementNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleCreditStatementNotFoundException(
+            CreditStatementNotFoundException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Credit statement not found");
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
     }
