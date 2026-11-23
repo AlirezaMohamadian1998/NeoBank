@@ -81,23 +81,23 @@ class CreditStatementLinesIntegrationTest extends DebitCardIntegrationTestSuppor
 
         assertThat(lines.size()).isEqualTo(4);
 
-        assertThat(lines.get(0).get("transactionType").asText()).isEqualTo("CARD_PURCHASE");
-        assertThat(lines.get(0).get("direction").asText()).isEqualTo("DEBIT");
+        assertThat(lines.get(0).get("transactionType").asString()).isEqualTo("CARD_PURCHASE");
+        assertThat(lines.get(0).get("direction").asString()).isEqualTo("DEBIT");
         assertThat(lines.get(0).get("appliedAmount").decimalValue()).isEqualByComparingTo("1000.00");
-        assertThat(lines.get(0).get("transactionReference").asText()).isEqualTo(firstPurchaseReference);
-        assertThat(lines.get(0).get("merchantName").asText()).isEqualTo("Test merchant");
-        assertThat(lines.get(0).get("cardReference").asText()).isEqualTo(issued.cardReference());
-        assertThat(lines.get(0).get("accountNumber").asText()).isEqualTo(issued.creditAccountNumber());
+        assertThat(lines.get(0).get("transactionReference").asString()).isEqualTo(firstPurchaseReference);
+        assertThat(lines.get(0).get("merchantName").asString()).isEqualTo("Test merchant");
+        assertThat(lines.get(0).get("cardReference").asString()).isEqualTo(issued.cardReference());
+        assertThat(lines.get(0).get("accountNumber").asString()).isEqualTo(issued.creditAccountNumber());
 
-        assertThat(lines.get(1).get("transactionType").asText()).isEqualTo("CARD_PURCHASE");
+        assertThat(lines.get(1).get("transactionType").asString()).isEqualTo("CARD_PURCHASE");
         assertThat(lines.get(1).get("appliedAmount").decimalValue()).isEqualByComparingTo("300.00");
 
-        assertThat(lines.get(2).get("transactionType").asText()).isEqualTo("CARD_REFUND");
-        assertThat(lines.get(2).get("direction").asText()).isEqualTo("CREDIT");
-        assertThat(lines.get(2).get("purchaseReference").asText()).isEqualTo(secondPurchaseReference);
+        assertThat(lines.get(2).get("transactionType").asString()).isEqualTo("CARD_REFUND");
+        assertThat(lines.get(2).get("direction").asString()).isEqualTo("CREDIT");
+        assertThat(lines.get(2).get("purchaseReference").asString()).isEqualTo(secondPurchaseReference);
 
-        assertThat(lines.get(3).get("transactionType").asText()).isEqualTo("CREDIT_CARD_REPAYMENT");
-        assertThat(lines.get(3).get("direction").asText()).isEqualTo("CREDIT");
+        assertThat(lines.get(3).get("transactionType").asString()).isEqualTo("CREDIT_CARD_REPAYMENT");
+        assertThat(lines.get(3).get("direction").asString()).isEqualTo("CREDIT");
         assertThat(lines.get(3).get("appliedAmount").decimalValue()).isEqualByComparingTo("400.00");
 
         assertThat(statement.getClosingBalance()).isEqualByComparingTo("600.00");
@@ -125,16 +125,16 @@ class CreditStatementLinesIntegrationTest extends DebitCardIntegrationTestSuppor
         JsonNode secondLines = lines(issued.cardReference(), second.getStatementReference());
 
         assertThat(secondLines.size()).isEqualTo(2);
-        assertThat(secondLines.get(0).get("transactionType").asText()).isEqualTo("CARD_PURCHASE");
-        assertThat(secondLines.get(1).get("transactionType").asText()).isEqualTo("CREDIT_CARD_INTEREST");
-        assertThat(secondLines.get(1).get("direction").asText()).isEqualTo("DEBIT");
+        assertThat(secondLines.get(0).get("transactionType").asString()).isEqualTo("CARD_PURCHASE");
+        assertThat(secondLines.get(1).get("transactionType").asString()).isEqualTo("CREDIT_CARD_INTEREST");
+        assertThat(secondLines.get(1).get("direction").asString()).isEqualTo("DEBIT");
         assertThat(secondLines.get(1).get("appliedAmount").decimalValue()).isEqualByComparingTo(second.getInterestCharged());
         assertLinesAddUpToClosingBalance(second, secondLines);
 
         JsonNode thirdLines = lines(issued.cardReference(), third.getStatementReference());
 
         assertThat(thirdLines.size()).isEqualTo(1);
-        assertThat(thirdLines.get(0).get("transactionType").asText()).isEqualTo("CREDIT_CARD_INTEREST");
+        assertThat(thirdLines.get(0).get("transactionType").asString()).isEqualTo("CREDIT_CARD_INTEREST");
         assertThat(thirdLines.get(0).get("appliedAmount").decimalValue()).isEqualByComparingTo(third.getInterestCharged());
         assertLinesAddUpToClosingBalance(third, thirdLines);
     }
@@ -158,7 +158,7 @@ class CreditStatementLinesIntegrationTest extends DebitCardIntegrationTestSuppor
 
         for (JsonNode line : lines) {
             BigDecimal amount = line.get("appliedAmount").decimalValue();
-            balance = "DEBIT".equals(line.get("direction").asText()) ? balance.add(amount) : balance.subtract(amount);
+            balance = "DEBIT".equals(line.get("direction").asString()) ? balance.add(amount) : balance.subtract(amount);
         }
 
         assertThat(balance).isEqualByComparingTo(statement.getClosingBalance());
