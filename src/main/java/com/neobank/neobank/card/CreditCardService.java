@@ -5,6 +5,7 @@ import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
+import com.neobank.neobank.card.dto.CreditCardTransactionFilter;
 import com.neobank.neobank.card.dto.CreditStatementResponse;
 import com.neobank.neobank.card.exception.CreditCardNotFoundException;
 import com.neobank.neobank.card.issuing.CardIssuer;
@@ -24,6 +25,7 @@ import com.neobank.neobank.shared.reference.ReferenceGenerator;
 import com.neobank.neobank.transaction.BankTransaction;
 import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.LedgerEntryRepository;
+import com.neobank.neobank.transaction.history.LedgerEntrySpecifications;
 import com.neobank.neobank.transaction.history.TransactionHistoryItemAssembler;
 import com.neobank.neobank.transaction.history.TransactionHistorySortHelper;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
@@ -31,6 +33,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +43,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -210,6 +214,27 @@ public class CreditCardService {
         return creditStatementRepository.findByStatementReferenceAndCreditAccount(statementReference, creditAccount)
                 .map(CreditCardMapper::toStatementResponse)
                 .orElseThrow(() -> new CreditStatementNotFoundException("Credit statement not found"));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TransactionHistoryItem> getTransactions(
+            String cardReference,
+            CreditCardTransactionFilter filter,
+            String email,
+            Pageable pageable
+    ) {
+        CreditAccount creditAccount = findOwnedCreditCard(cardReference, email).getCreditAccount();
+
+        Specification<LedgerEntry> spec =
+                LedgerEntrySpecifications.belongsToAccount(List.of(creditAccount.getLedgerAccount().getId()))
+                        .and(LedgerEntrySpecifications.hasTransactionType(filter.type()))
+                        .and(LedgerEntrySpecifications.createdAfterOrEqual(filter.dateFrom()))
+                        .and(LedgerEntrySpecifications.createdBefore(filter.dateTo()));
+
+        Page<LedgerEntry> entries =
+                ledgerEntryRepository.findAll(spec, TransactionHistorySortHelper.normalize(pageable));
+
+        return transactionHistoryItemAssembler.toItems(entries, entry -> creditAccount.getAccountNumber());
     }
 
     @Transactional(readOnly = true)

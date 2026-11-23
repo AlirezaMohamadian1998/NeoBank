@@ -8,6 +8,7 @@ import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
 import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
+import com.neobank.neobank.card.dto.CreditCardTransactionFilter;
 import com.neobank.neobank.card.dto.CreditStatementResponse;
 import com.neobank.neobank.card.exception.CreditCardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCreditCardRepaymentException;
@@ -330,6 +331,63 @@ class CreditCardControllerTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(creditCardService);
+    }
+
+    @Test
+    void getTransactionsPassesFilterAndNewestFirstSortByDefault() throws Exception {
+        given(creditCardService.getTransactions(any(String.class), any(CreditCardTransactionFilter.class), any(String.class), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(statementLine())));
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/transactions", CARD_REFERENCE)
+                        .param("type", "CREDIT_CARD_REPAYMENT")
+                        .param("dateFrom", "2026-08-01T00:00:00Z")
+                        .param("dateTo", "2026-09-01T00:00:00Z")
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].transactionType").value("CREDIT_CARD_REPAYMENT"))
+                .andExpect(jsonPath("$.page.totalElements").value(1));
+
+        ArgumentCaptor<CreditCardTransactionFilter> filterCaptor = ArgumentCaptor.forClass(CreditCardTransactionFilter.class);
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(creditCardService).getTransactions(eq(CARD_REFERENCE), filterCaptor.capture(), eq(EMAIL), pageableCaptor.capture());
+        assertThat(filterCaptor.getValue()).isEqualTo(new CreditCardTransactionFilter(
+                TransactionType.CREDIT_CARD_REPAYMENT,
+                Instant.parse("2026-08-01T00:00:00Z"),
+                Instant.parse("2026-09-01T00:00:00Z")
+        ));
+        assertThat(pageableCaptor.getValue().getSort()).containsExactly(Sort.Order.desc("createdAt"));
+    }
+
+    @Test
+    void getTransactionsRejectsDateFromAfterDateTo() throws Exception {
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/transactions", CARD_REFERENCE)
+                        .param("dateFrom", "2026-09-01T00:00:00Z")
+                        .param("dateTo", "2026-08-01T00:00:00Z")
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(creditCardService);
+    }
+
+    @Test
+    void getTransactionsRejectsUnknownType() throws Exception {
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/transactions", CARD_REFERENCE)
+                        .param("type", "NOT_A_TYPE")
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(creditCardService);
+    }
+
+    @Test
+    void getTransactionsReturnsNotFoundProblem() throws Exception {
+        given(creditCardService.getTransactions(any(String.class), any(CreditCardTransactionFilter.class), any(String.class), any(Pageable.class)))
+                .willThrow(new CreditCardNotFoundException("Credit card not found"));
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/transactions", CARD_REFERENCE)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Credit card not found"));
     }
 
     @Test

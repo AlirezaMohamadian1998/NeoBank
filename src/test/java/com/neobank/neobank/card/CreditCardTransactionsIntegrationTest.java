@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Import(MutableClockConfiguration.class)
-class CreditStatementLinesIntegrationTest extends DebitCardIntegrationTestSupport {
+class CreditCardTransactionsIntegrationTest extends DebitCardIntegrationTestSupport {
 
     @Autowired
     private MutableClock mutableClock;
@@ -151,6 +151,79 @@ class CreditStatementLinesIntegrationTest extends DebitCardIntegrationTestSuppor
                         .with(jwt().jwt(jwt -> jwt.subject("other@example.com"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Credit card not found"));
+    }
+
+    @Test
+    void transactionsListTheWholeCreditLedgerNewestFirst() throws Exception {
+        CreditCardIssueResponse issued = issueAndActivateCreditCard("2026-01-15T10:00:00Z");
+
+        purchase(issued.cardReference(), "600.00", "2".repeat(32), "2026-01-20T10:00:00Z");
+        String refundedPurchaseReference = purchase(issued.cardReference(), "100.00", "3".repeat(32), "2026-01-21T10:00:00Z");
+        refund(refundedPurchaseReference, "4".repeat(32), "2026-01-25T10:00:00Z");
+        close(issued.cardReference(), "2026-02-15T00:15:00Z");
+
+        repay(issued.cardReference(), "100.00", "5".repeat(32), "2026-02-20T10:00:00Z");
+        close(issued.cardReference(), "2026-03-15T00:15:00Z");
+
+        purchase(issued.cardReference(), "50.00", "6".repeat(32), "2026-03-20T10:00:00Z");
+
+        JsonNode transactions = transactions(issued.cardReference(), "");
+
+        assertThat(transactions.size()).isEqualTo(6);
+        assertThat(transactions.findValuesAsString("transactionType")).containsExactly(
+                "CARD_PURCHASE",
+                "CREDIT_CARD_INTEREST",
+                "CREDIT_CARD_REPAYMENT",
+                "CARD_REFUND",
+                "CARD_PURCHASE",
+                "CARD_PURCHASE"
+        );
+        assertThat(transactions.findValuesAsString("accountNumber")).containsOnly(issued.creditAccountNumber());
+        assertThat(transactions.get(1).get("appliedAmount").decimalValue())
+                .isEqualByComparingTo(statements().get(1).getInterestCharged());
+        assertThat(transactions.get(3).get("purchaseReference").asString()).isEqualTo(refundedPurchaseReference);
+    }
+
+    @Test
+    void transactionsCanBeFilteredByTypeAndDate() throws Exception {
+        CreditCardIssueResponse issued = issueAndActivateCreditCard("2026-01-15T10:00:00Z");
+
+        purchase(issued.cardReference(), "600.00", "2".repeat(32), "2026-01-20T10:00:00Z");
+        repay(issued.cardReference(), "100.00", "3".repeat(32), "2026-01-25T10:00:00Z");
+        purchase(issued.cardReference(), "50.00", "4".repeat(32), "2026-02-01T10:00:00Z");
+        repay(issued.cardReference(), "20.00", "5".repeat(32), "2026-02-05T10:00:00Z");
+
+        JsonNode repayments = transactions(issued.cardReference(), "?type=CREDIT_CARD_REPAYMENT");
+
+        assertThat(repayments.size()).isEqualTo(2);
+        assertThat(repayments.findValuesAsString("transactionType")).containsOnly("CREDIT_CARD_REPAYMENT");
+
+        JsonNode january = transactions(issued.cardReference(), "?dateFrom=2026-01-01T00:00:00Z&dateTo=2026-02-01T00:00:00Z");
+
+        assertThat(january.size()).isEqualTo(2);
+        assertThat(january.get(0).get("appliedAmount").decimalValue()).isEqualByComparingTo("100.00");
+        assertThat(january.get(1).get("appliedAmount").decimalValue()).isEqualByComparingTo("600.00");
+    }
+
+    @Test
+    void customerCannotSeeAnotherCustomersCreditCardTransactions() throws Exception {
+        CreditCardIssueResponse issued = issueAndActivateCreditCard("2026-01-15T10:00:00Z");
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}/transactions", issued.cardReference())
+                        .with(jwt().jwt(jwt -> jwt.subject("other@example.com"))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Credit card not found"));
+    }
+
+    private JsonNode transactions(String cardReference, String query) throws Exception {
+        String body = mockMvc.perform(get("/api/credit-cards/" + cardReference + "/transactions" + query)
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return objectMapper.readTree(body).get("content");
     }
 
     private void assertLinesAddUpToClosingBalance(CreditStatement statement, JsonNode lines) {
