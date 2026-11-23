@@ -6,6 +6,7 @@ import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
 import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
+import com.neobank.neobank.card.dto.CreditStatementResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
@@ -87,5 +88,29 @@ public class CreditCardController {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(creditCardRepaymentService.repay(cardReference, request, idempotencyKey, jwt.getSubject()));
+    }
+
+    @GetMapping("/{cardReference}/statements")
+    public ResponseEntity<PagedModel<CreditStatementResponse>> getStatements(
+            @PathVariable
+            @Pattern(regexp = "[a-f0-9]{32}", message = "Card reference must be 32 hexadecimal characters")
+            String cardReference,
+            @AuthenticationPrincipal Jwt jwt,
+            Pageable pageable
+    ) {
+        return ResponseEntity.ok(new PagedModel<>(creditCardService.getStatements(cardReference, jwt.getSubject(), pageable)));
+    }
+
+    @GetMapping("/{cardReference}/statements/{statementReference}")
+    public ResponseEntity<CreditStatementResponse> getStatement(
+            @PathVariable
+            @Pattern(regexp = "[a-f0-9]{32}", message = "Card reference must be 32 hexadecimal characters")
+            String cardReference,
+            @PathVariable
+            @Pattern(regexp = "[a-f0-9]{32}", message = "Statement reference must be 32 hexadecimal characters")
+            String statementReference,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ResponseEntity.ok(creditCardService.getStatement(cardReference, statementReference, jwt.getSubject()));
     }
 }

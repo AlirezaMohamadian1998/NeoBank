@@ -14,6 +14,8 @@ import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.creditaccount.CreditAccount;
 import com.neobank.neobank.creditaccount.CreditAccountProperties;
 import com.neobank.neobank.creditaccount.CreditAccountRepository;
+import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
+import com.neobank.neobank.creditaccount.CreditStatementRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.CustomerRepository;
@@ -57,6 +59,9 @@ class CreditCardServiceTest {
 
     @Mock
     private CreditAccountRepository creditAccountRepository;
+
+    @Mock
+    private CreditStatementRepository creditStatementRepository;
 
     @Mock
     private CustomerRepository customerRepository;
@@ -112,6 +117,7 @@ class CreditCardServiceTest {
         creditCardService = new CreditCardService(
                 creditCardRepository,
                 creditAccountRepository,
+                creditStatementRepository,
                 customerRepository,
                 idempotencyService,
                 requestHasher,
@@ -235,6 +241,8 @@ class CreditCardServiceTest {
         assertThat(response.creditLimit()).isEqualByComparingTo("1000.00");
         assertThat(response.balance()).isEqualByComparingTo("400.00");
         assertThat(response.availableCredit()).isEqualByComparingTo("600.00");
+        assertThat(response.annualInterestRate()).isEqualByComparingTo("0.2499");
+        assertThat(response.nextStatementDate()).isEqualTo(LocalDate.of(2026, 2, 15));
         assertThat(response.currency()).isEqualTo(CurrencyCode.TRY);
         assertThat(response.creditAccountNumber()).isEqualTo("55".repeat(7));
         assertThat(response.spendingLimits().spentToday()).isEqualByComparingTo("400.00");
@@ -298,6 +306,21 @@ class CreditCardServiceTest {
         assertThat(response.spendingLimits().perTransactionLimit()).isEqualByComparingTo("100.00");
         assertThat(response.spendingLimits().dailyLimit()).isEqualByComparingTo("300.00");
         assertThat(response.spendingLimits().currency()).isEqualTo(CurrencyCode.TRY);
+    }
+
+    @Test
+    void getStatementThrowsWhenStatementIsNotOnThisCardsAccount() {
+        CreditCard creditCard = createCreditCard();
+        String statementReference = "3".repeat(32);
+
+        given(creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase(creditCard.getCardReference(), EMAIL))
+                .willReturn(Optional.of(creditCard));
+        given(creditStatementRepository.findByStatementReferenceAndCreditAccount(statementReference, creditCard.getCreditAccount()))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> creditCardService.getStatement(creditCard.getCardReference(), statementReference, EMAIL))
+                .isInstanceOf(CreditStatementNotFoundException.class)
+                .hasMessage("Credit statement not found");
     }
 
     private CreditCard createCreditCard() {

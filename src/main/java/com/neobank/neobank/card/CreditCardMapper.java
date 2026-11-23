@@ -5,7 +5,9 @@ import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
+import com.neobank.neobank.card.dto.CreditStatementResponse;
 import com.neobank.neobank.creditaccount.CreditAccount;
+import com.neobank.neobank.creditaccount.CreditStatement;
 import com.neobank.neobank.transaction.BankTransaction;
 import com.neobank.neobank.transaction.LedgerEntry;
 import lombok.experimental.UtilityClass;
@@ -40,6 +42,8 @@ public class CreditCardMapper {
                 creditAccount.getCreditLimit(),
                 creditAccount.getLedgerAccount().getBalance(),
                 creditAccount.getAvailableCredit(),
+                creditAccount.getAnnualInterestRate(),
+                creditAccount.getNextStatementDate(),
                 creditAccount.getCurrency(),
                 new CardSpendingLimitsResponse(
                         limits.getPerTransactionLimit(),
@@ -47,6 +51,21 @@ public class CreditCardMapper {
                         spentToday,
                         creditAccount.getCurrency()
                 )
+        );
+    }
+
+    public static CreditStatementResponse toStatementResponse(CreditStatement statement) {
+        return new CreditStatementResponse(
+                statement.getStatementReference(),
+                statement.getPeriodStart(),
+                statement.getStatementDate(),
+                statement.getDueDate(),
+                statement.getOpeningBalance(),
+                statement.getClosingBalance(),
+                statement.getAverageDailyBalance(),
+                statement.getInterestCharged(),
+                statement.getMinimumPayment(),
+                statement.getCreditAccount().getCurrency()
         );
     }
 
