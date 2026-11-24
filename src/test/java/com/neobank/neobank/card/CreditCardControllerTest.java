@@ -76,10 +76,7 @@ class CreditCardControllerTest {
     private CreditCardService creditCardService;
 
     @MockitoBean
-    private CreditCardRepaymentService creditCardRepaymentService;
-
-    @MockitoBean
-    private CreditCardPayoutService creditCardPayoutService;
+    private CreditCardBalanceService creditCardBalanceService;
 
     @MockitoBean
     private CreditCardClosingService creditCardClosingService;
@@ -221,7 +218,7 @@ class CreditCardControllerTest {
     void repayReturnsCreatedRepayment() throws Exception {
         CreditCardRepaymentRequest request = new CreditCardRepaymentRequest("12345678900987", new BigDecimal("250.00"), null);
 
-        given(creditCardRepaymentService.repay(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+        given(creditCardBalanceService.repay(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
                 .willReturn(new CreditCardRepaymentResponse(
                         "a".repeat(32),
                         CARD_REFERENCE,
@@ -257,14 +254,14 @@ class CreditCardControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
 
-        verifyNoInteractions(creditCardRepaymentService);
+        verifyNoInteractions(creditCardBalanceService);
     }
 
     @Test
     void repayReturnsConflictWhenRepaymentExceedsBalance() throws Exception {
         CreditCardRepaymentRequest request = new CreditCardRepaymentRequest("12345678900987", new BigDecimal("250.00"), null);
 
-        given(creditCardRepaymentService.repay(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+        given(creditCardBalanceService.repay(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
                 .willThrow(new RepaymentExceedsBalanceException("Repayment exceeds the outstanding balance of 100.00"));
 
         mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
@@ -281,7 +278,7 @@ class CreditCardControllerTest {
     void repayReturnsBadRequestForInvalidRepayment() throws Exception {
         CreditCardRepaymentRequest request = new CreditCardRepaymentRequest("12345678900987", new BigDecimal("250.00"), null);
 
-        given(creditCardRepaymentService.repay(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+        given(creditCardBalanceService.repay(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
                 .willThrow(new InvalidCreditCardRepaymentException("Lock ID is not required for same currency repayment"));
 
         mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
@@ -298,7 +295,7 @@ class CreditCardControllerTest {
     void payOutReturnsCreatedPayout() throws Exception {
         CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
 
-        given(creditCardPayoutService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+        given(creditCardBalanceService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
                 .willReturn(new CreditCardPayoutResponse(
                         "a".repeat(32),
                         CARD_REFERENCE,
@@ -335,14 +332,14 @@ class CreditCardControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
 
-        verifyNoInteractions(creditCardPayoutService);
+        verifyNoInteractions(creditCardBalanceService);
     }
 
     @Test
     void payOutReturnsConflictWhenThereIsNothingToPayOut() throws Exception {
         CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
 
-        given(creditCardPayoutService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+        given(creditCardBalanceService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
                 .willThrow(new NothingToPayOutException("There is no credit balance to pay out"));
 
         mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
@@ -359,7 +356,7 @@ class CreditCardControllerTest {
     void payOutReturnsConflictWhenTheCreditAccountIsClosed() throws Exception {
         CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
 
-        given(creditCardPayoutService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+        given(creditCardBalanceService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
                 .willThrow(new CreditAccountClosedException("Credit account is closed"));
 
         mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
@@ -376,7 +373,7 @@ class CreditCardControllerTest {
     void payOutReturnsBadRequestForInvalidPayout() throws Exception {
         CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
 
-        given(creditCardPayoutService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+        given(creditCardBalanceService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
                 .willThrow(new InvalidCreditCardPayoutException("Credit balances can only be paid out to a current account"));
 
         mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)

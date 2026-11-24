@@ -32,9 +32,7 @@ public class CreditCardController {
 
     private final CreditCardService creditCardService;
 
-    private final CreditCardRepaymentService creditCardRepaymentService;
-
-    private final CreditCardPayoutService creditCardPayoutService;
+    private final CreditCardBalanceService creditCardBalanceService;
 
     private final CreditCardClosingService creditCardClosingService;
 
@@ -98,7 +96,7 @@ public class CreditCardController {
             @AuthenticationPrincipal Jwt jwt
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(creditCardRepaymentService.repay(cardReference, request, idempotencyKey, jwt.getSubject()));
+                .body(creditCardBalanceService.repay(cardReference, request, idempotencyKey, jwt.getSubject()));
     }
 
     @PostMapping("/{cardReference}/payouts")
@@ -111,7 +109,7 @@ public class CreditCardController {
             @AuthenticationPrincipal Jwt jwt
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(creditCardPayoutService.payOut(cardReference, request, idempotencyKey, jwt.getSubject()));
+                .body(creditCardBalanceService.payOut(cardReference, request, idempotencyKey, jwt.getSubject()));
     }
 
     @PostMapping("/{cardReference}/payoff-quotes")

@@ -53,7 +53,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
-class CreditCardPayoutServiceTest {
+class CreditCardBalanceServicePayoutTest {
 
     private static final String EMAIL = "customer@example.com";
 
@@ -87,11 +87,11 @@ class CreditCardPayoutServiceTest {
 
     private final Customer customer = Customer.createNew(EMAIL, "{bcrypt}encoded-password", "Ada Lovelace");
 
-    private CreditCardPayoutService creditCardPayoutService;
+    private CreditCardBalanceService creditCardBalanceService;
 
     @BeforeEach
     void setUp() {
-        creditCardPayoutService = new CreditCardPayoutService(
+        creditCardBalanceService = new CreditCardBalanceService(
                 creditCardRepository,
                 accountRepository,
                 bankTransactionRepository,
@@ -115,7 +115,7 @@ class CreditCardPayoutServiceTest {
         given(bankTransactionRepository.save(any(BankTransaction.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         CreditCardPayoutResponse response =
-                creditCardPayoutService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL);
+                creditCardBalanceService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL);
 
         verify(idempotencyService).save(idempotencyRecordCaptor.capture());
 
@@ -158,7 +158,7 @@ class CreditCardPayoutServiceTest {
         given(bankTransactionRepository.findByReference("a".repeat(32))).willReturn(Optional.of(existingTransaction));
 
         CreditCardPayoutResponse response =
-                creditCardPayoutService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL);
+                creditCardBalanceService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL);
 
         assertThat(response.transactionReference()).isEqualTo("a".repeat(32));
         assertThat(response.creditCardBalanceAfter()).isEqualByComparingTo("0.00");
@@ -170,7 +170,7 @@ class CreditCardPayoutServiceTest {
 
     @Test
     void payOutRejectsInvalidIdempotencyKey() {
-        assertThatThrownBy(() -> creditCardPayoutService.payOut(CARD_REFERENCE, request(null), "not-a-key", EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.payOut(CARD_REFERENCE, request(null), "not-a-key", EMAIL))
                 .isInstanceOf(InvalidIdempotencyKeyException.class)
                 .hasMessage("Idempotency key is invalid");
 
@@ -182,7 +182,7 @@ class CreditCardPayoutServiceTest {
         given(creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase(CARD_REFERENCE, EMAIL))
                 .willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> creditCardPayoutService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(CreditCardNotFoundException.class)
                 .hasMessage("Credit card not found");
 
@@ -198,7 +198,7 @@ class CreditCardPayoutServiceTest {
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(DESTINATION_ACCOUNT_NUMBER, EMAIL))
                 .willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> creditCardPayoutService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(AccountNotFoundException.class);
 
         verifyNoInteractions(idempotencyService);
@@ -212,7 +212,7 @@ class CreditCardPayoutServiceTest {
         givenCardAndDestinationAccount(creditCard, destinationAccount);
         given(idempotencyService.findAndValidateRecord(eq(IDEMPOTENCY_KEY), eq(EMAIL), any())).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> creditCardPayoutService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(InvalidCreditCardPayoutException.class)
                 .hasMessage("Credit balances can only be paid out to a current account");
 
@@ -228,7 +228,7 @@ class CreditCardPayoutServiceTest {
         givenCardAndDestinationAccount(creditCard, destinationAccount);
         given(idempotencyService.findAndValidateRecord(eq(IDEMPOTENCY_KEY), eq(EMAIL), any())).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> creditCardPayoutService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(CreditAccountClosedException.class)
                 .hasMessage("Credit account is closed");
 
@@ -243,7 +243,7 @@ class CreditCardPayoutServiceTest {
         givenCardAndDestinationAccount(creditCard, destinationAccount);
         given(idempotencyService.findAndValidateRecord(eq(IDEMPOTENCY_KEY), eq(EMAIL), any())).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> creditCardPayoutService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(NothingToPayOutException.class)
                 .hasMessage("There is no credit balance to pay out");
 
@@ -259,7 +259,7 @@ class CreditCardPayoutServiceTest {
         givenCardAndDestinationAccount(creditCard, destinationAccount);
         given(idempotencyService.findAndValidateRecord(eq(IDEMPOTENCY_KEY), eq(EMAIL), any())).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> creditCardPayoutService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(NothingToPayOutException.class)
                 .hasMessage("There is no credit balance to pay out");
 
@@ -278,7 +278,7 @@ class CreditCardPayoutServiceTest {
         given(bankTransactionRepository.save(any(BankTransaction.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         CreditCardPayoutResponse response =
-                creditCardPayoutService.payOut(CARD_REFERENCE, request(LOCK_ID), IDEMPOTENCY_KEY, EMAIL);
+                creditCardBalanceService.payOut(CARD_REFERENCE, request(LOCK_ID), IDEMPOTENCY_KEY, EMAIL);
 
         assertThat(response.debitedAmount()).isEqualByComparingTo("100.00");
         assertThat(response.debitedCurrency()).isEqualTo(CurrencyCode.USD);
@@ -295,7 +295,7 @@ class CreditCardPayoutServiceTest {
 
         givenCardAndDestinationAccount(creditCard, destinationAccount);
 
-        assertThatThrownBy(() -> creditCardPayoutService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.payOut(CARD_REFERENCE, request(null), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(FxRateLockUnavailableException.class)
                 .hasMessage("Lock ID is required for cross-currency payout");
 
@@ -309,7 +309,7 @@ class CreditCardPayoutServiceTest {
 
         givenCardAndDestinationAccount(creditCard, destinationAccount);
 
-        assertThatThrownBy(() -> creditCardPayoutService.payOut(CARD_REFERENCE, request(LOCK_ID), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.payOut(CARD_REFERENCE, request(LOCK_ID), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(InvalidCreditCardPayoutException.class)
                 .hasMessage("Lock ID is not required for same currency payout");
 
@@ -326,7 +326,7 @@ class CreditCardPayoutServiceTest {
         given(fxRateService.getCachedRate(EMAIL, LOCK_ID)).willReturn(rateLock(CurrencyCode.TRY));
         given(referenceGenerator.generate()).willReturn("a".repeat(32));
 
-        assertThatThrownBy(() -> creditCardPayoutService.payOut(CARD_REFERENCE, request(LOCK_ID), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.payOut(CARD_REFERENCE, request(LOCK_ID), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(FxRateLockUnavailableException.class)
                 .hasMessage("The base currency in the cached fx rate must be the same as the credit card currency");
 
