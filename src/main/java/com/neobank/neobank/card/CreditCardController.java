@@ -1,6 +1,8 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
+import com.neobank.neobank.card.dto.CreditCardClosingRequest;
+import com.neobank.neobank.card.dto.CreditCardClosingResponse;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardPayoutRequest;
@@ -121,6 +123,18 @@ public class CreditCardController {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(creditCardClosingService.quotePayoff(cardReference, jwt.getSubject()));
+    }
+
+    @PostMapping("/{cardReference}/close")
+    public ResponseEntity<CreditCardClosingResponse> close(
+            @PathVariable
+            @Pattern(regexp = "[a-f0-9]{32}", message = "Card reference must be 32 hexadecimal characters")
+            String cardReference,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody @Valid CreditCardClosingRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ResponseEntity.ok(creditCardClosingService.close(cardReference, request, idempotencyKey, jwt.getSubject()));
     }
 
     @GetMapping("/{cardReference}/transactions")

@@ -450,6 +450,30 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
     }
 
+    @ExceptionHandler(InvalidCreditCardClosingException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidCreditCardClosingException(
+            InvalidCreditCardClosingException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Invalid credit card closing");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(PayoffQuoteExpiredException.class)
+    public ResponseEntity<ProblemDetail> handlePayoffQuoteExpiredException(
+            PayoffQuoteExpiredException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Payoff quote expired");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
     @ExceptionHandler(NothingToPayOutException.class)
     public ResponseEntity<ProblemDetail> handleNothingToPayOutException(
             NothingToPayOutException ex,

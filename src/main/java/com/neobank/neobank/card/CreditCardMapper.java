@@ -2,6 +2,7 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
+import com.neobank.neobank.card.dto.CreditCardClosingResponse;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardPayoutResponse;
 import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
@@ -89,6 +90,22 @@ public class CreditCardMapper {
                 sourceEntry.getBalanceAfter(),
                 creditEntry.getBalanceAfter(),
                 transaction.getCreatedAt()
+        );
+    }
+
+    public static CreditCardClosingResponse toClosingResponse(
+            CreditCard creditCard,
+            Account payoffAccount,
+            CreditStatement closingStatement
+    ) {
+        return new CreditCardClosingResponse(
+                creditCard.getCardReference(),
+                creditCard.getCreditAccount().getAccountNumber(),
+                payoffAccount.getAccountNumber(),
+                closingStatement.getStatementReference(),
+                closingStatement.getInterestCharged(),
+                creditCard.getCreditAccount().getCurrency(),
+                closingStatement.getCreatedAt()
         );
     }
 

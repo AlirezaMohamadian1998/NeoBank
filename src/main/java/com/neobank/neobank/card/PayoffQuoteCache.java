@@ -13,7 +13,7 @@ import java.util.Optional;
 @Component
 public class PayoffQuoteCache {
 
-    private record QuoteKey(String customerEmail, String quoteId) {
+    private record QuoteKey(String customerEmail, String cardReference, String quoteId) {
     }
 
     private final Cache<QuoteKey, PayoffQuote> cache;
@@ -43,10 +43,10 @@ public class PayoffQuoteCache {
     }
 
     public void put(String customerEmail, PayoffQuote quote) {
-        cache.put(new QuoteKey(customerEmail, quote.quoteId()), quote);
+        cache.put(new QuoteKey(customerEmail, quote.cardReference(), quote.quoteId()), quote);
     }
 
-    public Optional<PayoffQuote> get(String customerEmail, String quoteId) {
-        return Optional.ofNullable(cache.getIfPresent(new QuoteKey(customerEmail, quoteId)));
+    public Optional<PayoffQuote> get(String customerEmail, String cardReference, String quoteId) {
+        return Optional.ofNullable(cache.getIfPresent(new QuoteKey(customerEmail, cardReference, quoteId)));
     }
 }

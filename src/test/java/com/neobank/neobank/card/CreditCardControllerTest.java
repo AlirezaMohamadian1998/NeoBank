@@ -3,6 +3,8 @@ package com.neobank.neobank.card;
 import com.neobank.neobank.auth.SecurityConfig;
 import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
 import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
+import com.neobank.neobank.card.dto.CreditCardClosingRequest;
+import com.neobank.neobank.card.dto.CreditCardClosingResponse;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.dto.CreditCardPayoutRequest;
@@ -14,7 +16,9 @@ import com.neobank.neobank.card.dto.CreditCardTransactionFilter;
 import com.neobank.neobank.card.dto.CreditStatementResponse;
 import com.neobank.neobank.card.dto.PayoffQuoteResponse;
 import com.neobank.neobank.card.exception.CreditCardNotFoundException;
+import com.neobank.neobank.card.exception.InvalidCreditCardClosingException;
 import com.neobank.neobank.card.exception.InvalidCreditCardPayoutException;
+import com.neobank.neobank.card.exception.PayoffQuoteExpiredException;
 import com.neobank.neobank.card.exception.InvalidCreditCardRepaymentException;
 import com.neobank.neobank.creditaccount.CreditAccountClosedException;
 import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
@@ -65,6 +69,8 @@ class CreditCardControllerTest {
     private static final String IDEMPOTENCY_KEY = "1".repeat(32);
 
     private static final String STATEMENT_REFERENCE = "3".repeat(32);
+
+    private static final String QUOTE_ID = "3f2b8c1e-7a4d-4e9b-9c2f-1d5e6a7b8c9d";
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -406,6 +412,78 @@ class CreditCardControllerTest {
                 .andExpect(jsonPath("$.accruedInterest").value(12.34))
                 .andExpect(jsonPath("$.payoffAmount").value(612.34))
                 .andExpect(jsonPath("$.expiresAt").value("2026-09-24T00:00:00Z"));
+    }
+
+    @Test
+    void closeReturnsTheClosing() throws Exception {
+        CreditCardClosingRequest request = new CreditCardClosingRequest(QUOTE_ID, "12345678900987", null);
+
+        given(creditCardClosingService.close(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+                .willReturn(new CreditCardClosingResponse(
+                        CARD_REFERENCE,
+                        "55".repeat(7),
+                        "12345678900987",
+                        STATEMENT_REFERENCE,
+                        new BigDecimal("12.34"),
+                        CurrencyCode.TRY,
+                        Instant.parse("2026-09-23T12:00:00Z")
+                ));
+
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/close", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.closingStatementReference").value(STATEMENT_REFERENCE))
+                .andExpect(jsonPath("$.payoffAccountNumber").value("12345678900987"))
+                .andExpect(jsonPath("$.interestCharged").value(12.34));
+    }
+
+    @Test
+    void closeReturnsValidationProblemWhenQuoteIdIsMissing() throws Exception {
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/close", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"payoffAccountNumber\":\"12345678900987\"}")
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        verifyNoInteractions(creditCardClosingService);
+    }
+
+    @Test
+    void closeReturnsConflictWhenTheQuoteExpired() throws Exception {
+        CreditCardClosingRequest request = new CreditCardClosingRequest(QUOTE_ID, "12345678900987", null);
+
+        given(creditCardClosingService.close(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+                .willThrow(new PayoffQuoteExpiredException("Payoff quote not found or expired"));
+
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/close", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Payoff quote expired"))
+                .andExpect(jsonPath("$.detail").value("Payoff quote not found or expired"));
+    }
+
+    @Test
+    void closeReturnsBadRequestForInvalidClosing() throws Exception {
+        CreditCardClosingRequest request = new CreditCardClosingRequest(QUOTE_ID, "12345678900987", null);
+
+        given(creditCardClosingService.close(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+                .willThrow(new InvalidCreditCardClosingException("Credit cards can only be paid off and closed with a current account"));
+
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/close", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid credit card closing"));
     }
 
     @Test
