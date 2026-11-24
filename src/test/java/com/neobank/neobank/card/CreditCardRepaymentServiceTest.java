@@ -10,6 +10,7 @@ import com.neobank.neobank.card.exception.CreditCardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCreditCardRepaymentException;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.creditaccount.CreditAccount;
+import com.neobank.neobank.creditaccount.CreditAccountClosedException;
 import com.neobank.neobank.creditaccount.RepaymentExceedsBalanceException;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxRateLockUnavailableException;
@@ -309,6 +310,24 @@ class CreditCardRepaymentServiceTest {
         assertThatThrownBy(() -> creditCardRepaymentService.repay(CARD_REFERENCE, request("600.01"), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(RepaymentExceedsBalanceException.class)
                 .hasMessage("Repayment exceeds the outstanding balance of 600.00");
+
+        assertThat(sourceAccount.getBalance()).isEqualByComparingTo("1000.00");
+        verify(bankTransactionRepository, never()).save(any());
+    }
+
+    @Test
+    void repayRejectsClosedCreditAccount() {
+        CreditCard creditCard = createCreditCard(CurrencyCode.TRY, "600.00");
+        Account sourceAccount = createSourceAccount(AccountType.CURRENT, CurrencyCode.TRY, "1000.00");
+        creditCard.getCreditAccount().getLedgerAccount().credit(new BigDecimal("600.00"));
+        creditCard.getCreditAccount().close(sourceAccount);
+
+        givenCardAndSourceAccount(creditCard, sourceAccount);
+        given(idempotencyService.findAndValidateRecord(eq(IDEMPOTENCY_KEY), eq(EMAIL), any())).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> creditCardRepaymentService.repay(CARD_REFERENCE, request("10.00"), IDEMPOTENCY_KEY, EMAIL))
+                .isInstanceOf(CreditAccountClosedException.class)
+                .hasMessage("Credit account is closed");
 
         assertThat(sourceAccount.getBalance()).isEqualByComparingTo("1000.00");
         verify(bankTransactionRepository, never()).save(any());

@@ -5,14 +5,19 @@ import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
 import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
+import com.neobank.neobank.card.dto.CreditCardPayoutRequest;
+import com.neobank.neobank.card.dto.CreditCardPayoutResponse;
 import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
 import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
 import com.neobank.neobank.card.dto.CreditCardTransactionFilter;
 import com.neobank.neobank.card.dto.CreditStatementResponse;
 import com.neobank.neobank.card.exception.CreditCardNotFoundException;
+import com.neobank.neobank.card.exception.InvalidCreditCardPayoutException;
 import com.neobank.neobank.card.exception.InvalidCreditCardRepaymentException;
+import com.neobank.neobank.creditaccount.CreditAccountClosedException;
 import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
+import com.neobank.neobank.creditaccount.NothingToPayOutException;
 import com.neobank.neobank.creditaccount.RepaymentExceedsBalanceException;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.EntryDirection;
@@ -71,6 +76,9 @@ class CreditCardControllerTest {
 
     @MockitoBean
     private CreditCardRepaymentService creditCardRepaymentService;
+
+    @MockitoBean
+    private CreditCardPayoutService creditCardPayoutService;
 
     @MockitoBean
     private JwtDecoder jwtDecoder;
@@ -280,6 +288,101 @@ class CreditCardControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Invalid credit card repayment"))
                 .andExpect(jsonPath("$.detail").value("Lock ID is not required for same currency repayment"));
+    }
+
+    @Test
+    void payOutReturnsCreatedPayout() throws Exception {
+        CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
+
+        given(creditCardPayoutService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+                .willReturn(new CreditCardPayoutResponse(
+                        "a".repeat(32),
+                        CARD_REFERENCE,
+                        "55".repeat(7),
+                        "12345678900987",
+                        new BigDecimal("150.00"),
+                        CurrencyCode.USD,
+                        new BigDecimal("150.00"),
+                        CurrencyCode.USD,
+                        new BigDecimal("1150.00"),
+                        new BigDecimal("0.00"),
+                        Instant.parse("2026-09-23T12:00:00Z")
+                ));
+
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.transactionReference").value("a".repeat(32)))
+                .andExpect(jsonPath("$.debitedAmount").value(150.00))
+                .andExpect(jsonPath("$.destinationAccountBalanceAfter").value(1150.00))
+                .andExpect(jsonPath("$.creditCardBalanceAfter").value(0.00));
+    }
+
+    @Test
+    void payOutReturnsValidationProblemWhenDestinationAccountIsMissing() throws Exception {
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        verifyNoInteractions(creditCardPayoutService);
+    }
+
+    @Test
+    void payOutReturnsConflictWhenThereIsNothingToPayOut() throws Exception {
+        CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
+
+        given(creditCardPayoutService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+                .willThrow(new NothingToPayOutException("There is no credit balance to pay out"));
+
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Nothing to pay out"))
+                .andExpect(jsonPath("$.detail").value("There is no credit balance to pay out"));
+    }
+
+    @Test
+    void payOutReturnsConflictWhenTheCreditAccountIsClosed() throws Exception {
+        CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
+
+        given(creditCardPayoutService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+                .willThrow(new CreditAccountClosedException("Credit account is closed"));
+
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Credit account closed"))
+                .andExpect(jsonPath("$.detail").value("Credit account is closed"));
+    }
+
+    @Test
+    void payOutReturnsBadRequestForInvalidPayout() throws Exception {
+        CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
+
+        given(creditCardPayoutService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
+                .willThrow(new InvalidCreditCardPayoutException("Credit balances can only be paid out to a current account"));
+
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid credit card payout"))
+                .andExpect(jsonPath("$.detail").value("Credit balances can only be paid out to a current account"));
     }
 
     @Test

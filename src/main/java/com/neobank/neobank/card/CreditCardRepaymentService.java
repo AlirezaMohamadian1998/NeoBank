@@ -121,6 +121,7 @@ public class CreditCardRepaymentService {
             throw new InvalidCreditCardRepaymentException("Credit cards can only be repaid from a current account");
         }
 
+        creditAccount.ensureOpen();
         creditAccount.ensureWithinOutstandingBalance(request.amount());
 
         BankTransaction bankTransaction = BankTransaction.createNew(

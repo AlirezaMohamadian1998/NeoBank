@@ -5,6 +5,7 @@ import com.neobank.neobank.card.exception.*;
 import com.neobank.neobank.creditaccount.CreditAccountClosedException;
 import com.neobank.neobank.creditaccount.CreditLimitExceededException;
 import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
+import com.neobank.neobank.creditaccount.NothingToPayOutException;
 import com.neobank.neobank.creditaccount.RepaymentExceedsBalanceException;
 import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
@@ -435,6 +436,30 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problemDetail.setTitle("Invalid credit card repayment");
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidCreditCardPayoutException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidCreditCardPayoutException(
+            InvalidCreditCardPayoutException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Invalid credit card payout");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(NothingToPayOutException.class)
+    public ResponseEntity<ProblemDetail> handleNothingToPayOutException(
+            NothingToPayOutException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Nothing to pay out");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
     }
 
     @ExceptionHandler(InvalidCardLimitException.class)

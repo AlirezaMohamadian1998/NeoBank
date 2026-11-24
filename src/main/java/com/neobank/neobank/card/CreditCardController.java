@@ -3,6 +3,8 @@ package com.neobank.neobank.card;
 import com.neobank.neobank.card.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
+import com.neobank.neobank.card.dto.CreditCardPayoutRequest;
+import com.neobank.neobank.card.dto.CreditCardPayoutResponse;
 import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
 import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
@@ -30,6 +32,8 @@ public class CreditCardController {
     private final CreditCardService creditCardService;
 
     private final CreditCardRepaymentService creditCardRepaymentService;
+
+    private final CreditCardPayoutService creditCardPayoutService;
 
     @PostMapping
     public ResponseEntity<CreditCardIssueResponse> issueCreditCard(
@@ -92,6 +96,19 @@ public class CreditCardController {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(creditCardRepaymentService.repay(cardReference, request, idempotencyKey, jwt.getSubject()));
+    }
+
+    @PostMapping("/{cardReference}/payouts")
+    public ResponseEntity<CreditCardPayoutResponse> payOut(
+            @PathVariable
+            @Pattern(regexp = "[a-f0-9]{32}", message = "Card reference must be 32 hexadecimal characters")
+            String cardReference,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody @Valid CreditCardPayoutRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(creditCardPayoutService.payOut(cardReference, request, idempotencyKey, jwt.getSubject()));
     }
 
     @GetMapping("/{cardReference}/transactions")
