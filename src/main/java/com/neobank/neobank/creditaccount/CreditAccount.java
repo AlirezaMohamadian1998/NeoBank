@@ -1,7 +1,9 @@
 package com.neobank.neobank.creditaccount;
 
+import com.neobank.neobank.account.Account;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
+import com.neobank.neobank.ledger.LedgerAccountStatus;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.persistence.BaseEntity;
@@ -39,6 +41,10 @@ public class CreditAccount extends BaseEntity {
 
     @Column(nullable = false)
     private LocalDate nextStatementDate;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "payoff_account_id")
+    private Account payoffAccount;
 
     private CreditAccount(
             String accountNumber,
@@ -121,6 +127,26 @@ public class CreditAccount extends BaseEntity {
         nextStatementDate = nextStatementDate.plusMonths(1);
     }
 
+    public void close(Account payoffAccount) {
+        if(payoffAccount == null) {
+            throw new IllegalArgumentException("Payoff account cannot be null");
+        }
+
+        ensureOpen();
+        ledgerAccount.close();
+        this.payoffAccount = payoffAccount;
+    }
+
+    public boolean isClosed() {
+        return ledgerAccount.getStatus() == LedgerAccountStatus.CLOSED;
+    }
+
+    public void ensureOpen() {
+        if(isClosed()) {
+            throw new CreditAccountClosedException("Credit account is closed");
+        }
+    }
+
     public CurrencyCode getCurrency() {
         return ledgerAccount.getCurrency();
     }
@@ -155,5 +181,4 @@ public class CreditAccount extends BaseEntity {
                     "Repayment exceeds the outstanding balance of " + outstandingBalance.toPlainString()
             );
         }
-    }
-}
+    }}

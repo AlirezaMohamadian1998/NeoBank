@@ -215,6 +215,22 @@ class CreditStatementIntegrationTest extends TransactionIntegrationTestSupport {
     }
 
     @Test
+    void closedAccountIsNeverDueAndKeepsItsPayoffAccount() {
+        transactionTemplate.executeWithoutResult(status ->
+                creditAccountRepository.findById(creditAccount.getId()).orElseThrow().close(account)
+        );
+
+        assertThat(creditAccountRepository.findIdsWithStatementDueBy(LocalDate.of(2026, 3, 15))).doesNotContain(creditAccount.getId());
+
+        transactionTemplate.executeWithoutResult(status -> {
+            CreditAccount closedAccount = reloadedCreditAccount();
+
+            assertThat(closedAccount.isClosed()).isTrue();
+            assertThat(closedAccount.getPayoffAccount().getId()).isEqualTo(account.getId());
+        });
+    }
+
+    @Test
     void closingTwiceCreatesOneStatement() {
         purchase("600.00", "2026-01-20T10:00:00Z");
 

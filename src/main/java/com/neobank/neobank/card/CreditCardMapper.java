@@ -2,7 +2,9 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.card.dto.CardSpendingLimitsResponse;
+import com.neobank.neobank.card.dto.CreditCardClosingResponse;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
+import com.neobank.neobank.card.dto.CreditCardPayoutResponse;
 import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
 import com.neobank.neobank.card.dto.CreditStatementResponse;
@@ -87,6 +89,44 @@ public class CreditCardMapper {
                 creditEntry.getCurrency(),
                 sourceEntry.getBalanceAfter(),
                 creditEntry.getBalanceAfter(),
+                transaction.getCreatedAt()
+        );
+    }
+
+    public static CreditCardClosingResponse toClosingResponse(
+            CreditCard creditCard,
+            Account payoffAccount,
+            CreditStatement closingStatement
+    ) {
+        return new CreditCardClosingResponse(
+                creditCard.getCardReference(),
+                creditCard.getCreditAccount().getAccountNumber(),
+                payoffAccount.getAccountNumber(),
+                closingStatement.getStatementReference(),
+                closingStatement.getInterestCharged(),
+                creditCard.getCreditAccount().getCurrency(),
+                closingStatement.getCreatedAt()
+        );
+    }
+
+    public static CreditCardPayoutResponse toPayoutResponse(
+            CreditCard creditCard,
+            Account destinationAccount,
+            BankTransaction transaction,
+            LedgerEntry cardEntry,
+            LedgerEntry destinationEntry
+    ) {
+        return new CreditCardPayoutResponse(
+                transaction.getReference(),
+                creditCard.getCardReference(),
+                creditCard.getCreditAccount().getAccountNumber(),
+                destinationAccount.getAccountNumber(),
+                cardEntry.getAmount(),
+                cardEntry.getCurrency(),
+                destinationEntry.getAmount(),
+                destinationEntry.getCurrency(),
+                destinationEntry.getBalanceAfter(),
+                cardEntry.getBalanceAfter(),
                 transaction.getCreatedAt()
         );
     }

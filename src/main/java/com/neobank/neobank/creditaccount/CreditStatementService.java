@@ -59,82 +59,16 @@ public class CreditStatementService {
         CreditAccount creditAccount = creditAccountRepository.findAndLockById(creditAccountId)
                 .orElseThrow(() -> new IllegalArgumentException("Credit account not found"));
 
-        LedgerAccount cardLedger = creditAccount.getLedgerAccount();
-
         while(!creditAccount.getNextStatementDate().isAfter(today)) {
-            List<CreditStatement> lastTwoStatements =
-                    creditStatementRepository.findTop2ByCreditAccountOrderByStatementDateDesc(creditAccount);
-
-            CreditStatement previousStatement = lastTwoStatements.isEmpty() ? null : lastTwoStatements.get(0);
-            CreditStatement statementBeforePrevious = lastTwoStatements.size() < 2 ? null : lastTwoStatements.get(1);
-
             LocalDate statementDate = creditAccount.getNextStatementDate();
 
-            LocalDate periodStart = previousStatement == null
-                    ? LocalDate.ofInstant(creditAccount.getCreatedAt(), ZoneOffset.UTC)
-                    : previousStatement.getStatementDate();
+            StatementFigures figures = calculateStatementFigures(creditAccount, statementDate, statementDate);
 
-            BigDecimal openingBalance = previousStatement == null ? BigDecimal.ZERO : previousStatement.getClosingBalance();
+            BigDecimal interest = figures.interest();
 
-            List<LedgerEntry> entries = ledgerEntryRepository.findNonInterestEntries(
-                    cardLedger,
-                    periodStart.atStartOfDay(ZoneOffset.UTC).toInstant(),
-                    statementDate.atStartOfDay(ZoneOffset.UTC).toInstant()
-            );
+            BankTransaction interestTransaction = postInterestTransaction(creditAccount, interest);
 
-            BigDecimal balance = openingBalance;
-            BigDecimal dailyBalanceSum = BigDecimal.ZERO;
-            LocalDate balanceSince = periodStart;
-
-            for(LedgerEntry entry : entries) {
-                LocalDate entryDay = LocalDate.ofInstant(entry.getCreatedAt(), ZoneOffset.UTC);
-
-                dailyBalanceSum = dailyBalanceSum.add(
-                        balance.max(BigDecimal.ZERO).multiply(BigDecimal.valueOf(ChronoUnit.DAYS.between(balanceSince, entryDay)))
-                );
-
-                balance = entry.getDirection() == EntryDirection.DEBIT
-                        ? balance.add(entry.getAmount())
-                        : balance.subtract(entry.getAmount());
-
-                balanceSince = entryDay;
-            }
-
-            dailyBalanceSum = dailyBalanceSum.add(
-                    balance.max(BigDecimal.ZERO).multiply(BigDecimal.valueOf(ChronoUnit.DAYS.between(balanceSince, statementDate)))
-            );
-
-            boolean gracePeriodAtCycleStart = isPaidInFull(statementBeforePrevious, cardLedger);
-            boolean previousStatementPaidInFull = isPaidInFull(previousStatement, cardLedger);
-
-            BigDecimal interest = gracePeriodAtCycleStart && previousStatementPaidInFull
-                    ? BigDecimal.ZERO
-                    : dailyBalanceSum.multiply(creditAccount.getAnnualInterestRate()).divide(DAYS_PER_YEAR, 2, RoundingMode.HALF_UP);
-
-            BankTransaction interestTransaction = null;
-
-            if(interest.signum() > 0) {
-                LedgerAccount interestIncomeLedger = internalAccountRepository
-                        .findByPurposeAndCurrency(InternalAccountPurpose.INTEREST_INCOME, creditAccount.getCurrency())
-                        .orElseThrow(() -> new IllegalStateException("Interest income account not found for " + creditAccount.getCurrency()))
-                        .getLedgerAccount();
-
-                interestTransaction = BankTransaction.createNew(
-                        interest,
-                        creditAccount.getCurrency(),
-                        TransactionType.CREDIT_CARD_INTEREST,
-                        referenceGenerator.generate(),
-                        null
-                );
-
-                ledgerPostingService.post(interestTransaction, cardLedger, EntryDirection.DEBIT, interest);
-                ledgerPostingService.post(interestTransaction, interestIncomeLedger, EntryDirection.CREDIT, interest);
-
-                interestTransaction.complete();
-                bankTransactionRepository.save(interestTransaction);
-            }
-
-            BigDecimal closingBalance = balance.add(interest);
+            BigDecimal closingBalance = figures.balanceBeforeInterest().add(interest);
 
             BigDecimal minimumPayment = closingBalance.signum() <= 0
                     ? BigDecimal.ZERO
@@ -144,17 +78,15 @@ public class CreditStatementService {
                             .max(creditAccountProperties.getMinimumPaymentFloor(creditAccount.getCurrency()))
                             .min(closingBalance);
 
-            long days = ChronoUnit.DAYS.between(periodStart, statementDate);
-
             creditStatementRepository.save(CreditStatement.createNew(
                     referenceGenerator.generate(),
                     creditAccount,
-                    periodStart,
+                    figures.periodStart(),
                     statementDate,
                     statementDate.plusDays(creditAccountProperties.paymentDueDays()),
-                    openingBalance,
+                    figures.openingBalance(),
                     closingBalance,
-                    dailyBalanceSum.divide(BigDecimal.valueOf(days), 2, RoundingMode.HALF_UP),
+                    figures.averageDailyBalance(),
                     interest,
                     minimumPayment,
                     interestTransaction
@@ -162,6 +94,120 @@ public class CreditStatementService {
 
             creditAccount.advanceStatementDate();
         }
+    }
+
+    public CreditStatement writeClosingStatement(CreditAccount creditAccount, LocalDate today) {
+        LocalDate statementDate = today.plusDays(1);
+
+        StatementFigures figures = calculateStatementFigures(creditAccount, statementDate, today);
+
+        BankTransaction interestTransaction = postInterestTransaction(creditAccount, figures.interest());
+
+        return creditStatementRepository.save(CreditStatement.createNew(
+                referenceGenerator.generate(),
+                creditAccount,
+                figures.periodStart(),
+                statementDate,
+                statementDate.plusDays(creditAccountProperties.paymentDueDays()),
+                figures.openingBalance(),
+                BigDecimal.ZERO,
+                figures.averageDailyBalance(),
+                figures.interest(),
+                BigDecimal.ZERO,
+                interestTransaction
+        ));
+    }
+
+    public BigDecimal calculatePayoffInterest(CreditAccount creditAccount, LocalDate today) {
+        return calculateStatementFigures(creditAccount, today.plusDays(1), today).interest();
+    }
+
+    private StatementFigures calculateStatementFigures(CreditAccount creditAccount, LocalDate periodEnd, LocalDate calculatedOn) {
+        LedgerAccount cardLedger = creditAccount.getLedgerAccount();
+
+        List<CreditStatement> lastTwoStatements =
+                creditStatementRepository.findTop2ByCreditAccountOrderByStatementDateDesc(creditAccount);
+
+        CreditStatement previousStatement = lastTwoStatements.isEmpty() ? null : lastTwoStatements.get(0);
+        CreditStatement statementBeforePrevious = lastTwoStatements.size() < 2 ? null : lastTwoStatements.get(1);
+
+        LocalDate periodStart = previousStatement == null
+                ? LocalDate.ofInstant(creditAccount.getCreatedAt(), ZoneOffset.UTC)
+                : previousStatement.getStatementDate();
+
+        BigDecimal openingBalance = previousStatement == null ? BigDecimal.ZERO : previousStatement.getClosingBalance();
+
+        List<LedgerEntry> entries = ledgerEntryRepository.findNonInterestEntries(
+                cardLedger,
+                periodStart.atStartOfDay(ZoneOffset.UTC).toInstant(),
+                periodEnd.atStartOfDay(ZoneOffset.UTC).toInstant()
+        );
+
+        BigDecimal balance = openingBalance;
+        BigDecimal dailyBalanceSum = BigDecimal.ZERO;
+        LocalDate balanceSince = periodStart;
+
+        for(LedgerEntry entry : entries) {
+            LocalDate entryDay = LocalDate.ofInstant(entry.getCreatedAt(), ZoneOffset.UTC);
+
+            dailyBalanceSum = dailyBalanceSum.add(
+                    balance.max(BigDecimal.ZERO).multiply(BigDecimal.valueOf(ChronoUnit.DAYS.between(balanceSince, entryDay)))
+            );
+
+            balance = entry.getDirection() == EntryDirection.DEBIT
+                    ? balance.add(entry.getAmount())
+                    : balance.subtract(entry.getAmount());
+
+            balanceSince = entryDay;
+        }
+
+        dailyBalanceSum = dailyBalanceSum.add(
+                balance.max(BigDecimal.ZERO).multiply(BigDecimal.valueOf(ChronoUnit.DAYS.between(balanceSince, periodEnd)))
+        );
+
+        boolean gracePeriodAtCycleStart = isPaidInFull(statementBeforePrevious, cardLedger);
+        boolean previousStatementSettled = isPaidInFull(previousStatement, cardLedger)
+                || !previousStatement.getDueDate().isBefore(calculatedOn);
+
+        BigDecimal interest = gracePeriodAtCycleStart && previousStatementSettled
+                ? BigDecimal.ZERO
+                : dailyBalanceSum.multiply(creditAccount.getAnnualInterestRate()).divide(DAYS_PER_YEAR, 2, RoundingMode.HALF_UP);
+
+            long days = ChronoUnit.DAYS.between(periodStart, periodEnd);
+
+        return new StatementFigures(
+                periodStart,
+                openingBalance,
+                balance,
+                dailyBalanceSum.divide(BigDecimal.valueOf(days), 2, RoundingMode.HALF_UP),
+                interest
+        );
+    }
+
+    private BankTransaction postInterestTransaction(CreditAccount creditAccount, BigDecimal interest) {
+        if(interest.signum() == 0) {
+            return null;
+        }
+
+        LedgerAccount interestIncomeLedger = internalAccountRepository
+                .findByPurposeAndCurrency(InternalAccountPurpose.INTEREST_INCOME, creditAccount.getCurrency())
+                .orElseThrow(() -> new IllegalStateException("Interest income account not found for " + creditAccount.getCurrency()))
+                .getLedgerAccount();
+
+        BankTransaction interestTransaction = BankTransaction.createNew(
+                interest,
+                creditAccount.getCurrency(),
+                TransactionType.CREDIT_CARD_INTEREST,
+                referenceGenerator.generate(),
+                null
+        );
+
+        ledgerPostingService.post(interestTransaction, creditAccount.getLedgerAccount(), EntryDirection.DEBIT, interest);
+        ledgerPostingService.post(interestTransaction, interestIncomeLedger, EntryDirection.CREDIT, interest);
+
+        interestTransaction.complete();
+
+        return bankTransactionRepository.save(interestTransaction);
     }
 
     private boolean isPaidInFull(CreditStatement statement, LedgerAccount cardLedger) {
@@ -176,5 +222,14 @@ public class CreditStatementService {
         );
 
         return repaidUntilDueDate.compareTo(statement.getClosingBalance()) >= 0;
+    }
+
+    private record StatementFigures(
+            LocalDate periodStart,
+            BigDecimal openingBalance,
+            BigDecimal balanceBeforeInterest,
+            BigDecimal averageDailyBalance,
+            BigDecimal interest
+    ) {
     }
 }

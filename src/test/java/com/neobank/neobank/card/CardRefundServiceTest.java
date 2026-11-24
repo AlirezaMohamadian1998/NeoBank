@@ -7,6 +7,7 @@ import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.dto.CardRefundResponse;
 import com.neobank.neobank.card.exception.CardPurchaseNotFoundException;
 import com.neobank.neobank.card.exception.CardPurchaseNotRefundableException;
+import com.neobank.neobank.creditaccount.CreditAccountRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
@@ -71,6 +72,9 @@ class CardRefundServiceTest {
     private AccountRepository accountRepository;
 
     @Mock
+    private CreditAccountRepository creditAccountRepository;
+
+    @Mock
     private ReferenceGenerator referenceGenerator;
 
     @Captor
@@ -97,6 +101,7 @@ class CardRefundServiceTest {
                 cardPurchaseDetailsRepository,
                 cardRefundDetailsRepository,
                 accountRepository,
+                creditAccountRepository,
                 requestHasher,
                 objectMapper,
                 referenceGenerator
@@ -460,6 +465,37 @@ class CardRefundServiceTest {
 
         assertThat(fundingAccount.getBalance())
                 .isEqualByComparingTo("750.00");
+
+        verify(cardRefundDetailsRepository, never()).save(any());
+        verify(idempotencyService, never()).save(any());
+    }
+
+    @Test
+    void refundPurchaseRejectsWhenTheAccountToRefundToIsClosed() {
+        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
+        Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
+        fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
+
+        CardPurchaseDetails purchase = createCompletedPurchase(
+                fundingAccount, merchantAccount, new BigDecimal("250.00"), CurrencyCode.TRY, BigDecimal.ONE, BigDecimal.ONE
+        );
+
+        fundingAccount.getLedgerAccount().debit(new BigDecimal("750.00"));
+        fundingAccount.getLedgerAccount().close();
+
+        stubUpToPurchaseLookup(merchantAccount, purchase);
+
+        assertThatThrownBy(() -> cardRefundService.refundPurchase(
+                MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, IDEMPOTENCY_KEY, MERCHANT_EMAIL
+        ))
+                .isInstanceOf(CardPurchaseNotRefundableException.class)
+                .hasMessage("The account to refund to is closed");
+
+        assertThat(purchase.getBankTransaction().getStatus())
+                .isSameAs(TransactionStatus.COMPLETED);
+
+        assertThat(merchantAccount.getBalance())
+                .isEqualByComparingTo("250.00");
 
         verify(cardRefundDetailsRepository, never()).save(any());
         verify(idempotencyService, never()).save(any());

@@ -95,8 +95,8 @@ class AccountIntegrationTest {
         bankTransactionRepository.deleteAll();
         cardDailySpendRepository.deleteAll();
         cardRepository.deleteAll();
-        accountRepository.deleteAll();
         creditAccountRepository.deleteAll();
+        accountRepository.deleteAll();
         internalAccountRepository.deleteAll();
         ledgerAccountRepository.deleteAll();
         customerRepository.deleteAll();

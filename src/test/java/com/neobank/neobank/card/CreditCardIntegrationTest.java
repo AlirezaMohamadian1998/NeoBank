@@ -4,6 +4,8 @@ import com.neobank.neobank.card.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.dto.CreditCardIssueResponse;
+import com.neobank.neobank.card.dto.CreditCardPayoutRequest;
+import com.neobank.neobank.card.dto.CreditCardPayoutResponse;
 import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
 import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
@@ -14,11 +16,13 @@ import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.fx.ProviderRateCache;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.shared.money.CurrencyCode;
+import com.neobank.neobank.transaction.TransactionType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -43,6 +47,9 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
 
     @Autowired
     private CreditStatementService creditStatementService;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     @Test
     void issuingTwiceWithSameIdempotencyKeyCreatesOneCreditCardAndAccount() throws Exception {
@@ -323,6 +330,121 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(jsonPath("$.detail").value("Lock ID is required for cross-currency repayment"));
     }
 
+    @Test
+    void payoutMovesTheWholeCreditBalanceToTheCurrentAccount() throws Exception {
+        CreditCardIssueResponse issued = issueAndActivateCreditCard();
+        giveCreditBalance(issued.cardReference(), "250.00");
+
+        CreditCardPayoutResponse payout = objectMapper.readValue(
+                payOut(issued.cardReference(), null, "2".repeat(32))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.debitedAmount").value(250.00))
+                        .andExpect(jsonPath("$.debitedCurrency").value("TRY"))
+                        .andExpect(jsonPath("$.creditedAmount").value(250.00))
+                        .andExpect(jsonPath("$.creditedCurrency").value("TRY"))
+                        .andExpect(jsonPath("$.destinationAccountBalanceAfter").value(250.00))
+                        .andExpect(jsonPath("$.creditCardBalanceAfter").value(0.00))
+                        .andReturn().getResponse().getContentAsString(),
+                CreditCardPayoutResponse.class
+        );
+
+        assertThat(bankTransactionRepository.findByReference(payout.transactionReference()).orElseThrow().getTransactionType())
+                .isEqualTo(TransactionType.CREDIT_CARD_PAYOUT);
+        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+                .isEqualByComparingTo("250.00");
+
+        mockMvc.perform(get("/api/credit-cards/{cardReference}", issued.cardReference())
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance").value(0.00));
+    }
+
+    @Test
+    void payingOutTwiceWithSameIdempotencyKeyPaysOutOnce() throws Exception {
+        CreditCardIssueResponse issued = issueAndActivateCreditCard();
+        giveCreditBalance(issued.cardReference(), "250.00");
+
+        CreditCardPayoutResponse first = objectMapper.readValue(
+                payOut(issued.cardReference(), null, "2".repeat(32))
+                        .andExpect(status().isCreated())
+                        .andReturn().getResponse().getContentAsString(),
+                CreditCardPayoutResponse.class
+        );
+
+        payOut(issued.cardReference(), null, "2".repeat(32))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.transactionReference").value(first.transactionReference()))
+                .andExpect(jsonPath("$.destinationAccountBalanceAfter").value(250.00));
+
+        payOut(issued.cardReference(), null, "3".repeat(32))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Nothing to pay out"))
+                .andExpect(jsonPath("$.detail").value("There is no credit balance to pay out"));
+
+        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+                .isEqualByComparingTo("250.00");
+    }
+
+    @Test
+    void payoutWithDebtIsRejected() throws Exception {
+        CreditCardIssueResponse issued = issueAndActivateCreditCard();
+
+        purchase(issued.cardReference(), "100.00", "2".repeat(32))
+                .andExpect(status().isCreated());
+
+        payOut(issued.cardReference(), null, "3".repeat(32))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("There is no credit balance to pay out"));
+    }
+
+    @Test
+    void payoutToAccountInAnotherCurrencyUsesTheLockedRate() throws Exception {
+        given(providerRateCache.getLatestRates()).willReturn(new FxProviderRates(
+                "test-provider",
+                CurrencyCode.USD,
+                Map.of(
+                        CurrencyCode.USD, BigDecimal.ONE,
+                        CurrencyCode.EUR, new BigDecimal("0.85"),
+                        CurrencyCode.GBP, new BigDecimal("0.75"),
+                        CurrencyCode.TRY, new BigDecimal("40.00")
+                ),
+                Instant.now()
+        ));
+
+        CreditCardIssueResponse issued = issueAndActivateCreditCard(CurrencyCode.USD);
+        giveCreditBalance(issued.cardReference(), "100.00");
+
+        String lockId = fxRateService.createRateLock(CurrencyCode.USD, customer.getEmail()).lockId();
+
+        payOut(issued.cardReference(), lockId, "2".repeat(32))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.debitedAmount").value(100.00))
+                .andExpect(jsonPath("$.debitedCurrency").value("USD"))
+                .andExpect(jsonPath("$.creditedAmount").value(4000.00))
+                .andExpect(jsonPath("$.creditedCurrency").value("TRY"))
+                .andExpect(jsonPath("$.destinationAccountBalanceAfter").value(4000.00))
+                .andExpect(jsonPath("$.creditCardBalanceAfter").value(0.00));
+    }
+
+    @Test
+    void closedCreditAccountRejectsPayoutsAndRepayments() throws Exception {
+        CreditCardIssueResponse issued = issueAndActivateCreditCard();
+
+        transactionTemplate.executeWithoutResult(status ->
+                creditCardRepository.findByCardReference(issued.cardReference()).orElseThrow().getCreditAccount()
+                        .close(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow())
+        );
+
+        payOut(issued.cardReference(), null, "2".repeat(32))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Credit account closed"))
+                .andExpect(jsonPath("$.detail").value("Credit account is closed"));
+
+        repay(issued.cardReference(), "10.00", "3".repeat(32))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Credit account closed"));
+    }
+
     private CreditCardIssueResponse issueAndActivateCreditCard() throws Exception {
         return issueAndActivateCreditCard(CurrencyCode.TRY);
     }
@@ -346,6 +468,23 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
                         new CreditCardRepaymentRequest(account.getAccountNumber(), new BigDecimal(amount), lockId)
+                ))
+                .header("Idempotency-Key", idempotencyKey)
+                .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))));
+    }
+
+    private void giveCreditBalance(String cardReference, String amount) {
+        transactionTemplate.executeWithoutResult(status ->
+                creditCardRepository.findByCardReference(cardReference).orElseThrow()
+                        .getCreditAccount().getLedgerAccount().credit(new BigDecimal(amount))
+        );
+    }
+
+    private ResultActions payOut(String cardReference, String lockId, String idempotencyKey) throws Exception {
+        return mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", cardReference)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(
+                        new CreditCardPayoutRequest(account.getAccountNumber(), lockId)
                 ))
                 .header("Idempotency-Key", idempotencyKey)
                 .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))));

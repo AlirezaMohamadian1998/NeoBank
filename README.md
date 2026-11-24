@@ -10,7 +10,8 @@ NeoBank is a work-in-progress banking backend built as a personal portfolio proj
 - Short-lived, customer-scoped FX rate locks for cross-currency money movement
 - Debit and credit card issuance, retrieval, and lifecycle management (activate, freeze, block, close)
 - Card purchases at internal merchants and external merchants through settlement accounts, through one endpoint for both card types
-- Credit cards backed by a credit account with a credit limit, repayments from current accounts (cross-currency with an FX rate lock), and credit balances after refunds
+- Credit cards backed by a credit account with a credit limit, repayments from current accounts (cross-currency with an FX rate lock), credit balances after refunds, and payouts of a credit balance to a current account
+- Closing a credit account with a payoff quote: the balance plus interest up to the day, valid until midnight, paid off and closed in one step
 - Monthly credit card statements with a minimum payment and interest on the average daily balance, with a grace period, closed by a daily scheduled job
 - Full refunds of card purchases by the merchant account's owner, at current FX rates for cross-currency purchases
 - Per-transaction and daily card spending limits, with bank defaults and maximums per currency that customers can adjust
@@ -25,7 +26,7 @@ NeoBank is a work-in-progress banking backend built as a personal portfolio proj
 
 NeoBank is a Spring Boot monolith organized by feature.
 
-- Operation-specific services coordinate deposits, withdrawals, transfers, card purchases, card refunds, and credit card repayments.
+- Operation-specific services coordinate deposits, withdrawals, transfers, card purchases, card refunds, credit card repayments and payouts, and credit account closings.
 - `LedgerPostingService` is the central boundary for balance changes and ledger-entry creation.
 - A `BankTransaction` groups its ledger entries and can complete only when its postings are balanced.
 - Internal settlement accounts provide the bank side of deposits, withdrawals, and external card purchases.
@@ -39,6 +40,9 @@ NeoBank is a Spring Boot monolith organized by feature.
 - FX provider responses are validated, cached with Caffeine, and normalized to the requested base currency.
 - A daily scheduled job closes credit card statements. Each credit account is closed in its own transaction under a pessimistic row lock, and a unique constraint on the account and statement date backs it up, so several application instances can run the job at once without creating a statement twice.
 - Interest is a `CREDIT_CARD_INTEREST` transaction that debits the credit account and credits an internal interest income account, a new `INCOME` ledger type.
+- A credit account is closed when its ledger account is closed; there is no separate status. A closed ledger account rejects every posting.
+- A close takes a pessimistic lock on the credit account as the first query of its transaction, so two closes of the same card run one after the other and the second sees the first one's result.
+- Payoff quotes are kept in a Caffeine cache, keyed by customer, card, and quote ID, and each entry expires at its own `expiresAt`.
 - Audit timestamps come from the application's `Clock` bean, so tests can move time.
 - Every transaction list is a page of ledger entries mapped to the same row types, so a purchase, refund, or repayment looks the same whichever list it appears in. Card details for purchase and refund rows are loaded with one query per page for each.
 
@@ -101,9 +105,11 @@ On Windows, use `mvnw.cmd` instead of `bash mvnw`.
 | Card purchases | `POST /api/cards/{cardReference}/payments` |
 | Card refunds | `POST /api/accounts/{merchantAccountNumber}/card-refunds/{purchaseReference}` |
 | Credit card repayments | `POST /api/credit-cards/{cardReference}/repayments` |
+| Credit card payouts | `POST /api/credit-cards/{cardReference}/payouts` |
+| Credit account closing | `POST /api/credit-cards/{cardReference}/payoff-quotes`, `POST /api/credit-cards/{cardReference}/close` |
 | Credit card statements | `GET /api/credit-cards/{cardReference}/statements`, `GET /api/credit-cards/{cardReference}/statements/{statementReference}`, `GET /api/credit-cards/{cardReference}/statements/{statementReference}/lines` |
 
-Protected endpoints require a bearer token. Money-movement, card issuance, card purchase, card refund, and credit card repayment requests require an `Idempotency-Key` header. Cross-currency deposits, withdrawals, transfers, and credit card repayments can reference an FX rate lock, which expires after five minutes.
+Protected endpoints require a bearer token. Money-movement, card issuance, card purchase, card refund, credit card repayment, payout, and closing requests require an `Idempotency-Key` header. Cross-currency deposits, withdrawals, transfers, and credit card repayments, payouts, and closings can reference an FX rate lock, which expires after five minutes.
 
 Every row in a transaction list includes the `transactionReference` of the movement it belongs to. Merchants use it as the `purchaseReference` when refunding, and a cardholder's refund row carries the `purchaseReference` of the purchase it reverses.
 
@@ -160,14 +166,17 @@ New cards start as `INACTIVE`. `PATCH /api/debit-cards/{cardReference}/status/{s
 ### Credit cards
 
 - `POST /api/credit-cards` with a `currency` issues a credit card together with a new credit account in that currency. The credit limit is the bank default for the currency, configured under `credit-account.default-credit-limits`. Customers can't change it.
-- The credit account holds the debt, so it carries on when a card is frozen, blocked, or closed. Closing a card doesn't require a zero balance.
+- The credit account holds the debt, so it carries on when a card is frozen, blocked, or closed. Closing a card doesn't require a zero balance. To close the credit account itself, see [Closing a credit account](#closing-a-credit-account).
 - Card responses include `creditLimit`, `balance` (what the customer owes), `availableCredit` (limit minus balance), `annualInterestRate`, and `nextStatementDate`.
 - A purchase that would take the balance over the credit limit is rejected with `409 Conflict`. The check uses the amount actually debited, after any FX conversion.
 - A refund lowers the balance. A refund after the purchase was already repaid leaves a negative balance, a credit balance: the bank owes the customer, and the available credit is higher than the limit until it is spent.
-- `POST /api/credit-cards/{cardReference}/repayments` moves money from one of the customer's current accounts to the credit account. The `amount` is in the card's currency. It works whatever the card's status.
+- `POST /api/credit-cards/{cardReference}/repayments` moves money from one of the customer's current accounts to the credit account. The `amount` is in the card's currency. It works whatever the card's status, as long as the credit account is open.
 - If the current account is in another currency, the request must include an FX rate lock whose base is the card's currency, and the account is debited the converted amount. A lock sent for a same-currency repayment is rejected.
 - A repayment larger than the outstanding balance is rejected with `409 Conflict`, as is one larger than the current account's balance.
 - Repayments appear as `CREDIT_CARD_REPAYMENT` in both the current account's history and the credit card's transactions.
+- `POST /api/credit-cards/{cardReference}/payouts` with a `destinationAccountNumber` pays the whole credit balance into one of the customer's current accounts. The request has no amount: it always pays out everything the bank owes. Without a credit balance it is rejected with `409 Conflict`.
+- A payout to an account in another currency needs an FX rate lock whose base is the card's currency, and the account is credited the converted amount.
+- Payouts appear as `CREDIT_CARD_PAYOUT` in both the current account's history and the credit card's transactions.
 
 ### Credit card statements
 
@@ -253,12 +262,24 @@ The lines of statements 2 and 3 from the example:
 
 On the credit account, DEBIT raises what the customer owes and CREDIT lowers it. The 11.50 posted on Mar 15 falls inside statement 3's period by date, but it belongs to statement 2, so it is listed only there.
 
+### Closing a credit account
+
+- **Quote.** `POST /api/credit-cards/{cardReference}/payoff-quotes` returns what closing costs today: the `balance`, the `accruedInterest` from the last statement up to and including today, and the `payoffAmount`, their sum. A negative payoff amount is a credit balance the bank pays back. If a statement is due but the job hasn't run yet, the quote closes that statement first.
+- Accrued interest follows the statement rules, with one addition: a previous statement that isn't due yet counts as paid, because the payoff pays it now.
+- **Validity.** A quote is valid until the next midnight UTC (`expiresAt`), and only while nothing is posted to the card: a purchase, refund, repayment, or payout after the quote makes it stale. Asking for a quote changes nothing, and the account keeps working normally.
+- **Close.** `POST /api/credit-cards/{cardReference}/close` with the `quoteId` and a `payoffAccountNumber`, one of the customer's current accounts, does everything in one transaction: it posts the accrued interest, writes a closing statement, takes the payoff amount from the account (or pays a credit balance into it), and closes the credit account and its card. An expired or stale quote, or a quote for another card, is rejected with `409 Conflict` and nothing changes.
+- If the payoff account is in another currency, an FX rate lock whose base is the card's currency is required, as for repayments.
+- **Closing statement.** It covers the last statement date up to and including the closing day, with a closing balance and minimum payment of 0. Its lines add up like any statement's, ending with the interest and the payoff.
+- **After closing.** The card is `CLOSED`, and the credit account takes no more money movement: purchases, repayments, payouts, new quotes, and another close are rejected with `409 Conflict`. The card, its transactions, and its statements stay readable. The statement job skips closed accounts.
+- **Refunds after closing.** A merchant refund of a purchase made on a closed credit card goes to the payoff account, the way a bank returns a credit that arrives after closing. If that account is closed too, the refund is rejected with `409 Conflict`.
+- Closing only the card with `PATCH /api/credit-cards/{cardReference}/status/CLOSED` doesn't close the credit account: the debt stays and statements continue.
+
 ### Transaction history
 
 | Endpoint | Lists | Filters |
 |---|---|---|
-| `GET /api/transactions` | The customer's current and savings accounts, or one of them: deposits, withdrawals, transfers, debit card purchases and refunds, and credit card repayments from the account | `accountNumber`, `type`, `requestedCurrency`, `dateFrom`/`dateTo`, `appliedMin`/`appliedMax` |
-| `GET /api/credit-cards/{cardReference}/transactions` | The whole credit account, for any period including the open cycle: purchases, refunds, repayments, and interest | `type`, `dateFrom`/`dateTo` |
+| `GET /api/transactions` | The customer's current and savings accounts, or one of them: deposits, withdrawals, transfers, debit card purchases and refunds, and credit card repayments and payouts | `accountNumber`, `type`, `requestedCurrency`, `dateFrom`/`dateTo`, `appliedMin`/`appliedMax` |
+| `GET /api/credit-cards/{cardReference}/transactions` | The whole credit account, for any period including the open cycle: purchases, refunds, repayments, payouts, and interest | `type`, `dateFrom`/`dateTo` |
 | `GET /api/cards/{cardReference}/transactions` | Purchases and refunds made with one card, debit or credit. Other cards on the same account and other movements are left out | `dateFrom`/`dateTo` |
 | `GET /api/credit-cards/{cardReference}/statements/{statementReference}/lines` | One closed statement, see [Credit card statements](#credit-card-statements) | none |
 
@@ -282,18 +303,18 @@ On the credit account, DEBIT raises what the customer owes and CREDIT lowers it.
 
 - Only purchases paid to a merchant account inside NeoBank can be refunded through the API. In real card networks, refunds of purchases at outside merchants reach the issuing bank through the network (for example Visa or Mastercard), not from the merchant; that path is not simulated.
 - Refunds are full refunds only.
-- FX rate locks are kept in memory, so they are lost on restart and are not shared between application instances.
+- FX rate locks and payoff quotes are kept in memory, so they are lost on restart and are not shared between application instances.
 - The daily card limit resets at midnight UTC for every customer; there is no per-customer time zone.
 - A purchase already in progress uses the limits it read. A limit change made at the same moment applies from the next purchase.
 - A missed minimum payment has no late fee and doesn't change the account; it only leaves the grace period off.
 - Interest is posted when the job closes the cycle. If the job was down, the catch-up posts it late, though the amounts are the same.
 - The interest rate is the bank default per currency and can't be changed per account.
-- A credit balance can only be used up by later purchases; it can't be paid out to a current account. Repaying more than the outstanding balance is rejected rather than turned into a credit balance.
-- Each credit card has its own credit account. Supplementary cards on a shared credit account are not supported, and a credit account can't be closed through the API.
+- Repaying more than the outstanding balance is rejected rather than turned into a credit balance.
+- Each credit card has its own credit account. Supplementary cards on a shared credit account are not supported.
 
 ## Tests
 
-The test suite includes domain and service tests, controller tests, REST-client tests, and MySQL integration tests for rollback, idempotency, and concurrent money movement, card purchases, card refunds, card spending limits, credit limits, credit card repayments, credit card statements (including concurrent closings of the same statement), and the transaction lists.
+The test suite includes domain and service tests, controller tests, REST-client tests, and MySQL integration tests for rollback, idempotency, and concurrent money movement, card purchases, card refunds, card spending limits, credit limits, credit card repayments and payouts, credit card statements (including concurrent closings of the same statement), payoff quotes and credit account closing, and the transaction lists.
 
 ```bash
 bash mvnw test

@@ -10,6 +10,7 @@ import com.neobank.neobank.card.exception.CreditCardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCreditCardRepaymentException;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.creditaccount.CreditAccount;
+import com.neobank.neobank.creditaccount.CreditAccountClosedException;
 import com.neobank.neobank.creditaccount.RepaymentExceedsBalanceException;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxRateLockUnavailableException;
@@ -53,7 +54,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
-class CreditCardRepaymentServiceTest {
+class CreditCardBalanceServiceRepaymentTest {
 
     private static final String EMAIL = "customer@example.com";
 
@@ -87,11 +88,11 @@ class CreditCardRepaymentServiceTest {
 
     private final Customer customer = Customer.createNew(EMAIL, "{bcrypt}encoded-password", "Ada Lovelace");
 
-    private CreditCardRepaymentService creditCardRepaymentService;
+    private CreditCardBalanceService creditCardBalanceService;
 
     @BeforeEach
     void setUp() {
-        creditCardRepaymentService = new CreditCardRepaymentService(
+        creditCardBalanceService = new CreditCardBalanceService(
                 creditCardRepository,
                 accountRepository,
                 bankTransactionRepository,
@@ -115,7 +116,7 @@ class CreditCardRepaymentServiceTest {
         given(bankTransactionRepository.save(any(BankTransaction.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         CreditCardRepaymentResponse response =
-                creditCardRepaymentService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL);
+                creditCardBalanceService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL);
 
         verify(idempotencyService).save(idempotencyRecordCaptor.capture());
 
@@ -146,7 +147,7 @@ class CreditCardRepaymentServiceTest {
         given(bankTransactionRepository.save(any(BankTransaction.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         CreditCardRepaymentResponse response =
-                creditCardRepaymentService.repay(CARD_REFERENCE, request("600.00"), IDEMPOTENCY_KEY, EMAIL);
+                creditCardBalanceService.repay(CARD_REFERENCE, request("600.00"), IDEMPOTENCY_KEY, EMAIL);
 
         assertThat(response.creditCardBalanceAfter()).isEqualByComparingTo("0.00");
     }
@@ -175,7 +176,7 @@ class CreditCardRepaymentServiceTest {
         given(bankTransactionRepository.findByReference("a".repeat(32))).willReturn(Optional.of(existingTransaction));
 
         CreditCardRepaymentResponse response =
-                creditCardRepaymentService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL);
+                creditCardBalanceService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL);
 
         assertThat(response.transactionReference()).isEqualTo("a".repeat(32));
         assertThat(response.sourceAccountBalanceAfter()).isEqualByComparingTo("750.00");
@@ -187,7 +188,7 @@ class CreditCardRepaymentServiceTest {
 
     @Test
     void repayRejectsInvalidIdempotencyKey() {
-        assertThatThrownBy(() -> creditCardRepaymentService.repay(CARD_REFERENCE, request("250.00"), "invalid", EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.repay(CARD_REFERENCE, request("250.00"), "invalid", EMAIL))
                 .isInstanceOf(InvalidIdempotencyKeyException.class);
 
         verifyNoInteractions(creditCardRepository, accountRepository, idempotencyService);
@@ -198,7 +199,7 @@ class CreditCardRepaymentServiceTest {
         given(creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase(CARD_REFERENCE, EMAIL))
                 .willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> creditCardRepaymentService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(CreditCardNotFoundException.class)
                 .hasMessage("Credit card not found");
     }
@@ -212,7 +213,7 @@ class CreditCardRepaymentServiceTest {
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(SOURCE_ACCOUNT_NUMBER, EMAIL))
                 .willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> creditCardRepaymentService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(AccountNotFoundException.class);
     }
 
@@ -224,7 +225,7 @@ class CreditCardRepaymentServiceTest {
         givenCardAndSourceAccount(creditCard, sourceAccount);
         given(idempotencyService.findAndValidateRecord(eq(IDEMPOTENCY_KEY), eq(EMAIL), any())).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> creditCardRepaymentService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(InvalidCreditCardRepaymentException.class)
                 .hasMessage("Credit cards can only be repaid from a current account");
 
@@ -243,7 +244,7 @@ class CreditCardRepaymentServiceTest {
         given(bankTransactionRepository.save(any(BankTransaction.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         CreditCardRepaymentResponse response =
-                creditCardRepaymentService.repay(CARD_REFERENCE, request("250.00", LOCK_ID), IDEMPOTENCY_KEY, EMAIL);
+                creditCardBalanceService.repay(CARD_REFERENCE, request("250.00", LOCK_ID), IDEMPOTENCY_KEY, EMAIL);
 
         assertThat(response.debitedAmount()).isEqualByComparingTo("8545.75");
         assertThat(response.debitedCurrency()).isEqualTo(CurrencyCode.TRY);
@@ -260,7 +261,7 @@ class CreditCardRepaymentServiceTest {
 
         givenCardAndSourceAccount(creditCard, sourceAccount);
 
-        assertThatThrownBy(() -> creditCardRepaymentService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(FxRateLockUnavailableException.class)
                 .hasMessage("Lock ID is required for cross-currency repayment");
 
@@ -274,7 +275,7 @@ class CreditCardRepaymentServiceTest {
 
         givenCardAndSourceAccount(creditCard, sourceAccount);
 
-        assertThatThrownBy(() -> creditCardRepaymentService.repay(CARD_REFERENCE, request("250.00", LOCK_ID), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.repay(CARD_REFERENCE, request("250.00", LOCK_ID), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(InvalidCreditCardRepaymentException.class)
                 .hasMessage("Lock ID is not required for same currency repayment");
 
@@ -291,7 +292,7 @@ class CreditCardRepaymentServiceTest {
         given(fxRateService.getCachedRate(EMAIL, LOCK_ID)).willReturn(rateLock(CurrencyCode.TRY));
         given(referenceGenerator.generate()).willReturn("a".repeat(32));
 
-        assertThatThrownBy(() -> creditCardRepaymentService.repay(CARD_REFERENCE, request("250.00", LOCK_ID), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.repay(CARD_REFERENCE, request("250.00", LOCK_ID), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(FxRateLockUnavailableException.class)
                 .hasMessage("The base currency in the cached fx rate must be the same as the credit card currency");
 
@@ -306,9 +307,27 @@ class CreditCardRepaymentServiceTest {
         givenCardAndSourceAccount(creditCard, sourceAccount);
         given(idempotencyService.findAndValidateRecord(eq(IDEMPOTENCY_KEY), eq(EMAIL), any())).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> creditCardRepaymentService.repay(CARD_REFERENCE, request("600.01"), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.repay(CARD_REFERENCE, request("600.01"), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(RepaymentExceedsBalanceException.class)
                 .hasMessage("Repayment exceeds the outstanding balance of 600.00");
+
+        assertThat(sourceAccount.getBalance()).isEqualByComparingTo("1000.00");
+        verify(bankTransactionRepository, never()).save(any());
+    }
+
+    @Test
+    void repayRejectsClosedCreditAccount() {
+        CreditCard creditCard = createCreditCard(CurrencyCode.TRY, "600.00");
+        Account sourceAccount = createSourceAccount(AccountType.CURRENT, CurrencyCode.TRY, "1000.00");
+        creditCard.getCreditAccount().getLedgerAccount().credit(new BigDecimal("600.00"));
+        creditCard.getCreditAccount().close(sourceAccount);
+
+        givenCardAndSourceAccount(creditCard, sourceAccount);
+        given(idempotencyService.findAndValidateRecord(eq(IDEMPOTENCY_KEY), eq(EMAIL), any())).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> creditCardBalanceService.repay(CARD_REFERENCE, request("10.00"), IDEMPOTENCY_KEY, EMAIL))
+                .isInstanceOf(CreditAccountClosedException.class)
+                .hasMessage("Credit account is closed");
 
         assertThat(sourceAccount.getBalance()).isEqualByComparingTo("1000.00");
         verify(bankTransactionRepository, never()).save(any());
@@ -323,7 +342,7 @@ class CreditCardRepaymentServiceTest {
         given(idempotencyService.findAndValidateRecord(eq(IDEMPOTENCY_KEY), eq(EMAIL), any())).willReturn(Optional.empty());
         given(referenceGenerator.generate()).willReturn("a".repeat(32), "b".repeat(32));
 
-        assertThatThrownBy(() -> creditCardRepaymentService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL))
+        assertThatThrownBy(() -> creditCardBalanceService.repay(CARD_REFERENCE, request("250.00"), IDEMPOTENCY_KEY, EMAIL))
                 .isInstanceOf(InsufficientFundsException.class);
 
         verify(bankTransactionRepository, never()).save(any());
