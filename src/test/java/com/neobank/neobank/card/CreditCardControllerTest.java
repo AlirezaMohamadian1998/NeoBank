@@ -12,6 +12,7 @@ import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
 import com.neobank.neobank.card.dto.CreditCardTransactionFilter;
 import com.neobank.neobank.card.dto.CreditStatementResponse;
+import com.neobank.neobank.card.dto.PayoffQuoteResponse;
 import com.neobank.neobank.card.exception.CreditCardNotFoundException;
 import com.neobank.neobank.card.exception.InvalidCreditCardPayoutException;
 import com.neobank.neobank.card.exception.InvalidCreditCardRepaymentException;
@@ -79,6 +80,9 @@ class CreditCardControllerTest {
 
     @MockitoBean
     private CreditCardPayoutService creditCardPayoutService;
+
+    @MockitoBean
+    private CreditCardClosingService creditCardClosingService;
 
     @MockitoBean
     private JwtDecoder jwtDecoder;
@@ -383,6 +387,28 @@ class CreditCardControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Invalid credit card payout"))
                 .andExpect(jsonPath("$.detail").value("Credit balances can only be paid out to a current account"));
+    }
+
+    @Test
+    void quotePayoffReturnsCreatedQuote() throws Exception {
+        given(creditCardClosingService.quotePayoff(CARD_REFERENCE, EMAIL))
+                .willReturn(new PayoffQuoteResponse(
+                        "3f2b8c1e-7a4d-4e9b-9c2f-1d5e6a7b8c9d",
+                        CARD_REFERENCE,
+                        CurrencyCode.TRY,
+                        new BigDecimal("600.00"),
+                        new BigDecimal("12.34"),
+                        new BigDecimal("612.34"),
+                        Instant.parse("2026-09-24T00:00:00Z")
+                ));
+
+        mockMvc.perform(post("/api/credit-cards/{cardReference}/payoff-quotes", CARD_REFERENCE)
+                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.quoteId").value("3f2b8c1e-7a4d-4e9b-9c2f-1d5e6a7b8c9d"))
+                .andExpect(jsonPath("$.accruedInterest").value(12.34))
+                .andExpect(jsonPath("$.payoffAmount").value(612.34))
+                .andExpect(jsonPath("$.expiresAt").value("2026-09-24T00:00:00Z"));
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.neobank.neobank.card.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.dto.CreditCardRetrieveResponse;
 import com.neobank.neobank.card.dto.CreditCardTransactionFilter;
 import com.neobank.neobank.card.dto.CreditStatementResponse;
+import com.neobank.neobank.card.dto.PayoffQuoteResponse;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -34,6 +35,8 @@ public class CreditCardController {
     private final CreditCardRepaymentService creditCardRepaymentService;
 
     private final CreditCardPayoutService creditCardPayoutService;
+
+    private final CreditCardClosingService creditCardClosingService;
 
     @PostMapping
     public ResponseEntity<CreditCardIssueResponse> issueCreditCard(
@@ -109,6 +112,17 @@ public class CreditCardController {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(creditCardPayoutService.payOut(cardReference, request, idempotencyKey, jwt.getSubject()));
+    }
+
+    @PostMapping("/{cardReference}/payoff-quotes")
+    public ResponseEntity<PayoffQuoteResponse> quotePayoff(
+            @PathVariable
+            @Pattern(regexp = "[a-f0-9]{32}", message = "Card reference must be 32 hexadecimal characters")
+            String cardReference,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(creditCardClosingService.quotePayoff(cardReference, jwt.getSubject()));
     }
 
     @GetMapping("/{cardReference}/transactions")

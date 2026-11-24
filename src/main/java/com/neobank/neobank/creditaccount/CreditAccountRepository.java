@@ -18,6 +18,17 @@ public interface CreditAccountRepository extends JpaRepository<CreditAccount, Lo
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<CreditAccount> findAndLockById(Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select c from CreditAccount c
+            where upper(c.customer.email) = upper(:customerEmail)
+              and c.id = (select card.creditAccount.id from CreditCard card where card.cardReference = :cardReference)
+            """)
+    Optional<CreditAccount> findAndLockByCardReferenceAndCustomerEmail(
+            @Param("cardReference") String cardReference,
+            @Param("customerEmail") String customerEmail
+    );
+
     @Query("""
             select c.id from CreditAccount c
             where c.nextStatementDate <= :today
