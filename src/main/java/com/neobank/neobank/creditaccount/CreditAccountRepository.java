@@ -18,6 +18,10 @@ public interface CreditAccountRepository extends JpaRepository<CreditAccount, Lo
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<CreditAccount> findAndLockById(Long id);
 
-    @Query("select c.id from CreditAccount c where c.nextStatementDate <= :today")
+    @Query("""
+            select c.id from CreditAccount c
+            where c.nextStatementDate <= :today
+              and c.ledgerAccount.status = com.neobank.neobank.ledger.LedgerAccountStatus.ACTIVE
+            """)
     List<Long> findIdsWithStatementDueBy(@Param("today") LocalDate today);
 }

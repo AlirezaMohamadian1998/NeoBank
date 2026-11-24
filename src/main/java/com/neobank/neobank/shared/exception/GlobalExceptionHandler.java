@@ -2,6 +2,7 @@ package com.neobank.neobank.shared.exception;
 
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.card.exception.*;
+import com.neobank.neobank.creditaccount.CreditAccountClosedException;
 import com.neobank.neobank.creditaccount.CreditLimitExceededException;
 import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
 import com.neobank.neobank.creditaccount.RepaymentExceedsBalanceException;
@@ -408,6 +409,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problemDetail.setInstance(URI.create(request.getRequestURI()));
         problemDetail.setTitle("Repayment exceeds balance");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
+    }
+
+    @ExceptionHandler(CreditAccountClosedException.class)
+    public ResponseEntity<ProblemDetail> handleCreditAccountClosedException(
+            CreditAccountClosedException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle("Credit account closed");
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
     }

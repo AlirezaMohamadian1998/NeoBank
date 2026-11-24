@@ -86,8 +86,8 @@ public abstract class TransactionIntegrationTestSupport {
         cardRepository.deleteAll();
         ledgerEntryRepository.deleteAll();
         bankTransactionRepository.deleteAll();
-        accountRepository.deleteAll();
         creditAccountRepository.deleteAll();
+        accountRepository.deleteAll();
         internalAccountRepository.deleteAll();
         ledgerAccountRepository.deleteAll();
         customerRepository.deleteAll();

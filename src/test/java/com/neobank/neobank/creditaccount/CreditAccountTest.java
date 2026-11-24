@@ -1,5 +1,7 @@
 package com.neobank.neobank.creditaccount;
 
+import com.neobank.neobank.account.Account;
+import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountStatus;
@@ -204,6 +206,60 @@ class CreditAccountTest {
                 .hasMessage("Amount must not be null");
     }
 
+    @Test
+    void closeClosesTheLedgerAndRemembersThePayoffAccount() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+        Account payoffAccount = payoffAccount();
+
+        creditAccount.close(payoffAccount);
+
+        assertThat(creditAccount.isClosed()).isTrue();
+        assertThat(creditAccount.getLedgerAccount().getStatus()).isEqualTo(LedgerAccountStatus.CLOSED);
+        assertThat(creditAccount.getPayoffAccount()).isSameAs(payoffAccount);
+    }
+
+    @Test
+    void newAccountIsOpen() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+
+        assertThat(creditAccount.isClosed()).isFalse();
+        creditAccount.ensureOpen();
+    }
+
+    @Test
+    void closeRejectsANonZeroBalance() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+        creditAccount.getLedgerAccount().debit(new BigDecimal("0.01"));
+
+        assertThatThrownBy(() -> creditAccount.close(payoffAccount()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Ledger account cannot be closed with a non-zero balance");
+        assertThat(creditAccount.isClosed()).isFalse();
+        assertThat(creditAccount.getPayoffAccount()).isNull();
+    }
+
+    @Test
+    void closeRejectsNullPayoffAccount() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+
+        assertThatThrownBy(() -> creditAccount.close(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Payoff account cannot be null");
+    }
+
+    @Test
+    void closedAccountRejectsClosingAgainAndEnsureOpen() {
+        CreditAccount creditAccount = creditAccount(new BigDecimal("1000.00"));
+        creditAccount.close(payoffAccount());
+
+        assertThatThrownBy(() -> creditAccount.close(payoffAccount()))
+                .isInstanceOf(CreditAccountClosedException.class)
+                .hasMessage("Credit account is closed");
+        assertThatThrownBy(creditAccount::ensureOpen)
+                .isInstanceOf(CreditAccountClosedException.class)
+                .hasMessage("Credit account is closed");
+    }
+
     private static Stream<String> invalidAccountNumbers() {
         return Stream.of(null, "", "1234567890123", "123456789012345", "1234567890123a");
     }
@@ -281,6 +337,16 @@ class CreditAccountTest {
                 Arguments.of(BigDecimal.ZERO, "Credit limit must be greater than zero"),
                 Arguments.of(new BigDecimal("-1.00"), "Credit limit must be greater than zero"),
                 Arguments.of(new BigDecimal("10.001"), "Credit limit must not have more than 2 decimal places")
+        );
+    }
+
+    private Account payoffAccount() {
+        return Account.createNew(
+                "12345678900987",
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                LedgerAccount.createNew("7".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY)
         );
     }
 
