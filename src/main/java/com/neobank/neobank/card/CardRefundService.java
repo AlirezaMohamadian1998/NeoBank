@@ -6,9 +6,12 @@ import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.card.dto.CardRefundResponse;
 import com.neobank.neobank.card.exception.CardPurchaseNotFoundException;
 import com.neobank.neobank.card.exception.CardPurchaseNotRefundableException;
+import com.neobank.neobank.creditaccount.CreditAccount;
+import com.neobank.neobank.creditaccount.CreditAccountRepository;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.idempotency.*;
 import com.neobank.neobank.ledger.LedgerAccount;
+import com.neobank.neobank.ledger.LedgerAccountStatus;
 import com.neobank.neobank.ledger.LedgerPostingService;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
@@ -43,6 +46,8 @@ public class CardRefundService {
     private final CardRefundDetailsRepository cardRefundDetailsRepository;
 
     private final AccountRepository accountRepository;
+
+    private final CreditAccountRepository creditAccountRepository;
 
     private final RequestHasher requestHasher;
 
@@ -156,13 +161,23 @@ public class CardRefundService {
     /**
      * Moves the purchase's requested amount back from whichever ledger account the purchase credited
      * to the card's funding account, as a new transaction, converting with current FX rates.
+     * If the funding account is a closed credit account, the refund goes to the account that paid it off.
      * It does not check who is asking; callers authorize before calling it.
      */
     private CardRefundDetails reversePurchase(CardPurchaseDetails cardPurchaseDetails) {
         BankTransaction purchaseTransaction = cardPurchaseDetails.getBankTransaction();
 
         LedgerAccount sourceLedgerAccount = getEntry(purchaseTransaction, EntryDirection.CREDIT).getLedgerAccount();
-        LedgerAccount destinationLedgerAccount = getEntry(purchaseTransaction, EntryDirection.DEBIT).getLedgerAccount();
+        LedgerAccount fundingLedgerAccount = getEntry(purchaseTransaction, EntryDirection.DEBIT).getLedgerAccount();
+
+        LedgerAccount destinationLedgerAccount = creditAccountRepository.findByLedgerAccount(fundingLedgerAccount)
+                .filter(CreditAccount::isClosed)
+                .map(creditAccount -> creditAccount.getPayoffAccount().getLedgerAccount())
+                .orElse(fundingLedgerAccount);
+
+        if(destinationLedgerAccount.getStatus() != LedgerAccountStatus.ACTIVE) {
+            throw new CardPurchaseNotRefundableException("The account to refund to is closed");
+        }
 
         BigDecimal requestedAmount = purchaseTransaction.getRequestedAmount();
         CurrencyCode requestedCurrency = purchaseTransaction.getRequestedCurrency();

@@ -3,6 +3,7 @@ package com.neobank.neobank.card;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.dto.CardPurchaseRequest;
+import com.neobank.neobank.card.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.dto.CreditCardClosingRequest;
 import com.neobank.neobank.card.dto.CreditCardClosingResponse;
 import com.neobank.neobank.card.dto.CreditCardIssueRequest;
@@ -275,6 +276,38 @@ class CreditCardClosingIntegrationTest extends DebitCardIntegrationTestSupport {
     }
 
     @Test
+    void refundAfterClosingGoesToThePayoffAccount() throws Exception {
+        Account payoffAccount = accountRepository.save(Account.createNew(
+                "98765432100123",
+                "payoff",
+                AccountType.CURRENT,
+                customer,
+                fundedLedger("2".repeat(32), "1000.00")
+        ));
+
+        CreditCardIssueResponse issued = issueAndActivateCreditCard("2026-01-15T10:00:00Z");
+        String purchaseReference = purchase(issued.cardReference(), "600.00", "2".repeat(32), "2026-01-20T10:00:00Z");
+
+        PayoffQuoteResponse quote = quotePayoff(issued.cardReference(), "2026-01-25T10:00:00Z");
+        closed(closeCard(issued.cardReference(), quote.quoteId(), payoffAccount, "3".repeat(32), "2026-01-25T11:00:00Z"));
+
+        assertThat(balanceOf(payoffAccount)).isEqualByComparingTo("400.00");
+
+        mutableClock.setInstant(Instant.parse("2026-01-28T10:00:00Z"));
+
+        mockMvc.perform(post("/api/accounts/{merchantAccountNumber}/card-refunds/{purchaseReference}",
+                        account.getAccountNumber(), purchaseReference)
+                        .header("Idempotency-Key", "4".repeat(32))
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isCreated());
+
+        assertThat(balanceOf(payoffAccount)).isEqualByComparingTo("1000.00");
+        assertThat(balanceOf(account)).isEqualByComparingTo("0.00");
+        assertThat(cardLedger(issued.cardReference()).getBalance()).isEqualByComparingTo("0.00");
+        assertThat(cardLedger(issued.cardReference()).getStatus()).isEqualTo(LedgerAccountStatus.CLOSED);
+    }
+
+    @Test
     void closingTwiceWithSameIdempotencyKeyClosesOnce() throws Exception {
         CreditCardIssueResponse issued = issueAndActivateCreditCard("2026-01-15T10:00:00Z");
         purchase(issued.cardReference(), "600.00", "2".repeat(32), "2026-01-20T10:00:00Z");
@@ -406,10 +439,10 @@ class CreditCardClosingIntegrationTest extends DebitCardIntegrationTestSupport {
         return issued;
     }
 
-    private void purchase(String cardReference, String amount, String idempotencyKey, String at) throws Exception {
+    private String purchase(String cardReference, String amount, String idempotencyKey, String at) throws Exception {
         mutableClock.setInstant(Instant.parse(at));
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
+        String body = mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CardPurchaseRequest(
                                 account.getAccountNumber(),
@@ -420,6 +453,11 @@ class CreditCardClosingIntegrationTest extends DebitCardIntegrationTestSupport {
                         )))
                         .header("Idempotency-Key", idempotencyKey)
                         .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return objectMapper.readValue(body, CardPurchaseResponse.class).transactionReference();
     }
 }

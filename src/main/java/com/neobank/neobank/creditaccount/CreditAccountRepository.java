@@ -1,5 +1,6 @@
 package com.neobank.neobank.creditaccount;
 
+import com.neobank.neobank.ledger.LedgerAccount;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -28,6 +29,8 @@ public interface CreditAccountRepository extends JpaRepository<CreditAccount, Lo
             @Param("cardReference") String cardReference,
             @Param("customerEmail") String customerEmail
     );
+
+    Optional<CreditAccount> findByLedgerAccount(LedgerAccount ledgerAccount);
 
     @Query("""
             select c.id from CreditAccount c
