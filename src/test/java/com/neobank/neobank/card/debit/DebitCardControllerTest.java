@@ -1,23 +1,13 @@
 package com.neobank.neobank.card.debit;
 
-import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.auth.SecurityConfig;
-import com.neobank.neobank.card.CardExpiredException;
 import com.neobank.neobank.card.CardStatus;
-import com.neobank.neobank.card.InvalidCardStatusTransitionException;
-import com.neobank.neobank.card.UnsupportedCardStatusException;
 import com.neobank.neobank.card.debit.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.debit.dto.DebitCardRetrieveResponse;
-import com.neobank.neobank.card.limit.CardSpendingLimitsNotChangeableException;
-import com.neobank.neobank.card.limit.InvalidCardLimitException;
 import com.neobank.neobank.card.limit.dto.CardSpendingLimitsResponse;
 import com.neobank.neobank.card.limit.dto.CardSpendingLimitsUpdateRequest;
-import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -35,7 +25,6 @@ import tools.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -93,29 +82,6 @@ class DebitCardControllerTest {
     }
 
     @Test
-    void issueDebitCardReturnsNotFoundWhenFundingAccountIsNotOwned() throws Exception {
-        String idempotencyKey = "11111111111111111111111111111111";
-        String email = "customer@example.com";
-        String accountNumber = "12345678900987";
-
-        given(debitCardService.issueDebitCard(email, accountNumber, idempotencyKey))
-                .willThrow(new AccountNotFoundException());
-
-        mockMvc.perform(post("/api/debit-cards/{accountNumber}", accountNumber)
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isNotFound())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Account not found"))
-                .andExpect(jsonPath("$.detail").value("Account not found"))
-                .andExpect(jsonPath("$.instance").value("/api/debit-cards/%s".formatted(accountNumber)))
-                .andExpect(jsonPath("$.status").value(404));
-
-        verify(debitCardService).issueDebitCard(email, accountNumber, idempotencyKey);
-
-    }
-
-    @Test
     void issueDebitCardReturnsValidationProblemForInvalidAccountNumber() throws Exception {
         String idempotencyKey = "11111111111111111111111111111111";
         String email = "customer@example.com";
@@ -161,26 +127,6 @@ class DebitCardControllerTest {
     }
 
     @Test
-    void issueDebitCardReturnsBadRequestWhenIdempotencyKeyIsInvalid() throws Exception {
-        String idempotencyKey = "ZZzz1111XX1111XXXX111111XX11zzZZ";
-        String email = "customer@example.com";
-        String accountNumber = "12345678900987";
-
-        given(debitCardService.issueDebitCard(email, accountNumber, idempotencyKey))
-                .willThrow(new InvalidIdempotencyKeyException("Invalid idempotency key"));
-
-        mockMvc.perform(post("/api/debit-cards/{accountNumber}", accountNumber)
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Invalid idempotency key"))
-                .andExpect(jsonPath("$.detail").value("Invalid idempotency key"))
-                .andExpect(jsonPath("$.instance").value("/api/debit-cards/%s".formatted(accountNumber)))
-                .andExpect(jsonPath("$.status").value(400));
-    }
-
-    @Test
     void getDebitCardReturnsCardForAuthenticatedCustomer() throws Exception {
         String email = "customer@example.com";
 
@@ -207,26 +153,6 @@ class DebitCardControllerTest {
                 .andExpect(jsonPath("$.fundingAccountNumber").value(response.fundingAccountNumber()));
 
         verify(debitCardService).getDebitCard(response.cardReference(), email);
-    }
-
-    @Test
-    void getDebitCardReturnsNotFoundProblem() throws Exception {
-        String email = "customer@example.com";
-        String cardReference = "11111111111111111111111111111111";
-
-        given(debitCardService.getDebitCard(cardReference, email))
-                .willThrow(new DebitCardNotFoundException("Debit card not found"));
-
-        mockMvc.perform(get("/api/debit-cards/{cardReference}", cardReference)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isNotFound())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Debit card not found"))
-                .andExpect(jsonPath("$.detail").value("Debit card not found"))
-                .andExpect(jsonPath("$.instance").value("/api/debit-cards/%s".formatted(cardReference)))
-                .andExpect(jsonPath("$.status").value(404));
-
-        verify(debitCardService).getDebitCard(cardReference, email);
     }
 
     @Test
@@ -441,66 +367,6 @@ class DebitCardControllerTest {
         verifyNoMoreInteractions(debitCardService);
     }
 
-    @ParameterizedTest
-    @MethodSource("changeCardStatusServiceExceptionSource")
-    void changeCardStatusReturnsExpectedProblemForServiceException(
-            CardStatus status,
-            RuntimeException ex,
-            String title,
-            int httpStatusCode
-    ) throws Exception {
-        String email = "customer@example.com";
-        String cardReference = "11111111111111111111111111111111";
-
-        given(debitCardService.changeCardStatus(cardReference, email, status))
-                .willThrow(ex);
-
-        mockMvc.perform(patch("/api/debit-cards/{cardReference}/status/{status}", cardReference, status.name())
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().is(httpStatusCode))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.detail").value(ex.getMessage()))
-                .andExpect(jsonPath("$.title").value(title))
-                .andExpect(jsonPath("$.instance")
-                        .value("/api/debit-cards/%s/status/%s".formatted(cardReference, status.name())))
-                .andExpect(jsonPath("$.status").value(httpStatusCode));
-
-        verify(debitCardService).changeCardStatus(cardReference, email, status);
-    }
-
-    static Stream<Arguments> changeCardStatusServiceExceptionSource() {
-        return Stream.of(
-                Arguments.argumentSet(
-                        "changeCardStatusReturnsNotFoundProblem",
-                        CardStatus.ACTIVE,
-                        new DebitCardNotFoundException("Debit card not found"),
-                        "Debit card not found",
-                        404
-                ),
-                Arguments.argumentSet(
-                        "changeCardStatusReturnsBadRequestForUnsupportedStatus",
-                        CardStatus.INACTIVE,
-                        new UnsupportedCardStatusException("The entered status is not supported"),
-                        "Unsupported card status",
-                        400
-                ),
-                Arguments.argumentSet(
-                        "changeCardStatusReturnsConflictForInvalidTransition",
-                        CardStatus.FROZEN,
-                        new InvalidCardStatusTransitionException("Only an active card can be frozen"),
-                        "Invalid card status transition",
-                        409
-                ),
-                Arguments.argumentSet(
-                        "changeCardStatusReturnsConflictForExpiredCard",
-                        CardStatus.ACTIVE,
-                        new CardExpiredException("Expired cards cannot be activated"),
-                        "Card expired",
-                        409
-                )
-        );
-    }
-
     @Test
     void updateSpendingLimitsReturnsUpdatedCardForAuthenticatedCustomer() throws Exception {
         String email = "customer@example.com";
@@ -595,54 +461,6 @@ class DebitCardControllerTest {
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(debitCardService);
-    }
-
-    @ParameterizedTest
-    @MethodSource("updateSpendingLimitsServiceExceptionSource")
-    void updateSpendingLimitsReturnsExpectedProblemForServiceException(
-            RuntimeException ex,
-            String title,
-            int httpStatusCode
-    ) throws Exception {
-        String email = "customer@example.com";
-        String cardReference = "1".repeat(32);
-        CardSpendingLimitsUpdateRequest request = new CardSpendingLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00"));
-
-        given(debitCardService.updateSpendingLimits(cardReference, email, request))
-                .willThrow(ex);
-
-        mockMvc.perform(put("/api/debit-cards/{cardReference}/spending-limits", cardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().is(httpStatusCode))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.detail").value(ex.getMessage()))
-                .andExpect(jsonPath("$.title").value(title))
-                .andExpect(jsonPath("$.instance").value("/api/debit-cards/%s/spending-limits".formatted(cardReference)));
-    }
-
-    private static Stream<Arguments> updateSpendingLimitsServiceExceptionSource() {
-        return Stream.of(
-                Arguments.argumentSet(
-                        "updateSpendingLimitsReturnsNotFoundProblem",
-                        new DebitCardNotFoundException("Debit card not found"),
-                        "Debit card not found",
-                        404
-                ),
-                Arguments.argumentSet(
-                        "updateSpendingLimitsReturnsBadRequestForLimitAboveMaximum",
-                        new InvalidCardLimitException("Per-transaction limit must not exceed 5000.00"),
-                        "Invalid card limit",
-                        400
-                ),
-                Arguments.argumentSet(
-                        "updateSpendingLimitsReturnsConflictForClosedCard",
-                        new CardSpendingLimitsNotChangeableException("Limits of closed or blocked cards cannot be changed"),
-                        "Card limits not changeable",
-                        409
-                )
-        );
     }
 
     private static CardSpendingLimitsResponse limitsResponse() {

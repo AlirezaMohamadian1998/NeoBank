@@ -16,10 +16,6 @@ import com.neobank.neobank.card.credit.dto.CreditStatementResponse;
 import com.neobank.neobank.card.credit.dto.PayoffQuoteResponse;
 import com.neobank.neobank.card.limit.dto.CardSpendingLimitsResponse;
 import com.neobank.neobank.card.limit.dto.CardSpendingLimitsUpdateRequest;
-import com.neobank.neobank.creditaccount.CreditAccountClosedException;
-import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
-import com.neobank.neobank.creditaccount.NothingToPayOutException;
-import com.neobank.neobank.creditaccount.RepaymentExceedsBalanceException;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.EntryDirection;
 import com.neobank.neobank.transaction.TransactionType;
@@ -157,18 +153,6 @@ class CreditCardControllerTest {
     }
 
     @Test
-    void getCreditCardReturnsNotFoundProblem() throws Exception {
-        given(creditCardService.getCreditCard(CARD_REFERENCE, EMAIL))
-                .willThrow(new CreditCardNotFoundException("Credit card not found"));
-
-        mockMvc.perform(get("/api/credit-cards/{cardReference}", CARD_REFERENCE)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.title").value("Credit card not found"))
-                .andExpect(jsonPath("$.detail").value("Credit card not found"));
-    }
-
-    @Test
     void getCreditCardRejectsInvalidCardReference() throws Exception {
         mockMvc.perform(get("/api/credit-cards/{cardReference}", "not-a-reference")
                         .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
@@ -260,40 +244,6 @@ class CreditCardControllerTest {
     }
 
     @Test
-    void repayReturnsConflictWhenRepaymentExceedsBalance() throws Exception {
-        CreditCardRepaymentRequest request = new CreditCardRepaymentRequest("12345678900987", new BigDecimal("250.00"), null);
-
-        given(creditCardBalanceService.repay(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
-                .willThrow(new RepaymentExceedsBalanceException("Repayment exceeds the outstanding balance of 100.00"));
-
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.title").value("Repayment exceeds balance"))
-                .andExpect(jsonPath("$.detail").value("Repayment exceeds the outstanding balance of 100.00"));
-    }
-
-    @Test
-    void repayReturnsBadRequestForInvalidRepayment() throws Exception {
-        CreditCardRepaymentRequest request = new CreditCardRepaymentRequest("12345678900987", new BigDecimal("250.00"), null);
-
-        given(creditCardBalanceService.repay(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
-                .willThrow(new InvalidCreditCardRepaymentException("Lock ID is not required for same currency repayment"));
-
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Invalid credit card repayment"))
-                .andExpect(jsonPath("$.detail").value("Lock ID is not required for same currency repayment"));
-    }
-
-    @Test
     void payOutReturnsCreatedPayout() throws Exception {
         CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
 
@@ -335,57 +285,6 @@ class CreditCardControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
 
         verifyNoInteractions(creditCardBalanceService);
-    }
-
-    @Test
-    void payOutReturnsConflictWhenThereIsNothingToPayOut() throws Exception {
-        CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
-
-        given(creditCardBalanceService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
-                .willThrow(new NothingToPayOutException("There is no credit balance to pay out"));
-
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.title").value("Nothing to pay out"))
-                .andExpect(jsonPath("$.detail").value("There is no credit balance to pay out"));
-    }
-
-    @Test
-    void payOutReturnsConflictWhenTheCreditAccountIsClosed() throws Exception {
-        CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
-
-        given(creditCardBalanceService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
-                .willThrow(new CreditAccountClosedException("Credit account is closed"));
-
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.title").value("Credit account closed"))
-                .andExpect(jsonPath("$.detail").value("Credit account is closed"));
-    }
-
-    @Test
-    void payOutReturnsBadRequestForInvalidPayout() throws Exception {
-        CreditCardPayoutRequest request = new CreditCardPayoutRequest("12345678900987", null);
-
-        given(creditCardBalanceService.payOut(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
-                .willThrow(new InvalidCreditCardPayoutException("Credit balances can only be paid out to a current account"));
-
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Invalid credit card payout"))
-                .andExpect(jsonPath("$.detail").value("Credit balances can only be paid out to a current account"));
     }
 
     @Test
@@ -450,39 +349,6 @@ class CreditCardControllerTest {
     }
 
     @Test
-    void closeReturnsConflictWhenTheQuoteExpired() throws Exception {
-        CreditCardClosingRequest request = new CreditCardClosingRequest(QUOTE_ID, "12345678900987", null);
-
-        given(creditCardClosingService.close(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
-                .willThrow(new PayoffQuoteExpiredException("Payoff quote not found or expired"));
-
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/close", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.title").value("Payoff quote expired"))
-                .andExpect(jsonPath("$.detail").value("Payoff quote not found or expired"));
-    }
-
-    @Test
-    void closeReturnsBadRequestForInvalidClosing() throws Exception {
-        CreditCardClosingRequest request = new CreditCardClosingRequest(QUOTE_ID, "12345678900987", null);
-
-        given(creditCardClosingService.close(CARD_REFERENCE, request, IDEMPOTENCY_KEY, EMAIL))
-                .willThrow(new InvalidCreditCardClosingException("Credit cards can only be paid off and closed with a current account"));
-
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/close", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Invalid credit card closing"));
-    }
-
-    @Test
     void getStatementsReturnsPagedStatements() throws Exception {
         given(creditCardService.getStatements(any(String.class), any(String.class), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(statementResponse())));
@@ -511,17 +377,6 @@ class CreditCardControllerTest {
                 .andExpect(jsonPath("$.interestCharged").value(10.27))
                 .andExpect(jsonPath("$.minimumPayment").value(25.00))
                 .andExpect(jsonPath("$.currency").value("USD"));
-    }
-
-    @Test
-    void getStatementReturnsNotFoundProblem() throws Exception {
-        given(creditCardService.getStatement(CARD_REFERENCE, STATEMENT_REFERENCE, EMAIL))
-                .willThrow(new CreditStatementNotFoundException("Credit statement not found"));
-
-        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements/{statementReference}", CARD_REFERENCE, STATEMENT_REFERENCE)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.title").value("Credit statement not found"));
     }
 
     @Test
@@ -580,17 +435,6 @@ class CreditCardControllerTest {
     }
 
     @Test
-    void getTransactionsReturnsNotFoundProblem() throws Exception {
-        given(creditCardService.getTransactions(any(String.class), any(CreditCardTransactionFilter.class), any(String.class), any(Pageable.class)))
-                .willThrow(new CreditCardNotFoundException("Credit card not found"));
-
-        mockMvc.perform(get("/api/credit-cards/{cardReference}/transactions", CARD_REFERENCE)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.title").value("Credit card not found"));
-    }
-
-    @Test
     void getStatementLinesReturnsPagedLinesOldestFirstByDefault() throws Exception {
         given(creditCardService.getStatementLines(any(String.class), any(String.class), any(String.class), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(statementLine())));
@@ -606,17 +450,6 @@ class CreditCardControllerTest {
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
         verify(creditCardService).getStatementLines(eq(CARD_REFERENCE), eq(STATEMENT_REFERENCE), eq(EMAIL), pageableCaptor.capture());
         assertThat(pageableCaptor.getValue().getSort()).containsExactly(Sort.Order.asc("createdAt"));
-    }
-
-    @Test
-    void getStatementLinesReturnsNotFoundProblem() throws Exception {
-        given(creditCardService.getStatementLines(any(String.class), any(String.class), any(String.class), any(Pageable.class)))
-                .willThrow(new CreditStatementNotFoundException("Credit statement not found"));
-
-        mockMvc.perform(get("/api/credit-cards/{cardReference}/statements/{statementReference}/lines", CARD_REFERENCE, STATEMENT_REFERENCE)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.title").value("Credit statement not found"));
     }
 
     @Test

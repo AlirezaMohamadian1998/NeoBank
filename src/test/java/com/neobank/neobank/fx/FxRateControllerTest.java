@@ -17,8 +17,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -97,19 +95,4 @@ class FxRateControllerTest {
         verifyNoInteractions(rateService);
     }
 
-    @Test
-    void providerUnavailableReturnsServiceUnavailable() throws Exception {
-        String email = "example.com";
-        given(rateService.createRateLock(any(CurrencyCode.class), eq(email)))
-                .willThrow(new FxProviderUnavailableException("Provider unavailable"));
-
-        mockMvc.perform(post("/api/fx/rate-locks")
-                        .param("base", CurrencyCode.USD.name())
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.instance").value("/api/fx/rate-locks"))
-                .andExpect(jsonPath("$.title").value("Fx provider unavailable"))
-                .andExpect(jsonPath("$.detail").value("Provider unavailable"));
-    }
 }

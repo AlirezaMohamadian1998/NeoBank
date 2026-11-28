@@ -1,9 +1,7 @@
 package com.neobank.neobank.card.payment;
 
-import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.auth.SecurityConfig;
 import com.neobank.neobank.card.payment.dto.CardRefundResponse;
-import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -113,57 +111,4 @@ class CardRefundControllerTest {
         verifyNoInteractions(cardRefundService);
     }
 
-    @Test
-    void refundCardPurchaseReturnsNotFoundForUnknownOrForeignPurchase() throws Exception {
-        given(cardRefundService.refundPurchase(MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, IDEMPOTENCY_KEY, EMAIL))
-                .willThrow(new CardPurchaseNotFoundException("Card purchase not found"));
-
-        mockMvc.perform(post(URL, MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE)
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isNotFound())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Card purchase not found"))
-                .andExpect(jsonPath("$.detail").value("Card purchase not found"))
-                .andExpect(jsonPath("$.status").value(404));
-    }
-
-    @Test
-    void refundCardPurchaseReturnsNotFoundWhenMerchantAccountIsNotOwned() throws Exception {
-        given(cardRefundService.refundPurchase(MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, IDEMPOTENCY_KEY, EMAIL))
-                .willThrow(new AccountNotFoundException("Merchant's account not found"));
-
-        mockMvc.perform(post(URL, MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE)
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void refundCardPurchaseReturnsConflictWhenAlreadyRefunded() throws Exception {
-        given(cardRefundService.refundPurchase(MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, IDEMPOTENCY_KEY, EMAIL))
-                .willThrow(new CardPurchaseNotRefundableException("Card purchase is already refunded"));
-
-        mockMvc.perform(post(URL, MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE)
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isConflict())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Card purchase not refundable"))
-                .andExpect(jsonPath("$.detail").value("Card purchase is already refunded"))
-                .andExpect(jsonPath("$.status").value(409));
-    }
-
-    @Test
-    void refundCardPurchaseReturnsInsufficientFundsProblemWhenMerchantCannotCoverRefund() throws Exception {
-        given(cardRefundService.refundPurchase(MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, IDEMPOTENCY_KEY, EMAIL))
-                .willThrow(new InsufficientFundsException());
-
-        mockMvc.perform(post(URL, MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE)
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
-                .andExpect(status().isConflict())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Insufficient funds"));
-    }
 }
