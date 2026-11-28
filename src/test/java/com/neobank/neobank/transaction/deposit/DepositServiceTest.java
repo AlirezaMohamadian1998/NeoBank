@@ -964,7 +964,7 @@ class DepositServiceTest {
                 .willReturn(Optional.of(account));
 
         assertThatThrownBy(() -> depositService.deposit(request, accountNumber, email, idempotencyKey))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidDepositException.class)
                 .hasMessage("Lock ID is not required for same currency operation.");
 
         verifyNoInteractions(bankTransactionRepository, internalAccountRepository, referenceGenerator, fxRateService, idempotencyService);

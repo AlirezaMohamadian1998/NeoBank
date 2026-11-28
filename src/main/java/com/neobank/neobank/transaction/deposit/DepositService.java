@@ -74,7 +74,7 @@ public class DepositService {
         }
 
         if(account.getCurrency() == request.requestedCurrency() && request.lockId() != null) {
-            throw new IllegalArgumentException("Lock ID is not required for same currency operation.");
+            throw new InvalidDepositException("Lock ID is not required for same currency operation.");
         }
 
         String normalizedNote = "";

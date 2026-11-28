@@ -978,7 +978,7 @@ class WithdrawalServiceTest {
                 .willReturn(Optional.of(account));
 
         assertThatThrownBy(() -> withdrawalService.withdraw(request, accountNumber, email, idempotencyKey))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidWithdrawalException.class)
                 .hasMessage("Lock ID is not required for same currency operation.");
 
         verifyNoInteractions(bankTransactionRepository, internalAccountRepository, referenceGenerator, fxRateService, idempotencyService);

@@ -66,7 +66,7 @@ public class WithdrawalService {
         boolean isCrossCurrency = account.getCurrency() != request.requestedCurrency();
 
         if(!isCrossCurrency && request.lockId() != null) {
-            throw new IllegalArgumentException("Lock ID is not required for same currency operation.");
+            throw new InvalidWithdrawalException("Lock ID is not required for same currency operation.");
         }
 
         if(isCrossCurrency && request.lockId() == null) {
