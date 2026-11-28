@@ -8,6 +8,7 @@ import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.fx.ProviderRateCache;
 import com.neobank.neobank.fx.dto.FxRateLockResponse;
+import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.internalaccount.InternalAccount;
 import com.neobank.neobank.internalaccount.InternalAccountPurpose;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
@@ -363,6 +364,14 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .isNotNull();
             assertThat(entry.getUpdatedAt())
                     .isNotNull();
+
+            IdempotencyRecord idempotencyRecord = idempotencyRecordRepository.findAll().getFirst();
+            assertThat(idempotencyRecord.getIdempotencyKey())
+                    .isEqualTo(IDEMPOTENCY_KEY);
+            assertThat(idempotencyRecord.getResultReference())
+                    .isEqualTo(transaction.getReference());
+            assertThat(idempotencyRecord.getCustomer().getId())
+                    .isEqualTo(customer.getId());
         }
 
         @Test
@@ -780,6 +789,14 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .isNotNull();
             assertThat(entry.getUpdatedAt())
                     .isNotNull();
+
+            IdempotencyRecord idempotencyRecord = idempotencyRecordRepository.findAll().getFirst();
+            assertThat(idempotencyRecord.getIdempotencyKey())
+                    .isEqualTo(IDEMPOTENCY_KEY);
+            assertThat(idempotencyRecord.getResultReference())
+                    .isEqualTo(transaction.getReference());
+            assertThat(idempotencyRecord.getCustomer().getId())
+                    .isEqualTo(customer.getId());
         }
 
         @Test
@@ -1264,6 +1281,14 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .isEqualByComparingTo(new BigDecimal("500.00"));
             assertThat(savedTargetAccount.getBalance())
                     .isEqualByComparingTo(new BigDecimal("500.00"));
+
+            IdempotencyRecord idempotencyRecord = idempotencyRecordRepository.findAll().getFirst();
+            assertThat(idempotencyRecord.getIdempotencyKey())
+                    .isEqualTo(IDEMPOTENCY_KEY);
+            assertThat(idempotencyRecord.getResultReference())
+                    .isEqualTo(transaction.getReference());
+            assertThat(idempotencyRecord.getCustomer().getId())
+                    .isEqualTo(sourceCustomer.getId());
         }
 
         @Test
