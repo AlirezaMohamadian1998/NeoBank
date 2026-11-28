@@ -32,6 +32,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -193,21 +194,13 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     fxRateResponse.lockId()
             );
 
-            MvcResult firstMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(firstRequest))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            MvcResult firstMvcResult = deposit(account.getAccountNumber(), firstRequest, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.amount").value(4000.00))
                     .andReturn();
 
-            MvcResult secondMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(secondRequest))
-                            .header("Idempotency-Key", "2".repeat(32))
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            MvcResult secondMvcResult = deposit(account.getAccountNumber(), secondRequest, "2".repeat(32), customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.amount").value(8000.00))
@@ -228,8 +221,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
             assertThat(idempotencyRecordRepository.count())
                     .isEqualTo(2);
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            getAccount(account.getAccountNumber(), customer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.balance").value(12000.00));
 
@@ -274,11 +266,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
         void authenticatedCustomerCanDepositIntoOwnedAccount() throws Exception {
             DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
-            MvcResult depositMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            MvcResult depositMvcResult = deposit(account.getAccountNumber(), request, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.amount").value(1000.00))
@@ -300,8 +288,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
             DepositResponse response = objectMapper.readValue(depositMvcResult.getResponse().getContentAsString(), DepositResponse.class);
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            getAccount(account.getAccountNumber(), customer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.balance").value(1000.00));
 
@@ -399,11 +386,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     fxRateResponse.lockId()
             );
 
-            MvcResult mvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            MvcResult mvcResult = deposit(account.getAccountNumber(), request, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.transactionReference").isNotEmpty())
@@ -423,8 +406,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.bankTransaction").doesNotHaveJsonPath())
                     .andReturn();
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            getAccount(account.getAccountNumber(), customer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.balance").value(40000.00));
 
@@ -567,11 +549,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
             DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
-            mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer2.getEmail()))))
+            deposit(account.getAccountNumber(), request, IDEMPOTENCY_KEY, customer2.getEmail())
                     .andExpect(status().isNotFound())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.detail").value("Account not found"))
@@ -579,8 +557,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900987/deposits"))
                     .andExpect(jsonPath("$.status").value(404));
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            getAccount(account.getAccountNumber(), customer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(0.00));
@@ -595,26 +572,17 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
         void customerCannotDepositMoreThanOnceWithSameIdempotencyKeyAndSameRequest() throws Exception {
             DepositRequest request = new DepositRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
-            String firstResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            String firstResponse = deposit(account.getAccountNumber(), request, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andReturn().getResponse().getContentAsString();
 
-            String secondResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            String secondResponse = deposit(account.getAccountNumber(), request, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andReturn().getResponse().getContentAsString();
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            getAccount(account.getAccountNumber(), customer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(1000.00));
@@ -637,20 +605,12 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
             DepositRequest request1 = new DepositRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
             DepositRequest request2 = new DepositRequest(new BigDecimal("2000.00"), "Test", CurrencyCode.TRY, null);
 
-            mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request1))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            deposit(account.getAccountNumber(), request1, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balanceAfter").value(1000.00));
 
-            mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request2))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            deposit(account.getAccountNumber(), request2, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isConflict())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.detail").value("request hash mismatch"))
@@ -658,8 +618,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.instance").value("/api/accounts/%s/deposits".formatted(account.getAccountNumber())))
                     .andExpect(jsonPath("$.status").value(409));
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            getAccount(account.getAccountNumber(), customer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(1000.00));
@@ -683,11 +642,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
             WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("500.00"), "Test", CurrencyCode.TRY, null);
 
-            MvcResult withdrawMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            MvcResult withdrawMvcResult = withdraw(account.getAccountNumber(), request, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.transactionReference").value(matchesPattern("^[0-9a-f]{32}$")))
@@ -707,8 +662,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.bankTransaction").doesNotHaveJsonPath())
                     .andReturn();
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            getAccount(account.getAccountNumber(), customer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.balance").value(500.00));
 
@@ -827,11 +781,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     fxRateResponse.lockId()
             );
 
-            MvcResult mvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            MvcResult mvcResult = withdraw(account.getAccountNumber(), request, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.transactionReference").isNotEmpty())
@@ -851,8 +801,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.bankTransaction").doesNotHaveJsonPath())
                     .andReturn();
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            getAccount(account.getAccountNumber(), customer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.balance").value(1000.00));
 
@@ -991,11 +940,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
             WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("1000.00"), "Test", CurrencyCode.TRY, null);
 
-            mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer2.getEmail()))))
+            withdraw(account.getAccountNumber(), request, IDEMPOTENCY_KEY, customer2.getEmail())
                     .andExpect(status().isNotFound())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.detail").value("Account not found"))
@@ -1003,8 +948,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900987/withdrawals"))
                     .andExpect(jsonPath("$.status").value(404));
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            getAccount(account.getAccountNumber(), customer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(0.00));
@@ -1021,26 +965,17 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
             WithdrawalRequest request = new WithdrawalRequest(new BigDecimal("500.00"), "Test", CurrencyCode.TRY, null);
 
-            String firstResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            String firstResponse = withdraw(account.getAccountNumber(), request, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andReturn().getResponse().getContentAsString();
 
-            String secondResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            String secondResponse = withdraw(account.getAccountNumber(), request, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andReturn().getResponse().getContentAsString();
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            getAccount(account.getAccountNumber(), customer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(500.00));
@@ -1065,20 +1000,12 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
             WithdrawalRequest request1 = new WithdrawalRequest(new BigDecimal("500.00"), "Test", CurrencyCode.TRY, null);
             WithdrawalRequest request2 = new WithdrawalRequest(new BigDecimal("250.00"), "Test", CurrencyCode.TRY, null);
 
-            mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request1))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            withdraw(account.getAccountNumber(), request1, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balanceAfter").value(500.00));
 
-            mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", account.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request2))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            withdraw(account.getAccountNumber(), request2, IDEMPOTENCY_KEY, customer.getEmail())
                     .andExpect(status().isConflict())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.detail").value("request hash mismatch"))
@@ -1086,8 +1013,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.instance").value("/api/accounts/%s/withdrawals".formatted(account.getAccountNumber())))
                     .andExpect(jsonPath("$.status").value(409));
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", account.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+            getAccount(account.getAccountNumber(), customer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(500.00));
@@ -1139,11 +1065,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     null
             );
 
-            MvcResult transferMvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+            MvcResult transferMvcResult = transfer(sourceAccount.getAccountNumber(), request, IDEMPOTENCY_KEY, sourceCustomer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.transactionReference").value(matchesPattern("^[0-9a-f]{32}$")))
@@ -1348,11 +1270,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     fxRateResponse.lockId()
             );
 
-            MvcResult mvcResult = mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+            MvcResult mvcResult = transfer(sourceAccount.getAccountNumber(), request, IDEMPOTENCY_KEY, sourceCustomer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.transactionReference").value(matchesPattern("^[0-9a-f]{32}$")))
@@ -1582,11 +1500,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     null
             );
 
-            mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", targetAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+            transfer(targetAccount.getAccountNumber(), request, IDEMPOTENCY_KEY, sourceCustomer.getEmail())
                     .andExpect(status().isNotFound())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.detail").value("Account not found"))
@@ -1594,14 +1508,12 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.instance").value("/api/accounts/%s/transfers".formatted(targetAccount.getAccountNumber())))
                     .andExpect(jsonPath("$.status").value(404));
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", sourceAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+            getAccount(sourceAccount.getAccountNumber(), sourceCustomer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(0.00));
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", targetAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(targetCustomer.getEmail()))))
+            getAccount(targetAccount.getAccountNumber(), targetCustomer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(1000.00));
@@ -1646,32 +1558,22 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     null
             );
 
-            String firstResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+            String firstResponse = transfer(sourceAccount.getAccountNumber(), request, IDEMPOTENCY_KEY, sourceCustomer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andReturn().getResponse().getContentAsString();
 
-            String secondResponse = mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+            String secondResponse = transfer(sourceAccount.getAccountNumber(), request, IDEMPOTENCY_KEY, sourceCustomer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andReturn().getResponse().getContentAsString();
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", sourceAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+            getAccount(sourceAccount.getAccountNumber(), sourceCustomer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(500.00));
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", targetAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(targetCustomer.getEmail()))))
+            getAccount(targetAccount.getAccountNumber(), targetCustomer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(500.00));
@@ -1730,20 +1632,12 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     CurrencyCode.TRY,
                     null
             );
-            mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request1))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+            transfer(sourceAccount.getAccountNumber(), request1, IDEMPOTENCY_KEY, sourceCustomer.getEmail())
                     .andExpect(status().isCreated())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.sourceBalanceAfter").value(500.00));
 
-            mockMvc.perform(post("/api/accounts/{accountNumber}/transfers", sourceAccount.getAccountNumber())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request2))
-                            .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+            transfer(sourceAccount.getAccountNumber(), request2, IDEMPOTENCY_KEY, sourceCustomer.getEmail())
                     .andExpect(status().isConflict())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                     .andExpect(jsonPath("$.detail").value("request hash mismatch"))
@@ -1751,14 +1645,12 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.instance").value("/api/accounts/%s/transfers".formatted(account.getAccountNumber())))
                     .andExpect(jsonPath("$.status").value(409));
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", sourceAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(sourceCustomer.getEmail()))))
+            getAccount(sourceAccount.getAccountNumber(), sourceCustomer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(500.00));
 
-            mockMvc.perform(get("/api/accounts/{accountNumber}", targetAccount.getAccountNumber())
-                            .with(jwt().jwt(jwt -> jwt.subject(targetCustomer.getEmail()))))
+            getAccount(targetAccount.getAccountNumber(), targetCustomer.getEmail())
                     .andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.balance").value(500.00));
@@ -2321,5 +2213,34 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(jsonPath("$.instance").value("/api/transactions"))
                     .andExpect(jsonPath("$.title").value("Account not found"));
         }
+    }
+
+    private ResultActions deposit(String accountNumber, DepositRequest request, String idempotencyKey, String email) throws Exception {
+        return mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", accountNumber)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+                .header("Idempotency-Key", idempotencyKey)
+                .with(jwt().jwt(jwt -> jwt.subject(email))));
+    }
+
+    private ResultActions withdraw(String accountNumber, WithdrawalRequest request, String idempotencyKey, String email) throws Exception {
+        return mockMvc.perform(post("/api/accounts/{accountNumber}/withdrawals", accountNumber)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+                .header("Idempotency-Key", idempotencyKey)
+                .with(jwt().jwt(jwt -> jwt.subject(email))));
+    }
+
+    private ResultActions transfer(String sourceAccountNumber, TransferRequest request, String idempotencyKey, String email) throws Exception {
+        return mockMvc.perform(post("/api/accounts/{sourceAccountNumber}/transfers", sourceAccountNumber)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+                .header("Idempotency-Key", idempotencyKey)
+                .with(jwt().jwt(jwt -> jwt.subject(email))));
+    }
+
+    private ResultActions getAccount(String accountNumber, String email) throws Exception {
+        return mockMvc.perform(get("/api/accounts/{accountNumber}", accountNumber)
+                .with(jwt().jwt(jwt -> jwt.subject(email))));
     }
 }
