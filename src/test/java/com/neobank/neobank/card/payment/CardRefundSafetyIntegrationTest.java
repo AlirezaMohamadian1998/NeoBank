@@ -1,13 +1,9 @@
 package com.neobank.neobank.card.payment;
 
-import com.neobank.neobank.account.Account;
-import com.neobank.neobank.account.AccountType;
-import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.payment.dto.CardRefundResponse;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
-import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.shared.money.CurrencyCode;
@@ -27,7 +23,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
@@ -65,29 +60,9 @@ class CardRefundSafetyIntegrationTest extends CardIntegrationTestSupport {
         account.getLedgerAccount().credit(new BigDecimal("1000.00"));
         ledgerAccountRepository.save(account.getLedgerAccount());
 
-        DebitCard debitCard = DebitCard.createNew(
-                CARD_REFERENCE,
-                "1234",
-                YearMonth.now(clock).plusYears(5),
-                YearMonth.now(clock),
-                account,
-                TestCardLimits.generous()
-        );
-        debitCard.activateCard(YearMonth.now(clock));
-        debitCardRepository.save(debitCard);
+        savedActiveDebitCard(CARD_REFERENCE, TestCardLimits.generous());
 
-        Customer merchantCustomer = customerRepository.save(
-                Customer.createNew(MERCHANT_EMAIL, "{bcrypt}password-hash", "Merchant Owner")
-        );
-
-        accountRepository.save(Account.createNew(
-                MERCHANT_ACCOUNT_NUMBER,
-                "5".repeat(32),
-                "merchant",
-                AccountType.CURRENT,
-                merchantCustomer,
-                CurrencyCode.TRY
-        ));
+        savedMerchantAccount(MERCHANT_EMAIL, MERCHANT_ACCOUNT_NUMBER, "5".repeat(32), CurrencyCode.TRY);
 
         purchaseReference = cardPaymentService.makePurchase(
                 CARD_REFERENCE,
@@ -282,7 +257,4 @@ class CardRefundSafetyIntegrationTest extends CardIntegrationTestSupport {
                 .isEqualTo(4);
     }
 
-    private BigDecimal balanceOf(String accountNumber) {
-        return accountRepository.findByAccountNumber(accountNumber).orElseThrow().getBalance();
-    }
 }

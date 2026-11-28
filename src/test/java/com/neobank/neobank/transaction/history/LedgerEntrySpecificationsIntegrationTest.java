@@ -25,6 +25,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.neobank.neobank.transaction.history.LedgerEntryFixtures.completedTransaction;
+import static com.neobank.neobank.transaction.history.LedgerEntryFixtures.entryOn;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.tuple;
 import static org.mockito.BDDMockito.given;
@@ -60,31 +62,16 @@ class LedgerEntrySpecificationsIntegrationTest {
                 )
         );
 
-        BankTransaction transaction = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
-                CurrencyCode.USD,
+        BankTransaction transaction = completedTransaction(
                 TransactionType.TRANSFER,
+                CurrencyCode.USD,
+                "1000.00",
                 "33333333333333333333333333333333",
-                null
+                "4".repeat(32), sourceLedgerAccount,
+                "5".repeat(32), targetLedgerAccount
         );
 
-        LedgerEntry sourceEntry = transaction.addEntry(
-                "4".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("500.00"),
-                EntryDirection.DEBIT,
-                sourceLedgerAccount
-        );
-
-        LedgerEntry targetEntry = transaction.addEntry(
-                "5".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("1500.00"),
-                EntryDirection.CREDIT,
-                targetLedgerAccount
-        );
-
-        transaction.complete();
+        LedgerEntry sourceEntry = entryOn(transaction, sourceLedgerAccount);
 
         BankTransaction savedTransaction = transactionRepository.save(transaction);
 
@@ -132,31 +119,14 @@ class LedgerEntrySpecificationsIntegrationTest {
                 )
         );
 
-        BankTransaction transaction = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
-                CurrencyCode.USD,
+        BankTransaction transaction = completedTransaction(
                 TransactionType.TRANSFER,
+                CurrencyCode.USD,
+                "1000.00",
                 "33333333333333333333333333333333",
-                null
+                "4".repeat(32), sourceLedgerAccount,
+                "5".repeat(32), targetLedgerAccount
         );
-
-        LedgerEntry sourceEntry = transaction.addEntry(
-                "4".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("500.00"),
-                EntryDirection.DEBIT,
-                sourceLedgerAccount
-        );
-
-        LedgerEntry targetEntry = transaction.addEntry(
-                "5".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("1500.00"),
-                EntryDirection.CREDIT,
-                targetLedgerAccount
-        );
-
-        transaction.complete();
 
         transactionRepository.save(transaction);
 
@@ -193,56 +163,27 @@ class LedgerEntrySpecificationsIntegrationTest {
                 )
         );
 
-        BankTransaction depositTransaction = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
-                CurrencyCode.USD,
+        BankTransaction depositTransaction = completedTransaction(
                 TransactionType.DEPOSIT,
-                "33333333333333333333333333333333",
-                null
-        );
-
-        LedgerEntry customerDepositEntry = depositTransaction.addEntry(
-                "4".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("1500.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
-                "5".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.DEBIT,
-                internalLedgerAccount
-        );
-
-        BankTransaction withdrawalTransaction = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
                 CurrencyCode.USD,
+                "1000.00",
+                "33333333333333333333333333333333",
+                "5".repeat(32), internalLedgerAccount,
+                "4".repeat(32), ledgerAccount
+        );
+
+        LedgerEntry customerDepositEntry = entryOn(depositTransaction, ledgerAccount);
+
+        BankTransaction withdrawalTransaction = completedTransaction(
                 TransactionType.WITHDRAWAL,
+                CurrencyCode.USD,
+                "1000.00",
                 "6".repeat(32),
-                null
+                "7".repeat(32), ledgerAccount,
+                "8".repeat(32), internalLedgerAccount
         );
 
-        LedgerEntry customerWithdrawalEntry = withdrawalTransaction.addEntry(
-                "7".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("500.00"),
-                EntryDirection.DEBIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalWithdrawalEntry = withdrawalTransaction.addEntry(
-                "8".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.CREDIT,
-                internalLedgerAccount
-        );
-
-        depositTransaction.complete();
-        withdrawalTransaction.complete();
+        LedgerEntry customerWithdrawalEntry = entryOn(withdrawalTransaction, ledgerAccount);
 
         transactionRepository.saveAll(List.of(depositTransaction, withdrawalTransaction));
 
@@ -296,56 +237,25 @@ class LedgerEntrySpecificationsIntegrationTest {
                 )
         );
 
-        BankTransaction depositTransaction = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
-                CurrencyCode.USD,
+        BankTransaction depositTransaction = completedTransaction(
                 TransactionType.DEPOSIT,
-                "33333333333333333333333333333333",
-                null
-        );
-
-        LedgerEntry customerDepositEntry = depositTransaction.addEntry(
-                "4".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("1500.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
-                "5".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.DEBIT,
-                internalLedgerAccount
-        );
-
-        BankTransaction withdrawalTransaction = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
                 CurrencyCode.USD,
+                "1000.00",
+                "33333333333333333333333333333333",
+                "5".repeat(32), internalLedgerAccount,
+                "4".repeat(32), ledgerAccount
+        );
+
+        LedgerEntry customerDepositEntry = entryOn(depositTransaction, ledgerAccount);
+
+        BankTransaction withdrawalTransaction = completedTransaction(
                 TransactionType.WITHDRAWAL,
+                CurrencyCode.USD,
+                "1000.00",
                 "6".repeat(32),
-                null
+                "7".repeat(32), ledgerAccount,
+                "8".repeat(32), internalLedgerAccount
         );
-
-        LedgerEntry customerWithdrawalEntry = withdrawalTransaction.addEntry(
-                "7".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("500.00"),
-                EntryDirection.DEBIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalWithdrawalEntry = withdrawalTransaction.addEntry(
-                "8".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.CREDIT,
-                internalLedgerAccount
-        );
-
-        depositTransaction.complete();
-        withdrawalTransaction.complete();
 
         transactionRepository.saveAll(List.of(depositTransaction, withdrawalTransaction));
 
@@ -401,29 +311,16 @@ class LedgerEntrySpecificationsIntegrationTest {
                 )
         );
 
-        BankTransaction depositTransaction = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
-                CurrencyCode.USD,
+        BankTransaction depositTransaction = completedTransaction(
                 TransactionType.DEPOSIT,
+                CurrencyCode.USD,
+                "1000.00",
                 "33333333333333333333333333333333",
-                null
+                "5".repeat(32), internalLedgerAccountUsd,
+                "4".repeat(32), ledgerAccount
         );
 
-        LedgerEntry customerDepositEntry = depositTransaction.addEntry(
-                "4".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("1500.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
-                "5".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.DEBIT,
-                internalLedgerAccountUsd
-        );
+        LedgerEntry customerDepositEntry = entryOn(depositTransaction, ledgerAccount);
 
         BankTransaction withdrawalTransaction = BankTransaction.createNew(
                 new BigDecimal("1000.00"),
@@ -433,7 +330,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 null
         );
 
-        LedgerEntry customerWithdrawalEntry = withdrawalTransaction.addEntry(
+        withdrawalTransaction.addEntry(
                 "7".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("500.00"),
@@ -441,7 +338,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalWithdrawalEntry = withdrawalTransaction.addEntry(
+        withdrawalTransaction.addEntry(
                 "8".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -471,8 +368,6 @@ class LedgerEntrySpecificationsIntegrationTest {
         );
 
         withdrawalTransaction.addFxInfo(fxInfo);
-
-        depositTransaction.complete();
         withdrawalTransaction.complete();
 
         transactionRepository.saveAll(List.of(depositTransaction, withdrawalTransaction));
@@ -521,105 +416,44 @@ class LedgerEntrySpecificationsIntegrationTest {
                 )
         );
 
-        BankTransaction depositTransaction = BankTransaction.createNew(
-                new BigDecimal("1500.00"),
-                CurrencyCode.USD,
+        BankTransaction depositTransaction = completedTransaction(
                 TransactionType.DEPOSIT,
+                CurrencyCode.USD,
+                "1500.00",
                 "33333333333333333333333333333333",
-                null
+                "5".repeat(32), internalLedgerAccount,
+                "4".repeat(32), ledgerAccount
         );
 
-        LedgerEntry customerDepositEntry = depositTransaction.addEntry(
-                "4".repeat(32),
-                new BigDecimal("1500.00"),
-                new BigDecimal("3000.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        );
+        LedgerEntry customerDepositEntry = entryOn(depositTransaction, ledgerAccount);
 
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
-                "5".repeat(32),
-                new BigDecimal("1500.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.DEBIT,
-                internalLedgerAccount
-        );
-
-        BankTransaction withdrawalTransaction = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
-                CurrencyCode.USD,
+        BankTransaction withdrawalTransaction = completedTransaction(
                 TransactionType.WITHDRAWAL,
+                CurrencyCode.USD,
+                "1000.00",
                 "6".repeat(32),
-                null
+                "7".repeat(32), ledgerAccount,
+                "8".repeat(32), internalLedgerAccount
         );
 
-        LedgerEntry customerWithdrawalEntry = withdrawalTransaction.addEntry(
-                "7".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("2000.00"),
-                EntryDirection.DEBIT,
-                ledgerAccount
-        );
+        LedgerEntry customerWithdrawalEntry = entryOn(withdrawalTransaction, ledgerAccount);
 
-        LedgerEntry internalWithdrawalEntry = withdrawalTransaction.addEntry(
-                "8".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.CREDIT,
-                internalLedgerAccount
-        );
-
-        BankTransaction withdrawalTransactionOverMax = BankTransaction.createNew(
-                new BigDecimal("2000.00"),
-                CurrencyCode.USD,
+        BankTransaction withdrawalTransactionOverMax = completedTransaction(
                 TransactionType.WITHDRAWAL,
-                "10".repeat(16),
-                null
-        );
-
-        LedgerEntry customerWithdrawalEntryOverMax = withdrawalTransactionOverMax.addEntry(
-                "11".repeat(16),
-                new BigDecimal("2000.00"),
-                new BigDecimal("0.00"),
-                EntryDirection.DEBIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalWithdrawalEntryOverMax = withdrawalTransactionOverMax.addEntry(
-                "12".repeat(16),
-                new BigDecimal("2000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.CREDIT,
-                internalLedgerAccount
-        );
-        BankTransaction depositTransactionBelowMin = BankTransaction.createNew(
-                new BigDecimal("500.00"),
                 CurrencyCode.USD,
+                "2000.00",
+                "10".repeat(16),
+                "11".repeat(16), ledgerAccount,
+                "12".repeat(16), internalLedgerAccount
+        );
+        BankTransaction depositTransactionBelowMin = completedTransaction(
                 TransactionType.DEPOSIT,
+                CurrencyCode.USD,
+                "500.00",
                 "13".repeat(16),
-                null
+                "15".repeat(16), internalLedgerAccount,
+                "14".repeat(16), ledgerAccount
         );
-
-        LedgerEntry customerDepositEntryBelowMin = depositTransactionBelowMin.addEntry(
-                "14".repeat(16),
-                new BigDecimal("500.00"),
-                new BigDecimal("500.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalDepositEntryBelowMin = depositTransactionBelowMin.addEntry(
-                "15".repeat(16),
-                new BigDecimal("500.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.DEBIT,
-                internalLedgerAccount
-        );
-
-        depositTransaction.complete();
-        withdrawalTransaction.complete();
-        withdrawalTransactionOverMax.complete();
-        depositTransactionBelowMin.complete();
 
         transactionRepository.saveAll(List.of(withdrawalTransaction, depositTransaction, withdrawalTransactionOverMax, depositTransactionBelowMin));
 
@@ -669,81 +503,34 @@ class LedgerEntrySpecificationsIntegrationTest {
                 )
         );
 
-        BankTransaction depositTransaction = BankTransaction.createNew(
-                new BigDecimal("1500.00"),
-                CurrencyCode.USD,
+        BankTransaction depositTransaction = completedTransaction(
                 TransactionType.DEPOSIT,
+                CurrencyCode.USD,
+                "1500.00",
                 "33333333333333333333333333333333",
-                null
+                "5".repeat(32), internalLedgerAccount,
+                "4".repeat(32), ledgerAccount
         );
 
-        LedgerEntry customerDepositEntry = depositTransaction.addEntry(
-                "4".repeat(32),
-                new BigDecimal("1500.00"),
-                new BigDecimal("3000.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
-                "5".repeat(32),
-                new BigDecimal("1500.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.DEBIT,
-                internalLedgerAccount
-        );
-
-        BankTransaction withdrawalTransaction1 = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
-                CurrencyCode.USD,
+        BankTransaction withdrawalTransaction1 = completedTransaction(
                 TransactionType.WITHDRAWAL,
+                CurrencyCode.USD,
+                "1000.00",
                 "6".repeat(32),
-                null
+                "7".repeat(32), ledgerAccount,
+                "8".repeat(32), internalLedgerAccount
         );
 
-        LedgerEntry customerWithdrawalEntry1 = withdrawalTransaction1.addEntry(
-                "7".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("2000.00"),
-                EntryDirection.DEBIT,
-                ledgerAccount
-        );
+        LedgerEntry customerWithdrawalEntry1 = entryOn(withdrawalTransaction1, ledgerAccount);
 
-        LedgerEntry internalWithdrawalEntry1 = withdrawalTransaction1.addEntry(
-                "8".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.CREDIT,
-                internalLedgerAccount
-        );
-
-        BankTransaction withdrawalTransaction2 = BankTransaction.createNew(
-                new BigDecimal("2000.00"),
-                CurrencyCode.USD,
+        BankTransaction withdrawalTransaction2 = completedTransaction(
                 TransactionType.WITHDRAWAL,
+                CurrencyCode.USD,
+                "2000.00",
                 "10".repeat(16),
-                null
+                "11".repeat(16), ledgerAccount,
+                "12".repeat(16), internalLedgerAccount
         );
-
-        LedgerEntry customerWithdrawalEntry2 = withdrawalTransaction2.addEntry(
-                "11".repeat(16),
-                new BigDecimal("2000.00"),
-                new BigDecimal("0.00"),
-                EntryDirection.DEBIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalWithdrawalEntry2 = withdrawalTransaction2.addEntry(
-                "12".repeat(16),
-                new BigDecimal("2000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.CREDIT,
-                internalLedgerAccount
-        );
-
-        depositTransaction.complete();
-        withdrawalTransaction1.complete();
-        withdrawalTransaction2.complete();
 
         transactionRepository.saveAll(List.of(withdrawalTransaction1, depositTransaction, withdrawalTransaction2));
 
@@ -813,122 +600,63 @@ class LedgerEntrySpecificationsDateIntegrationTest {
                 )
         );
 
-        BankTransaction depositTransaction = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
-                CurrencyCode.USD,
+        BankTransaction depositTransaction = completedTransaction(
                 TransactionType.DEPOSIT,
+                CurrencyCode.USD,
+                "1000.00",
                 "33333333333333333333333333333333",
-                null
+                "5".repeat(32), internalLedgerAccount,
+                "4".repeat(32), ledgerAccount
         );
 
-        LedgerEntry customerDepositEntry = depositTransaction.addEntry(
-                "4".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("1500.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
-                "5".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.DEBIT,
-                internalLedgerAccount
-        );
-
-        depositTransaction.complete();
+        LedgerEntry customerDepositEntry = entryOn(depositTransaction, ledgerAccount);
         transactionRepository.saveAndFlush(depositTransaction);
 
 
-        BankTransaction withdrawalTransaction = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
-                CurrencyCode.USD,
+        BankTransaction withdrawalTransaction = completedTransaction(
+
                 TransactionType.WITHDRAWAL,
+
+                CurrencyCode.USD,
+
+                "1000.00",
+
                 "6".repeat(32),
-                null
-        );
 
-        LedgerEntry customerWithdrawalEntry = withdrawalTransaction.addEntry(
-                "7".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("500.00"),
-                EntryDirection.DEBIT,
-                ledgerAccount
-        );
+                "7".repeat(32), ledgerAccount,
 
-        LedgerEntry internalWithdrawalEntry = withdrawalTransaction.addEntry(
-                "8".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.CREDIT,
-                internalLedgerAccount
+                "8".repeat(32), internalLedgerAccount
+
         );
 
         given(auditingDateTimeProvider.getNow())
                 .willReturn(Optional.of(Instant.parse("2026-09-18T12:00:00Z")));
-
-        withdrawalTransaction.complete();
         transactionRepository.saveAndFlush(withdrawalTransaction);
 
-        BankTransaction depositTransactionBeforeStart = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
-                CurrencyCode.USD,
+        BankTransaction depositTransactionBeforeStart = completedTransaction(
                 TransactionType.DEPOSIT,
+                CurrencyCode.USD,
+                "1000.00",
                 "a".repeat(32),
-                null
-        );
-
-        LedgerEntry customerDepositEntryBeforeStart = depositTransactionBeforeStart.addEntry(
-                "b".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("1500.00"),
-                EntryDirection.CREDIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalDepositEntryBeforeStart = depositTransactionBeforeStart.addEntry(
-                "c".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.DEBIT,
-                internalLedgerAccount
+                "c".repeat(32), internalLedgerAccount,
+                "b".repeat(32), ledgerAccount
         );
 
         given(auditingDateTimeProvider.getNow())
                 .willReturn(Optional.of(Instant.parse("2026-08-31T12:00:00Z")));
-
-        depositTransactionBeforeStart.complete();
         transactionRepository.saveAndFlush(depositTransactionBeforeStart);
 
-        BankTransaction withdrawalTransactionAtEnd = BankTransaction.createNew(
-                new BigDecimal("1000.00"),
-                CurrencyCode.USD,
+        BankTransaction withdrawalTransactionAtEnd = completedTransaction(
                 TransactionType.WITHDRAWAL,
+                CurrencyCode.USD,
+                "1000.00",
                 "d".repeat(32),
-                null
-        );
-
-        LedgerEntry customerWithdrawalEntryAtEnd = withdrawalTransactionAtEnd.addEntry(
-                "e".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("500.00"),
-                EntryDirection.DEBIT,
-                ledgerAccount
-        );
-
-        LedgerEntry internalWithdrawalEntryAtEnd = withdrawalTransactionAtEnd.addEntry(
-                "f".repeat(32),
-                new BigDecimal("1000.00"),
-                new BigDecimal("100000.00"),
-                EntryDirection.CREDIT,
-                internalLedgerAccount
+                "e".repeat(32), ledgerAccount,
+                "f".repeat(32), internalLedgerAccount
         );
 
         given(auditingDateTimeProvider.getNow())
                 .willReturn(Optional.of(Instant.parse("2026-09-10T12:00:00Z")));
-
-        withdrawalTransactionAtEnd.complete();
         transactionRepository.saveAndFlush(withdrawalTransactionAtEnd);
 
         Specification<LedgerEntry> spec =

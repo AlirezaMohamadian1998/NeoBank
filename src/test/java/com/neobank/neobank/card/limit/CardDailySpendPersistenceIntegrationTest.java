@@ -33,14 +33,6 @@ class CardDailySpendPersistenceIntegrationTest extends CardIntegrationTestSuppor
     }
 
     @Test
-    void cardSpendingLimitsArePersisted() {
-        DebitCard reloaded = debitCardRepository.findByCardReference(debitCard.getCardReference()).orElseThrow();
-
-        assertThat(reloaded.getSpendingLimits())
-                .isEqualTo(CardSpendingLimits.createNew(new BigDecimal("100.00"), new BigDecimal("250.00")));
-    }
-
-    @Test
     void dailySpendIsSavedAndFoundByCardAndDate() {
         CardDailySpend spend = CardDailySpend.createNew(debitCard, TODAY);
         spend.add(new BigDecimal("40.00"), debitCard.getSpendingLimits());

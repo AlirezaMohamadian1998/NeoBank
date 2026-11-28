@@ -208,18 +208,7 @@ class TransactionHistoryControllerTest {
 
     @Test
     void historyReturnsUnauthorizedWithoutAuthentication() throws Exception {
-
-        mockMvc.perform(get("/api/transactions")
-                        .param("accountNumber", "12345678900987")
-                        .param("requestedCurrency", "USD")
-                        .param("type", "TRANSFER")
-                        .param("appliedMin", "100.00")
-                        .param("appliedMax", "5000.00")
-                        .param("dateFrom", "2026-08-01T00:00:00Z")
-                        .param("dateTo", "2026-09-01T23:59:59Z")
-                        .param("page", "2")
-                        .param("size", "25")
-                        .param("sort", "appliedAmount,asc"))
+        mockMvc.perform(get("/api/transactions"))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(transactionHistoryService);

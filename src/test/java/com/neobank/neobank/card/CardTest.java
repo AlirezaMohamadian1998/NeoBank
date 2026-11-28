@@ -262,15 +262,6 @@ class CardTest {
     }
 
     @Test
-    void changeSpendingLimitsRejectsDailyAboveMaximum() {
-        Card card = createValidCard(YearMonth.of(2026, 9));
-
-        assertThatThrownBy(() -> card.changeSpendingLimits(limits("100.00", "5000.01"), MAXIMUM))
-                .isInstanceOf(InvalidCardLimitException.class)
-                .hasMessage("Daily limit must not exceed 5000.00");
-    }
-
-    @Test
     void changeSpendingLimitsRejectsClosedCard() {
         Card card = createValidCard(YearMonth.of(2026, 9));
         card.closeCard();

@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -116,18 +118,15 @@ class CreditStatementTest {
                 .hasMessage("Due date must be after the statement date");
     }
 
-    @Test
-    void createNewRejectsNegativeInterest() {
-        assertThatThrownBy(() -> statement(new BigDecimal("-1.00"), null))
+    @ParameterizedTest
+    @CsvSource({
+            "-1.00, Interest charged cannot be negative",
+            "1.001, Interest charged must not have more than 2 decimal places"
+    })
+    void createNewRejectsInvalidInterest(BigDecimal interest, String message) {
+        assertThatThrownBy(() -> statement(interest, null))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Interest charged cannot be negative");
-    }
-
-    @Test
-    void createNewRejectsAmountWithMoreThanTwoDecimals() {
-        assertThatThrownBy(() -> statement(new BigDecimal("1.001"), null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Interest charged must not have more than 2 decimal places");
+                .hasMessage(message);
     }
 
     @Test

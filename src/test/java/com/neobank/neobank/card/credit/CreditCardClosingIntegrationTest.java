@@ -4,7 +4,6 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.credit.dto.CreditCardClosingRequest;
 import com.neobank.neobank.card.credit.dto.CreditCardClosingResponse;
-import com.neobank.neobank.card.credit.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.credit.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.credit.dto.PayoffQuoteResponse;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
@@ -36,7 +35,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -159,7 +157,7 @@ class CreditCardClosingIntegrationTest extends CardIntegrationTestSupport {
         assertThat(closingStatement.getMinimumPayment()).isEqualByComparingTo("0.00");
         assertLinesAddUpToClosingBalance(issued.cardReference(), closingStatement);
 
-        assertThat(balanceOf(account)).isEqualByComparingTo("0.00");
+        assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("0.00");
         assertThat(cardLedger(issued.cardReference()).getStatus()).isEqualTo(LedgerAccountStatus.CLOSED);
 
         mockMvc.perform(get("/api/credit-cards/{cardReference}", issued.cardReference())
@@ -197,7 +195,7 @@ class CreditCardClosingIntegrationTest extends CardIntegrationTestSupport {
         assertThat(closingStatement.getInterestTransaction()).isNotNull();
         assertLinesAddUpToClosingBalance(issued.cardReference(), closingStatement);
 
-        assertThat(balanceOf(payoffAccount)).isEqualByComparingTo(new BigDecimal("1000.00").subtract(quote.payoffAmount()));
+        assertThat(balanceOf(payoffAccount.getAccountNumber())).isEqualByComparingTo(new BigDecimal("1000.00").subtract(quote.payoffAmount()));
         assertThat(cardLedger(issued.cardReference()).getBalance()).isEqualByComparingTo("0.00");
     }
 
@@ -210,7 +208,7 @@ class CreditCardClosingIntegrationTest extends CardIntegrationTestSupport {
 
         closed(closeCard(issued.cardReference(), quote.quoteId(), account, "3".repeat(32), "2026-01-25T11:00:00Z"));
 
-        assertThat(balanceOf(account)).isEqualByComparingTo("250.00");
+        assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("250.00");
         assertThat(cardLedger(issued.cardReference()).getStatus()).isEqualTo(LedgerAccountStatus.CLOSED);
     }
 
@@ -270,18 +268,15 @@ class CreditCardClosingIntegrationTest extends CardIntegrationTestSupport {
         PayoffQuoteResponse quote = quotePayoff(issued.cardReference(), "2026-01-25T10:00:00Z");
         closed(closeCard(issued.cardReference(), quote.quoteId(), payoffAccount, "3".repeat(32), "2026-01-25T11:00:00Z"));
 
-        assertThat(balanceOf(payoffAccount)).isEqualByComparingTo("400.00");
+        assertThat(balanceOf(payoffAccount.getAccountNumber())).isEqualByComparingTo("400.00");
 
         mutableClock.setInstant(Instant.parse("2026-01-28T10:00:00Z"));
 
-        mockMvc.perform(post("/api/accounts/{merchantAccountNumber}/card-refunds/{purchaseReference}",
-                        account.getAccountNumber(), purchaseReference)
-                        .header("Idempotency-Key", "4".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        refund(account.getAccountNumber(), purchaseReference, "4".repeat(32), customer.getEmail())
                 .andExpect(status().isCreated());
 
-        assertThat(balanceOf(payoffAccount)).isEqualByComparingTo("1000.00");
-        assertThat(balanceOf(account)).isEqualByComparingTo("0.00");
+        assertThat(balanceOf(payoffAccount.getAccountNumber())).isEqualByComparingTo("1000.00");
+        assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("0.00");
         assertThat(cardLedger(issued.cardReference()).getBalance()).isEqualByComparingTo("0.00");
         assertThat(cardLedger(issued.cardReference()).getStatus()).isEqualTo(LedgerAccountStatus.CLOSED);
     }
@@ -297,7 +292,7 @@ class CreditCardClosingIntegrationTest extends CardIntegrationTestSupport {
         CreditCardClosingResponse replay = closed(closeCard(issued.cardReference(), quote.quoteId(), account, "3".repeat(32), "2026-01-25T11:05:00Z"));
 
         assertThat(replay).isEqualTo(first);
-        assertThat(balanceOf(account)).isEqualByComparingTo("0.00");
+        assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("0.00");
 
         closeCard(issued.cardReference(), quote.quoteId(), account, "4".repeat(32), "2026-01-25T11:10:00Z")
                 .andExpect(status().isConflict())
@@ -362,10 +357,6 @@ class CreditCardClosingIntegrationTest extends CardIntegrationTestSupport {
         assertThat(balance).isEqualByComparingTo(statement.getClosingBalance());
     }
 
-    private BigDecimal balanceOf(Account account) {
-        return accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance();
-    }
-
     private LedgerAccount cardLedger(String cardReference) {
         return transactionTemplate.execute(status -> {
             LedgerAccount ledgerAccount = creditCardRepository.findByCardReference(cardReference).orElseThrow()
@@ -392,23 +383,7 @@ class CreditCardClosingIntegrationTest extends CardIntegrationTestSupport {
     private CreditCardIssueResponse issueAndActivateCreditCard(String at, String idempotencyKey) throws Exception {
         mutableClock.setInstant(Instant.parse(at));
 
-        String body = mockMvc.perform(post("/api/credit-cards")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new CreditCardIssueRequest(CurrencyCode.TRY)))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        CreditCardIssueResponse issued = objectMapper.readValue(body, CreditCardIssueResponse.class);
-
-        mockMvc.perform(patch("/api/credit-cards/{cardReference}/status/{status}", issued.cardReference(), "ACTIVE")
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isOk());
-
-        return issued;
+        return issueAndActivateCreditCard(CurrencyCode.TRY, idempotencyKey);
     }
 
     private String purchase(String cardReference, String amount, String idempotencyKey, String at) throws Exception {

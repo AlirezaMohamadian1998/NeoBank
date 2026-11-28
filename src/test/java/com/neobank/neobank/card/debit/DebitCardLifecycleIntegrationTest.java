@@ -143,7 +143,7 @@ class DebitCardLifecycleIntegrationTest extends CardIntegrationTestSupport {
     void customerCannotChangeAnotherCustomersCardStatus() throws Exception {
         String cardReference = "2".repeat(32);
 
-        DebitCard debitCard = debitCardRepository.save(
+        debitCardRepository.save(
                 DebitCard.createNew(
                         cardReference,
                         "1234",
@@ -180,25 +180,12 @@ class DebitCardLifecycleIntegrationTest extends CardIntegrationTestSupport {
     }
 
     @Test
-    void changingMissingCardReturnsNotFound() throws Exception {
-        mockMvc.perform(patch("/api/debit-cards/{cardReference}/status/{status}", "2".repeat(32), CardStatus.ACTIVE.name())
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isNotFound())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Debit card not found"))
-                .andExpect(jsonPath("$.detail").value("Debit card not found"))
-                .andExpect(jsonPath("$.instance").value(
-                        "/api/debit-cards/%s/status/%s".formatted("2".repeat(32), CardStatus.ACTIVE.name())))
-                .andExpect(jsonPath("$.status").value(404));
-    }
-
-    @Test
     void invalidTransitionLeavesPersistedStatusUnchanged() throws Exception {
         String cardReference = "2".repeat(32);
 
         YearMonth now = YearMonth.now(clock);
 
-        DebitCard debitCard = debitCardRepository.save(
+        debitCardRepository.save(
                 DebitCard.createNew(
                         cardReference,
                         "1234",

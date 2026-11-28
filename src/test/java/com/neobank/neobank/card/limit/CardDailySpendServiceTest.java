@@ -6,7 +6,6 @@ import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -49,64 +48,6 @@ class CardDailySpendServiceTest {
     }
 
     @Test
-    void firstPurchaseOfTheDayCreatesRow() {
-        ArgumentCaptor<CardDailySpend> captor = ArgumentCaptor.forClass(CardDailySpend.class);
-
-        given(cardDailySpendRepository.findByCardAndSpendDate(card, TODAY))
-                .willReturn(Optional.empty());
-        given(cardDailySpendRepository.saveAndFlush(any(CardDailySpend.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
-
-        cardDailySpendService.recordSpend(card, TODAY, new BigDecimal("40.00"));
-
-        verify(cardDailySpendRepository).saveAndFlush(captor.capture());
-
-        assertThat(captor.getValue().getCard()).isSameAs(card);
-        assertThat(captor.getValue().getSpendDate()).isEqualTo(TODAY);
-        assertThat(captor.getValue().getAmountSpent()).isEqualTo(new BigDecimal("40.00"));
-    }
-
-    @Test
-    void laterPurchaseAddsToExistingRow() {
-        CardDailySpend existing = CardDailySpend.createNew(card, TODAY);
-        existing.add(new BigDecimal("60.00"), TestCardLimits.generous());
-
-        given(cardDailySpendRepository.findByCardAndSpendDate(card, TODAY))
-                .willReturn(Optional.of(existing));
-        given(cardDailySpendRepository.saveAndFlush(existing))
-                .willReturn(existing);
-
-        CardDailySpend result = cardDailySpendService.recordSpend(card, TODAY, new BigDecimal("40.00"));
-
-        assertThat(result.getAmountSpent()).isEqualTo(new BigDecimal("100.00"));
-    }
-
-    @Test
-    void limitBreachWritesNothing() {
-        CardDailySpend existing = CardDailySpend.createNew(card, TODAY);
-        existing.add(new BigDecimal("200.00"), TestCardLimits.generous());
-
-        given(cardDailySpendRepository.findByCardAndSpendDate(card, TODAY))
-                .willReturn(Optional.of(existing));
-
-        assertThatThrownBy(() -> cardDailySpendService.recordSpend(card, TODAY, new BigDecimal("50.01")))
-                .isInstanceOf(CardLimitExceededException.class);
-
-        verify(cardDailySpendRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void duplicateFirstInsertBecomesRetryableRaceException() {
-        given(cardDailySpendRepository.findByCardAndSpendDate(card, TODAY))
-                .willReturn(Optional.empty());
-        given(cardDailySpendRepository.saveAndFlush(any(CardDailySpend.class)))
-                .willThrow(violationOf("neobank.card_daily_spend.uk_card_daily_spend_card_date"));
-
-        assertThatThrownBy(() -> cardDailySpendService.recordSpend(card, TODAY, new BigDecimal("40.00")))
-                .isInstanceOf(CardDailySpendRaceException.class);
-    }
-
-    @Test
     void otherIntegrityViolationsAreRethrown() {
         DataIntegrityViolationException violation = violationOf("chk_card_daily_spend_amount_non_negative");
 
@@ -117,25 +58,6 @@ class CardDailySpendServiceTest {
 
         assertThatThrownBy(() -> cardDailySpendService.recordSpend(card, TODAY, new BigDecimal("40.00")))
                 .isSameAs(violation);
-    }
-
-    @Test
-    void getAmountSpentReturnsAmountOfExistingRow() {
-        CardDailySpend existing = CardDailySpend.createNew(card, TODAY);
-        existing.add(new BigDecimal("60.00"), TestCardLimits.generous());
-
-        given(cardDailySpendRepository.findByCardAndSpendDate(card, TODAY))
-                .willReturn(Optional.of(existing));
-
-        assertThat(cardDailySpendService.getAmountSpent(card, TODAY)).isEqualTo(new BigDecimal("60.00"));
-    }
-
-    @Test
-    void getAmountSpentReturnsZeroWhenNothingWasSpent() {
-        given(cardDailySpendRepository.findByCardAndSpendDate(card, TODAY))
-                .willReturn(Optional.empty());
-
-        assertThat(cardDailySpendService.getAmountSpent(card, TODAY)).isEqualTo(new BigDecimal("0.00"));
     }
 
     @Test

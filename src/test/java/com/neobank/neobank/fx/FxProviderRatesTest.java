@@ -2,6 +2,8 @@ package com.neobank.neobank.fx;
 
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -47,13 +49,18 @@ class FxProviderRatesTest {
                 rates,
                 PROVIDER_TIMESTAMP
         ))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("rates must contain every NeoBank-supported currency");
     }
 
-    @Test
-    void nonPositiveRateIsRejected() {
+    @ParameterizedTest
+    @CsvSource({
+            "EUR, 0, Rate for EUR must be positive",
+            "USD, 1.01, Base currency rate must equal 1"
+    })
+    void invalidRateIsRejected(CurrencyCode currency, BigDecimal rate, String message) {
         Map<CurrencyCode, BigDecimal> rates = validRates();
-        rates.put(CurrencyCode.EUR, BigDecimal.ZERO);
+        rates.put(currency, rate);
 
         assertThatThrownBy(() -> new FxProviderRates(
                 PROVIDER,
@@ -61,21 +68,8 @@ class FxProviderRatesTest {
                 rates,
                 PROVIDER_TIMESTAMP
         ))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void baseCurrencyRateOtherThanOneIsRejected() {
-        Map<CurrencyCode, BigDecimal> rates = validRates();
-        rates.put(CurrencyCode.USD, new BigDecimal("1.01"));
-
-        assertThatThrownBy(() -> new FxProviderRates(
-                PROVIDER,
-                CurrencyCode.USD,
-                rates,
-                PROVIDER_TIMESTAMP
-        ))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(message);
     }
 
     @Test
@@ -86,7 +80,8 @@ class FxProviderRatesTest {
                 validRates(),
                 Instant.EPOCH
         ))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("providerTimestamp must be after the Unix epoch");
     }
 
     private Map<CurrencyCode, BigDecimal> validRates() {

@@ -10,6 +10,7 @@ import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigDecimal;
@@ -264,18 +265,12 @@ class CreditAccountTest {
         return Stream.of(null, "", "1234567890123", "123456789012345", "1234567890123a");
     }
 
-    @Test
-    void createNewNormalizesAnnualInterestRate() {
-        CreditAccount creditAccount = creditAccount(new BigDecimal("0.25"), LocalDate.of(2026, 1, 15));
+    @ParameterizedTest
+    @CsvSource({"0.25, 0.2500", "0, 0.0000"})
+    void createNewNormalizesAnnualInterestRateToFourDecimals(BigDecimal annualInterestRate, BigDecimal expected) {
+        CreditAccount creditAccount = creditAccount(annualInterestRate, LocalDate.of(2026, 1, 15));
 
-        assertThat(creditAccount.getAnnualInterestRate()).isEqualTo(new BigDecimal("0.2500"));
-    }
-
-    @Test
-    void createNewAcceptsZeroAnnualInterestRate() {
-        CreditAccount creditAccount = creditAccount(BigDecimal.ZERO, LocalDate.of(2026, 1, 15));
-
-        assertThat(creditAccount.getAnnualInterestRate()).isEqualTo(new BigDecimal("0.0000"));
+        assertThat(creditAccount.getAnnualInterestRate()).isEqualTo(expected);
     }
 
     @ParameterizedTest

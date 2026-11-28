@@ -3,7 +3,6 @@ package com.neobank.neobank.fx.openexchangerates;
 import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.FxProviderUnavailableException;
 import com.neobank.neobank.shared.money.CurrencyCode;
-import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

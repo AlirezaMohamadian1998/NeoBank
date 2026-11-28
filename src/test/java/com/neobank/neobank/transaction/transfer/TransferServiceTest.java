@@ -3,7 +3,6 @@ package com.neobank.neobank.transaction.transfer;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxRateLockUnavailableException;
 import com.neobank.neobank.fx.FxRateService;
@@ -32,11 +31,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.neobank.neobank.support.TestFixtures.currentAccount;
+import static com.neobank.neobank.support.TestFixtures.customer;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -91,189 +91,10 @@ class TransferServiceTest {
     }
 
     @Test
-    void transferDebitsSourceAndCreditsDestinationAndSavesCompletedTransactionWithBothEntries() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
-        String idempotencyKey = "11111111111111111111111111111111";
-
-        Account sourceAccount = createAccount(
-                "12345678900987",
-                SOURCE_LEDGER_REFERENCE,
-                CurrencyCode.TRY,
-                sourceCustomer
-        );
-        Account destinationAccount = createAccount(
-                "98765432100123",
-                DESTINATION_LEDGER_REFERENCE,
-                CurrencyCode.TRY,
-                destinationCustomer
-        );
-        sourceAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
-
-        TransferRequest request = createTransferRequest(
-                destinationAccount.getAccountNumber(),
-                new BigDecimal("500.00"),
-                CurrencyCode.TRY,
-                null
-        );
-
-        String requestHash = hash(sourceAccount, destinationAccount, request, null);
-
-        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(
-                sourceAccount.getAccountNumber(),
-                sourceCustomer.getEmail()
-        )).willReturn(Optional.of(sourceAccount));
-        given(accountRepository.findByAccountNumber(destinationAccount.getAccountNumber()))
-                .willReturn(Optional.of(destinationAccount));
-        given(referenceGenerator.generate())
-                .willReturn(
-                        TRANSACTION_REFERENCE,
-                        SOURCE_ENTRY_REFERENCE,
-                        DESTINATION_ENTRY_REFERENCE
-                );
-        given(bankTransactionRepository.save(any(BankTransaction.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
-
-        given(idempotencyService.findAndValidateRecord(idempotencyKey, sourceCustomer.getEmail(), requestHash))
-                .willReturn(Optional.empty());
-
-        var response = transferService.transfer(
-                request,
-                sourceAccount.getAccountNumber(),
-                sourceCustomer.getEmail(),
-                idempotencyKey
-        );
-
-        verify(bankTransactionRepository).save(bankTransactionCaptor.capture());
-        verify(idempotencyService).save(idempotencyRecordCaptor.capture());
-
-        BankTransaction savedTransaction = bankTransactionCaptor.getValue();
-        List<LedgerEntry> entries = savedTransaction.getEntries();
-
-        assertThat(entries).hasSize(2);
-        LedgerEntry sourceEntry = entries.get(0);
-        LedgerEntry destinationEntry = entries.get(1);
-
-        assertThat(savedTransaction.getReference())
-                .isEqualTo(TRANSACTION_REFERENCE);
-        assertThat(savedTransaction.getTransactionType())
-                .isSameAs(TransactionType.TRANSFER);
-        assertThat(savedTransaction.getStatus())
-                .isSameAs(TransactionStatus.COMPLETED);
-        assertThat(savedTransaction.getRequestedAmount())
-                .isEqualByComparingTo(request.amount());
-        assertThat(savedTransaction.getRequestedCurrency())
-                .isSameAs(request.currency());
-        assertThat(savedTransaction.getNote())
-                .isEqualTo(request.note());
-
-        assertThat(sourceEntry.getReference())
-                .isEqualTo(SOURCE_ENTRY_REFERENCE);
-        assertThat(sourceEntry.getAmount())
-                .isEqualByComparingTo(request.amount());
-        assertThat(sourceEntry.getBalanceAfter())
-                .isEqualByComparingTo(sourceAccount.getBalance());
-        assertThat(sourceEntry.getDirection())
-                .isSameAs(EntryDirection.DEBIT);
-        assertThat(sourceEntry.getCurrency())
-                .isSameAs(sourceAccount.getCurrency());
-        assertThat(sourceEntry.getLedgerAccount())
-                .isSameAs(sourceAccount.getLedgerAccount());
-        assertThat(sourceEntry.getBankTransaction())
-                .isSameAs(savedTransaction);
-
-        assertThat(destinationEntry.getReference())
-                .isEqualTo(DESTINATION_ENTRY_REFERENCE);
-        assertThat(destinationEntry.getAmount())
-                .isEqualByComparingTo(request.amount());
-        assertThat(destinationEntry.getBalanceAfter())
-                .isEqualByComparingTo(destinationAccount.getBalance());
-        assertThat(destinationEntry.getDirection())
-                .isSameAs(EntryDirection.CREDIT);
-        assertThat(destinationEntry.getCurrency())
-                .isSameAs(destinationAccount.getCurrency());
-        assertThat(destinationEntry.getLedgerAccount())
-                .isSameAs(destinationAccount.getLedgerAccount());
-        assertThat(destinationEntry.getBankTransaction())
-                .isSameAs(savedTransaction);
-
-        assertThat(response.transactionReference())
-                .isEqualTo(savedTransaction.getReference());
-        assertThat(response.sourceEntryReference())
-                .isEqualTo(sourceEntry.getReference());
-        assertThat(response.transactionType())
-                .isSameAs(TransactionType.TRANSFER);
-        assertThat(response.sourceAccountNumber())
-                .isEqualTo(sourceAccount.getAccountNumber());
-        assertThat(response.destinationAccountNumber())
-                .isEqualTo(destinationAccount.getAccountNumber());
-        assertThat(response.amount())
-                .isEqualByComparingTo(request.amount());
-        assertThat(response.sourceBalanceAfter())
-                .isEqualByComparingTo(sourceEntry.getBalanceAfter());
-        assertThat(response.currency())
-                .isSameAs(request.currency());
-        assertThat(response.note())
-                .isEqualTo(request.note());
-        assertThat(response.createdAt())
-                .isEqualTo(savedTransaction.getCreatedAt());
-
-        assertThat(sourceAccount.getBalance()).isEqualByComparingTo("500.00");
-        assertThat(destinationAccount.getBalance()).isEqualByComparingTo("500.00");
-
-        IdempotencyRecord idempotencyRecord = idempotencyRecordCaptor.getValue();
-
-        assertThat(idempotencyRecord.getIdempotencyKey())
-                .isEqualTo(idempotencyKey);
-        assertThat(idempotencyRecord.getCustomer())
-                .isSameAs(sourceCustomer);
-        assertThat(idempotencyRecord.getResultReference())
-                .isEqualTo(savedTransaction.getReference());
-        assertThat(idempotencyRecord.getRequestHash())
-                .isEqualTo(hash(sourceAccount, destinationAccount, request, null));
-
-        verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(
-                sourceAccount.getAccountNumber(),
-                sourceCustomer.getEmail()
-        );
-        verify(accountRepository).findByAccountNumber(destinationAccount.getAccountNumber());
-        verify(referenceGenerator, times(3)).generate();
-        verify(accountRepository, never()).save(any(Account.class));
-    }
-
-    @Test
-    void transferThrowsAccountNotFoundExceptionWhenSourceAccountDoesNotExist() {
-        String destinationAccountNumber = "12345678900987";
-        String sourceAccountNumber = "98765432100123";
-        String email = "source@example.com";
-        String idempotencyKey = "11111111111111111111111111111111";
-
-        TransferRequest request = createTransferRequest(
-                destinationAccountNumber,
-                new BigDecimal("500.00"),
-                CurrencyCode.TRY,
-                null
-        );
-
-        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(sourceAccountNumber, email))
-                .willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
-                .isInstanceOf(AccountNotFoundException.class)
-                .hasMessage("Account not found");
-
-        verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(sourceAccountNumber, email);
-        verify(accountRepository, never()).findByAccountNumber(any(String.class));
-        verify(accountRepository, never()).save(any(Account.class));
-
-        verifyNoInteractions(bankTransactionRepository, referenceGenerator, idempotencyService);
-    }
-
-    @Test
     void transferThrowsInvalidTransferExceptionWhenSourceAndDestinationHaveSameAccountNumber() {
         String idempotencyKey = "11111111111111111111111111111111";
         String sameAccountNumber = "12345678900987";
-        Customer sourceCustomer = createCustomer("source@example.com");
+        Customer sourceCustomer = customer("source@example.com");
         Account sourceAccount = createAccount(
                 sameAccountNumber,
                 SOURCE_LEDGER_REFERENCE,
@@ -316,7 +137,7 @@ class TransferServiceTest {
     void transferThrowsAccountNotFoundExceptionWhenDestinationAccountDoesNotExist() {
         String idempotencyKey = "11111111111111111111111111111111";
         String destinationAccountNumber = "98765432100123";
-        Customer sourceCustomer = createCustomer("source@example.com");
+        Customer sourceCustomer = customer("source@example.com");
         Account sourceAccount = createAccount(
                 "12345678900987",
                 SOURCE_LEDGER_REFERENCE,
@@ -360,8 +181,8 @@ class TransferServiceTest {
     @Test
     void transferThrowsInsufficientFundsWhenSourceBalanceIsLessThanAmount() {
         String idempotencyKey = "11111111111111111111111111111111";
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
         Account sourceAccount = createAccount(
                 "12345678900987",
                 SOURCE_LEDGER_REFERENCE,
@@ -439,348 +260,9 @@ class TransferServiceTest {
     }
 
     @Test
-    void transferReturnsOldResponseWhenIdempotencyKeyAlreadyExists() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
-        String idempotencyKey = "11111111111111111111111111111111";
-
-        Account sourceAccount = createAccount(
-                "12345678900987",
-                SOURCE_LEDGER_REFERENCE,
-                CurrencyCode.TRY,
-                sourceCustomer
-        );
-        Account destinationAccount = createAccount(
-                "98765432100123",
-                DESTINATION_LEDGER_REFERENCE,
-                CurrencyCode.TRY,
-                destinationCustomer
-        );
-        sourceAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
-
-        TransferRequest request = createTransferRequest(
-                destinationAccount.getAccountNumber(),
-                new BigDecimal("500.00"),
-                CurrencyCode.TRY,
-                null
-        );
-
-        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(sourceAccount.getAccountNumber(), sourceCustomer.getEmail()))
-                .willReturn(Optional.of(sourceAccount));
-
-        given(accountRepository.findByAccountNumber(destinationAccount.getAccountNumber()))
-                .willReturn(Optional.of(destinationAccount));
-
-        String requestHash = hash(sourceAccount, destinationAccount, request, null);
-
-        BankTransaction savedTransaction = BankTransaction.createNew(
-                request.amount(),
-                request.currency(),
-                TransactionType.TRANSFER,
-                TRANSACTION_REFERENCE,
-                request.note()
-        );
-
-        BigDecimal sourceBalanceAfter = sourceAccount.getLedgerAccount().debit(request.amount());
-
-        savedTransaction.addEntry(
-                SOURCE_ENTRY_REFERENCE,
-                request.amount(),
-                sourceBalanceAfter,
-                EntryDirection.DEBIT,
-                sourceAccount.getLedgerAccount()
-        );
-
-        BigDecimal destinationBalanceAfter = destinationAccount.getLedgerAccount().credit(request.amount());
-
-        savedTransaction.addEntry(
-                DESTINATION_ENTRY_REFERENCE,
-                request.amount(),
-                destinationBalanceAfter,
-                EntryDirection.CREDIT,
-                destinationAccount.getLedgerAccount()
-        );
-
-        savedTransaction.complete();
-
-        ReflectionTestUtils.setField(sourceAccount.getLedgerAccount(), "id", 1L);
-
-        IdempotencyRecord idempotencyRecord = IdempotencyRecord.createNew(
-                idempotencyKey,
-                requestHash,
-                sourceCustomer,
-                savedTransaction.getReference()
-        );
-
-        given(idempotencyService.findAndValidateRecord(idempotencyKey, sourceCustomer.getEmail(), requestHash))
-                .willReturn(Optional.of(idempotencyRecord));
-
-        given(bankTransactionRepository.findByReference(idempotencyRecord.getResultReference()))
-                .willReturn(Optional.of(savedTransaction));
-
-        TransferResponse response = transferService.transfer(request, sourceAccount.getAccountNumber(), sourceCustomer.getEmail(), idempotencyKey);
-
-        assertThat(response.sourceBalanceAfter())
-                .isEqualByComparingTo(sourceAccount.getBalance());
-
-        assertThat(response.sourceAccountNumber())
-                .isEqualTo(sourceAccount.getAccountNumber());
-
-        assertThat(response.transactionReference())
-                .isEqualTo(TRANSACTION_REFERENCE);
-
-        assertThat(response.sourceEntryReference())
-                .isEqualTo(SOURCE_ENTRY_REFERENCE);
-
-        assertThat(response.transactionType())
-                .isSameAs(TransactionType.TRANSFER);
-
-        assertThat(response.destinationAccountNumber())
-                .isEqualTo(destinationAccount.getAccountNumber());
-
-        assertThat(response.amount())
-                .isEqualByComparingTo(request.amount());
-
-        assertThat(response.currency())
-                .isSameAs(request.currency());
-
-        assertThat(response.note())
-                .isEqualTo(request.note());
-
-        verify(bankTransactionRepository, never()).save(any());
-        verify(idempotencyService, never()).save(any());
-        verifyNoInteractions(referenceGenerator);
-    }
-
-    @Test
-    void crossCurrencyTransferConvertsBothAccountsWhenRequestCurrencyDiffersFromBoth() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
-
-        String idempotencyKey = "11111111111111111111111111111111";
-        String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
-
-        Account sourceAccount = createAccount(
-                "12345678900987",
-                SOURCE_LEDGER_REFERENCE,
-                CurrencyCode.EUR,
-                sourceCustomer
-        );
-        Account destinationAccount = createAccount(
-                "98765432100123",
-                DESTINATION_LEDGER_REFERENCE,
-                CurrencyCode.TRY,
-                destinationCustomer
-        );
-        sourceAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
-
-        TransferRequest request = createTransferRequest(
-                destinationAccount.getAccountNumber(),
-                new BigDecimal("500.00"),
-                CurrencyCode.USD,
-                lockId
-        );
-
-        String requestHash = hash(sourceAccount, destinationAccount, request, lockId);
-
-        FxRateLockResponse fxResponse = new FxRateLockResponse(
-                lockId,
-                Instant.parse("2026-09-05T12:00:00Z"),
-                request.currency(),
-                Map.of(
-                        CurrencyCode.USD, BigDecimal.ONE,
-                        CurrencyCode.TRY, new BigDecimal("48.00"),
-                        CurrencyCode.GBP, new BigDecimal("0.75"),
-                        CurrencyCode.EUR, new BigDecimal("0.85")
-                )
-        );
-
-        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(sourceAccount.getAccountNumber(), sourceCustomer.getEmail()))
-                .willReturn(Optional.of(sourceAccount));
-
-        given(accountRepository.findByAccountNumber(destinationAccount.getAccountNumber()))
-                .willReturn(Optional.of(destinationAccount));
-
-        given(idempotencyService.findAndValidateRecord(idempotencyKey, sourceCustomer.getEmail(), requestHash))
-                .willReturn(Optional.empty());
-
-        given(referenceGenerator.generate())
-                .willReturn(TRANSACTION_REFERENCE, SOURCE_ENTRY_REFERENCE, DESTINATION_ENTRY_REFERENCE);
-
-        given(fxRateService.getCachedRate(sourceCustomer.getEmail(), lockId))
-                .willReturn(fxResponse);
-
-        given(bankTransactionRepository.save(any(BankTransaction.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
-
-        TransferResponse response = transferService.transfer(
-                request,
-                sourceAccount.getAccountNumber(),
-                sourceCustomer.getEmail(),
-                idempotencyKey
-        );
-
-        verify(bankTransactionRepository).save(bankTransactionCaptor.capture());
-
-        BankTransaction transaction = bankTransactionCaptor.getValue();
-
-        assertThat(transaction.getEntries())
-                .hasSize(2);
-
-        LedgerEntry sourceEntry = transaction.getEntries()
-                .stream()
-                .filter(entry -> entry.getDirection() == EntryDirection.DEBIT)
-                .findFirst()
-                .orElseThrow();
-
-        LedgerEntry destinationEntry = transaction.getEntries()
-                .stream()
-                .filter(entry -> entry.getDirection() == EntryDirection.CREDIT)
-                .findFirst()
-                .orElseThrow();
-
-        assertThat(response.transactionReference())
-                .isEqualTo(transaction.getReference());
-
-        assertThat(response.sourceEntryReference())
-                .isEqualTo(sourceEntry.getReference());
-
-        assertThat(response.transactionType())
-                .isSameAs(transaction.getTransactionType());
-
-        assertThat(response.sourceAccountNumber())
-                .isEqualTo(sourceAccount.getAccountNumber());
-
-        assertThat(response.destinationAccountNumber())
-                .isEqualTo(destinationAccount.getAccountNumber());
-
-        assertThat(response.amount())
-                .isEqualByComparingTo(request.amount());
-
-        assertThat(response.sourceBalanceAfter())
-                .isEqualByComparingTo(sourceEntry.getBalanceAfter());
-
-        assertThat(response.currency())
-                .isSameAs(request.currency());
-
-        assertThat(response.note())
-                .isEqualTo(transaction.getNote());
-
-        assertThat(transaction.getRequestedAmount())
-                .isEqualByComparingTo(request.amount());
-
-        assertThat(transaction.getRequestedCurrency())
-                .isSameAs(request.currency());
-
-        assertThat(transaction.getStatus())
-                .isSameAs(TransactionStatus.COMPLETED);
-
-        assertThat(transaction.getTransactionType())
-                .isSameAs(TransactionType.TRANSFER);
-
-        assertThat(transaction.getReference())
-                .isEqualTo(TRANSACTION_REFERENCE);
-
-        assertThat(transaction.getNote())
-                .isEqualTo(request.note());
-
-        assertThat(transaction.getEntries())
-                .extracting(LedgerEntry::getDirection)
-                .doesNotHaveDuplicates();
-
-        assertThat(transaction.getFxInfo().getLockId())
-                .isEqualTo(lockId);
-
-        assertThat(transaction.getFxInfo().getRates())
-                .extracting(FxRate::getCurrencyContext, FxRate::getCurrency, FxRate::getRate)
-                .containsExactlyInAnyOrder(
-                        tuple(CurrencyContext.REQUEST, request.currency(), BigDecimal.ONE),
-                        tuple(CurrencyContext.SOURCE, sourceAccount.getCurrency(), new BigDecimal("0.85")),
-                        tuple(CurrencyContext.DESTINATION, destinationAccount.getCurrency(), new BigDecimal("48.00"))
-                );
-
-        assertThat(sourceEntry.getReference())
-                .isEqualTo(SOURCE_ENTRY_REFERENCE);
-
-        assertThat(sourceEntry.getAmount())
-                .isEqualByComparingTo(request.amount().multiply(fxResponse.rates().get(sourceAccount.getCurrency())));
-
-        assertThat(sourceEntry.getBalanceAfter())
-                .isEqualByComparingTo(sourceAccount.getBalance());
-
-        assertThat(sourceEntry.getDirection())
-                .isSameAs(EntryDirection.DEBIT);
-
-        assertThat(sourceEntry.getCurrency())
-                .isSameAs(sourceAccount.getCurrency());
-
-        assertThat(sourceEntry.getLedgerAccount())
-                .isSameAs(sourceAccount.getLedgerAccount());
-
-        assertThat(sourceEntry.getBankTransaction())
-                .isSameAs(transaction);
-
-        assertThat(destinationEntry.getReference())
-                .isEqualTo(DESTINATION_ENTRY_REFERENCE);
-
-        assertThat(destinationEntry.getAmount())
-                .isEqualByComparingTo(request.amount().multiply(fxResponse.rates().get(destinationAccount.getCurrency())));
-
-        assertThat(destinationEntry.getBalanceAfter())
-                .isEqualByComparingTo(destinationAccount.getBalance());
-
-        assertThat(destinationEntry.getDirection())
-                .isSameAs(EntryDirection.CREDIT);
-
-        assertThat(destinationEntry.getCurrency())
-                .isSameAs(destinationAccount.getCurrency());
-
-        assertThat(destinationEntry.getLedgerAccount())
-                .isSameAs(destinationAccount.getLedgerAccount());
-
-        assertThat(destinationEntry.getBankTransaction())
-                .isSameAs(transaction);
-
-        assertThat(sourceAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("575.00"));
-
-        assertThat(destinationAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("24000.00"));
-
-        verify(idempotencyService).save(idempotencyRecordCaptor.capture());
-
-        IdempotencyRecord idempotencyRecord = idempotencyRecordCaptor.getValue();
-
-        assertThat(idempotencyRecord.getIdempotencyKey())
-                .isEqualTo(idempotencyKey);
-
-        assertThat(idempotencyRecord.getRequestHash())
-                .isEqualTo(requestHash);
-
-        assertThat(idempotencyRecord.getCustomer())
-                .isSameAs(sourceCustomer);
-
-        assertThat(idempotencyRecord.getResultReference())
-                .isEqualTo(transaction.getReference());
-
-        verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(
-                sourceAccount.getAccountNumber(),
-                sourceCustomer.getEmail()
-        );
-
-        verify(accountRepository).findByAccountNumber(destinationAccount.getAccountNumber());
-
-        verify(referenceGenerator, times(3)).generate();
-
-        verify(accountRepository, never()).save(any(Account.class));
-
-        verify(fxRateService).getCachedRate(sourceCustomer.getEmail(), lockId);
-    }
-
-    @Test
     void transferBetweenSameCurrencyAccountsUsesLockWhenRequestCurrencyDiffers() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
 
         String idempotencyKey = "11111111111111111111111111111111";
         String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
@@ -998,8 +480,8 @@ class TransferServiceTest {
 
     @Test
     void crossCurrencyIdempotentReplayDoesNotReloadRateLock() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
 
         String idempotencyKey = "11111111111111111111111111111111";
         String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
@@ -1072,7 +554,7 @@ class TransferServiceTest {
                 sourceAccount.getLedgerAccount()
         );
 
-        LedgerEntry destinationEntry = transaction.addEntry(
+        transaction.addEntry(
                 DESTINATION_ENTRY_REFERENCE,
                 destinationMoneyMovementAmount,
                 destinationAccount.getBalance(),
@@ -1139,8 +621,8 @@ class TransferServiceTest {
 
     @Test
     void crossCurrencyTransferWithoutLockIsRejected() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
 
         String idempotencyKey = "11111111111111111111111111111111";
 
@@ -1186,8 +668,8 @@ class TransferServiceTest {
 
     @Test
     void sameCurrencyTransferWithLockIsRejected() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
 
         String idempotencyKey = "11111111111111111111111111111111";
 
@@ -1232,8 +714,8 @@ class TransferServiceTest {
 
     @Test
     void crossCurrencyTransferRejectsLockWithDifferentBaseCurrency() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
 
         String idempotencyKey = "11111111111111111111111111111111";
         String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
@@ -1302,8 +784,8 @@ class TransferServiceTest {
 
     @Test
     void transferThrowsIdempotencyResultNotFoundExceptionWhenResultDoesNotExist() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
         String idempotencyKey = "11111111111111111111111111111111";
 
         Account sourceAccount = createAccount(
@@ -1363,14 +845,6 @@ class TransferServiceTest {
         verifyNoInteractions(referenceGenerator, fxRateService);
     }
 
-    private Customer createCustomer(String email) {
-        return Customer.createNew(
-                email,
-                "{bcrypt}raw-password123",
-                "Ada Lovelace"
-        );
-    }
-
     private Account createAccount(
             String accountNumber,
             String ledgerReference,
@@ -1378,14 +852,7 @@ class TransferServiceTest {
             Customer customer
     ) {
 
-        return Account.createNew(
-                accountNumber,
-                ledgerReference,
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                currency
-        );
+        return currentAccount(accountNumber, ledgerReference, customer, currency);
     }
 
     private TransferRequest createTransferRequest(

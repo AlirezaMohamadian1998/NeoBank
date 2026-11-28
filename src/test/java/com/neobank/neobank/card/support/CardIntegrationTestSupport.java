@@ -5,9 +5,13 @@ import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.CardRepository;
 import com.neobank.neobank.card.credit.CreditCardRepository;
+import com.neobank.neobank.card.credit.dto.CreditCardIssueRequest;
+import com.neobank.neobank.card.credit.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.credit.dto.CreditCardRepaymentRequest;
+import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.debit.DebitCardRepository;
 import com.neobank.neobank.card.limit.CardDailySpendRepository;
+import com.neobank.neobank.card.limit.CardSpendingLimits;
 import com.neobank.neobank.card.payment.CardPurchaseDetailsRepository;
 import com.neobank.neobank.card.payment.CardRefundDetailsRepository;
 import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
@@ -16,6 +20,7 @@ import com.neobank.neobank.creditaccount.CreditAccountRepository;
 import com.neobank.neobank.creditaccount.CreditStatementRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerRepository;
+import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.idempotency.IdempotencyRecordRepository;
 import com.neobank.neobank.internalaccount.InternalAccount;
 import com.neobank.neobank.internalaccount.InternalAccountPurpose;
@@ -41,8 +46,12 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.YearMonth;
+import java.util.Map;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -148,6 +157,34 @@ public abstract class CardIntegrationTestSupport {
         );
     }
 
+    protected CreditCardIssueResponse issueCreditCard(CurrencyCode currency, String idempotencyKey) throws Exception {
+        String body = mockMvc.perform(post("/api/credit-cards")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreditCardIssueRequest(currency)))
+                        .header("Idempotency-Key", idempotencyKey)
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return objectMapper.readValue(body, CreditCardIssueResponse.class);
+    }
+
+    protected CreditCardIssueResponse issueAndActivateCreditCard(CurrencyCode currency, String idempotencyKey) throws Exception {
+        CreditCardIssueResponse issued = issueCreditCard(currency, idempotencyKey);
+
+        mockMvc.perform(patch("/api/credit-cards/{cardReference}/status/{status}", issued.cardReference(), "ACTIVE")
+                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+                .andExpect(status().isOk());
+
+        return issued;
+    }
+
+    protected BigDecimal balanceOf(String accountNumber) {
+        return accountRepository.findByAccountNumber(accountNumber).orElseThrow().getBalance();
+    }
+
     protected ResultActions purchase(
             String cardReference,
             String merchantAccountNumber,
@@ -163,11 +200,20 @@ public abstract class CardIntegrationTestSupport {
                 "Test merchant"
         );
 
+        return purchase(cardReference, request, idempotencyKey, customer.getEmail());
+    }
+
+    protected ResultActions purchase(
+            String cardReference,
+            CardPurchaseRequest request,
+            String idempotencyKey,
+            String email
+    ) throws Exception {
         return mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request))
                 .header("Idempotency-Key", idempotencyKey)
-                .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))));
+                .with(jwt().jwt(jwt -> jwt.subject(email))));
     }
 
     protected String transactionReferenceOf(ResultActions purchase) throws Exception {
@@ -178,6 +224,17 @@ public abstract class CardIntegrationTestSupport {
                 .getContentAsString();
 
         return objectMapper.readValue(body, CardPurchaseResponse.class).transactionReference();
+    }
+
+    protected ResultActions refund(
+            String merchantAccountNumber,
+            String purchaseReference,
+            String idempotencyKey,
+            String email
+    ) throws Exception {
+        return mockMvc.perform(post("/api/accounts/{merchantAccountNumber}/card-refunds/{purchaseReference}", merchantAccountNumber, purchaseReference)
+                .header("Idempotency-Key", idempotencyKey)
+                .with(jwt().jwt(jwt -> jwt.subject(email))));
     }
 
     protected ResultActions repay(String cardReference, String amount, String lockId, String idempotencyKey) throws Exception {
@@ -194,6 +251,44 @@ public abstract class CardIntegrationTestSupport {
         transactionTemplate.executeWithoutResult(status ->
                 creditCardRepository.findByCardReference(cardReference).orElseThrow()
                         .getCreditAccount().getLedgerAccount().credit(new BigDecimal(amount))
+        );
+    }
+
+    protected DebitCard savedActiveDebitCard(String cardReference, CardSpendingLimits limits) {
+        DebitCard debitCard = DebitCard.createNew(
+                cardReference,
+                "1234",
+                YearMonth.now(clock).plusYears(5),
+                YearMonth.now(clock),
+                account,
+                limits
+        );
+        debitCard.activateCard(YearMonth.now(clock));
+
+        return debitCardRepository.save(debitCard);
+    }
+
+    protected Account savedMerchantAccount(String email, String accountNumber, String ledgerReference, CurrencyCode currency) {
+        Customer merchantCustomer = customerRepository.save(
+                Customer.createNew(email, "{bcrypt}password-hash", "Merchant Owner")
+        );
+
+        return accountRepository.save(
+                Account.createNew(accountNumber, ledgerReference, "merchant", AccountType.CURRENT, merchantCustomer, currency)
+        );
+    }
+
+    protected FxProviderRates usdBasedRates(String tryPerUsd) {
+        return new FxProviderRates(
+                "test-provider",
+                CurrencyCode.USD,
+                Map.of(
+                        CurrencyCode.USD, BigDecimal.ONE,
+                        CurrencyCode.EUR, new BigDecimal("0.85"),
+                        CurrencyCode.GBP, new BigDecimal("0.75"),
+                        CurrencyCode.TRY, new BigDecimal(tryPerUsd)
+                ),
+                Instant.now()
         );
     }
 

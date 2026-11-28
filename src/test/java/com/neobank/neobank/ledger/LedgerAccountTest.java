@@ -5,6 +5,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,41 +60,17 @@ class LedgerAccountTest {
                 .isEqualTo(2);
     }
 
-    @Test
-    void creditRejectsNullAmount() {
-        assertThatThrownBy(() -> ledgerAccount.credit(null))
+    @ParameterizedTest
+    @CsvSource({
+            ", Amount must not be null",
+            "0, Amount must be greater than zero",
+            "-10.00, Amount must be greater than zero",
+            "10.001, Amount must not have more than 2 decimal places"
+    })
+    void creditRejectsInvalidAmount(BigDecimal amount, String message) {
+        assertThatThrownBy(() -> ledgerAccount.credit(amount))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must not be null");
-
-        assertThat(ledgerAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("0.00"));
-    }
-
-    @Test
-    void creditRejectsZeroAmount() {
-        assertThatThrownBy(() -> ledgerAccount.credit(BigDecimal.ZERO))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must be greater than zero");
-
-        assertThat(ledgerAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("0.00"));
-    }
-
-    @Test
-    void creditRejectsNegativeAmount() {
-        assertThatThrownBy(() -> ledgerAccount.credit(new BigDecimal("-10.00")))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must be greater than zero");
-
-        assertThat(ledgerAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("0.00"));
-    }
-
-    @Test
-    void creditRejectsAmountWithMoreThanTwoMeaningfulDecimalPlaces() {
-        assertThatThrownBy(() -> ledgerAccount.credit(new BigDecimal("10.001")))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must not have more than 2 decimal places");
+                .hasMessage(message);
 
         assertThat(ledgerAccount.getBalance())
                 .isEqualByComparingTo(new BigDecimal("0.00"));
@@ -126,49 +104,19 @@ class LedgerAccountTest {
                 .isEqualByComparingTo(new BigDecimal("0.00"));
     }
 
-    @Test
-    void debitRejectsNullAmount() {
+    @ParameterizedTest
+    @CsvSource({
+            ", Amount must not be null",
+            "0, Amount must be greater than zero",
+            "-10.00, Amount must be greater than zero",
+            "10.001, Amount must not have more than 2 decimal places"
+    })
+    void debitRejectsInvalidAmount(BigDecimal amount, String message) {
         ledgerAccount.credit(new BigDecimal("100.00"));
 
-        assertThatThrownBy(() -> ledgerAccount.debit(null))
+        assertThatThrownBy(() -> ledgerAccount.debit(amount))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must not be null");
-
-        assertThat(ledgerAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("100.00"));
-    }
-
-    @Test
-    void debitRejectsZeroAmount() {
-        ledgerAccount.credit(new BigDecimal("100.00"));
-
-        assertThatThrownBy(() -> ledgerAccount.debit(BigDecimal.ZERO))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must be greater than zero");
-
-        assertThat(ledgerAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("100.00"));
-    }
-
-    @Test
-    void debitRejectsNegativeAmount() {
-        ledgerAccount.credit(new BigDecimal("100.00"));
-
-        assertThatThrownBy(() -> ledgerAccount.debit(new BigDecimal("-10.00")))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must be greater than zero");
-
-        assertThat(ledgerAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("100.00"));
-    }
-
-    @Test
-    void debitRejectsAmountWithMoreThanTwoMeaningfulDecimalPlaces() {
-        ledgerAccount.credit(new BigDecimal("100.00"));
-
-        assertThatThrownBy(() -> ledgerAccount.debit(new BigDecimal("10.001")))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must not have more than 2 decimal places");
+                .hasMessage(message);
 
         assertThat(ledgerAccount.getBalance())
                 .isEqualByComparingTo(new BigDecimal("100.00"));
@@ -181,14 +129,6 @@ class LedgerAccountTest {
         assertThatThrownBy(() -> ledgerAccount.debit(new BigDecimal("100.01")))
                 .isInstanceOf(InsufficientFundsException.class)
                 .hasMessage("Insufficient funds");
-    }
-
-    @Test
-    void failedOperationLeavesBalanceUnchanged() {
-        ledgerAccount.credit(new BigDecimal("100.00"));
-
-        assertThatThrownBy(() -> ledgerAccount.debit(new BigDecimal("150.00")))
-                .isInstanceOf(InsufficientFundsException.class);
 
         assertThat(ledgerAccount.getBalance())
                 .isEqualByComparingTo(new BigDecimal("100.00"));
@@ -285,65 +225,22 @@ class LedgerAccountTest {
                 .isEqualTo(2);
     }
 
-    @Test
-    void createNewRejectsNullReference() {
+    @ParameterizedTest
+    @CsvSource({
+            ", Ledger reference cannot be null",
+            "'', Ledger reference must be exactly 32 hexadecimal characters",
+            "0123456789abcdef0123456789abcde, Ledger reference must be exactly 32 hexadecimal characters",
+            "0123456789abcdef0123456789abcdef0, Ledger reference must be exactly 32 hexadecimal characters",
+            "0123456789abcdef0123456789abcdeg, Ledger reference must be exactly 32 hexadecimal characters"
+    })
+    void createNewRejectsInvalidReference(String reference, String message) {
         assertThatThrownBy(() -> LedgerAccount.createNew(
-                null,
+                reference,
                 LedgerAccountType.LIABILITY,
                 CurrencyCode.TRY
         ))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Ledger reference cannot be null");
-    }
-
-    @Test
-    void createNewRejectsEmptyReference() {
-        assertThatThrownBy(() -> LedgerAccount.createNew(
-                "",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Ledger reference must be exactly 32 hexadecimal characters");
-    }
-
-    @Test
-    void createNewRejectsReferenceShorterThan32Characters() {
-        assertThatThrownBy(() -> LedgerAccount.createNew(
-                "0123456789abcdef0123456789abcde",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Ledger reference must be exactly 32 hexadecimal characters"
-                );
-    }
-
-    @Test
-    void createNewRejectsReferenceLongerThan32Characters() {
-        assertThatThrownBy(() -> LedgerAccount.createNew(
-                "0123456789abcdef0123456789abcdef0",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Ledger reference must be exactly 32 hexadecimal characters"
-                );
-    }
-
-    @Test
-    void createNewRejectsNonHexadecimalCharacters() {
-        assertThatThrownBy(() -> LedgerAccount.createNew(
-                "0123456789abcdef0123456789abcdeg",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Ledger reference must be exactly 32 hexadecimal characters"
-                );
+                .hasMessage(message);
     }
 
     @Test

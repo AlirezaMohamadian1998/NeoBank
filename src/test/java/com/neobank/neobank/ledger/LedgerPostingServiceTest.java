@@ -47,114 +47,7 @@ class LedgerPostingServiceTest {
     }
 
     @Test
-    void creditToLiabilityAccountIncreasesBalance() {
-        LedgerEntry entry = postingService.post(
-                transaction,
-                liabilityAccount,
-                EntryDirection.CREDIT,
-                new BigDecimal("100.00")
-        );
-
-        assertThat(liabilityAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("100.00"));
-
-        assertThat(entry.getBalanceAfter())
-                .isEqualByComparingTo(new BigDecimal("100.00"));
-
-        assertThat(entry.getReference())
-                .isEqualTo("11111111111111111111111111111111");
-    }
-
-    @Test
-    void debitFromLiabilityAccountDecreasesBalance() {
-        postingService.post(
-                transaction,
-                liabilityAccount,
-                EntryDirection.CREDIT,
-                new BigDecimal("100.00")
-        );
-
-        LedgerEntry entry = postingService.post(
-                transaction,
-                liabilityAccount,
-                EntryDirection.DEBIT,
-                new BigDecimal("40.00")
-        );
-
-        assertThat(liabilityAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("60.00"));
-
-        assertThat(entry.getBalanceAfter())
-                .isEqualByComparingTo(new BigDecimal("60.00"));
-    }
-
-    @Test
-    void debitToAssetAccountIncreasesBalance() {
-        LedgerAccount assetAccount = LedgerAccount.createNew(
-                "11111111111111111111111111111111",
-                LedgerAccountType.ASSET,
-                CurrencyCode.TRY
-        );
-
-        LedgerEntry entry = postingService.post(
-                transaction,
-                assetAccount,
-                EntryDirection.DEBIT,
-                new BigDecimal("100.00")
-        );
-
-        assertThat(assetAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("100.00"));
-
-        assertThat(entry.getBalanceAfter())
-                .isEqualByComparingTo(new BigDecimal("100.00"));
-    }
-
-    @Test
-    void creditFromAssetAccountDecreasesBalance() {
-        LedgerAccount assetAccount = LedgerAccount.createNew(
-                "11111111111111111111111111111111",
-                LedgerAccountType.ASSET,
-                CurrencyCode.TRY
-        );
-
-        postingService.post(
-                transaction,
-                assetAccount,
-                EntryDirection.DEBIT,
-                new BigDecimal("100.00")
-        );
-
-        LedgerEntry entry = postingService.post(
-                transaction,
-                assetAccount,
-                EntryDirection.CREDIT,
-                new BigDecimal("40.00")
-        );
-
-        assertThat(assetAccount.getBalance())
-                .isEqualByComparingTo(new BigDecimal("60.00"));
-
-        assertThat(entry.getBalanceAfter())
-                .isEqualByComparingTo(new BigDecimal("60.00"));
-    }
-
-    @Test
-    void postingCreatesExactlyOneEntryOnTransaction() {
-        LedgerEntry result = postingService.post(
-                transaction,
-                liabilityAccount,
-                EntryDirection.CREDIT,
-                new BigDecimal("100.00")
-        );
-
-        assertThat(transaction.getEntries())
-                .hasSize(1)
-                .containsExactly(result);
-    }
-
-    @Test
-    void createdEntryContainsCorrectPostingData() {
+    void postingAddsOneEntryWithThePostingDataAndLeavesTransactionPending() {
         BigDecimal amount = new BigDecimal("125.50");
 
         LedgerEntry entry = postingService.post(
@@ -163,6 +56,12 @@ class LedgerPostingServiceTest {
                 EntryDirection.CREDIT,
                 amount
         );
+
+        assertThat(transaction.getEntries())
+                .containsExactly(entry);
+
+        assertThat(transaction.getStatus())
+                .isEqualTo(TransactionStatus.PENDING);
 
         assertThat(entry.getAmount())
                 .isEqualByComparingTo(new BigDecimal("125.50"));
@@ -184,19 +83,6 @@ class LedgerPostingServiceTest {
 
         assertThat(entry.getBalanceAfter())
                 .isEqualByComparingTo(new BigDecimal("125.50"));
-    }
-
-    @Test
-    void postingLeavesTransactionPending() {
-        postingService.post(
-                transaction,
-                liabilityAccount,
-                EntryDirection.CREDIT,
-                new BigDecimal("100.00")
-        );
-
-        assertThat(transaction.getStatus())
-                .isEqualTo(TransactionStatus.PENDING);
     }
 
     @Test

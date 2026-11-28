@@ -32,6 +32,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
@@ -96,11 +97,7 @@ class CreditCardControllerTest {
                         CurrencyCode.USD
                 ));
 
-        mockMvc.perform(post("/api/credit-cards")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+        authenticatedPost(objectMapper.writeValueAsString(request), "/api/credit-cards")
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.cardReference").value(CARD_REFERENCE))
                 .andExpect(jsonPath("$.lastFourDigits").value("5678"))
@@ -113,11 +110,7 @@ class CreditCardControllerTest {
 
     @Test
     void issueCreditCardReturnsValidationProblemWhenCurrencyIsMissing() throws Exception {
-        mockMvc.perform(post("/api/credit-cards")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}")
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+        authenticatedPost("{}", "/api/credit-cards")
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
 
@@ -219,11 +212,7 @@ class CreditCardControllerTest {
                         Instant.parse("2026-09-23T12:00:00Z")
                 ));
 
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+        authenticatedPost(objectMapper.writeValueAsString(request), "/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.transactionReference").value("a".repeat(32)))
                 .andExpect(jsonPath("$.sourceAccountBalanceAfter").value(750.00))
@@ -232,11 +221,7 @@ class CreditCardControllerTest {
 
     @Test
     void repayReturnsValidationProblemWhenAmountIsMissing() throws Exception {
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"sourceAccountNumber\":\"12345678900987\"}")
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+        authenticatedPost("{\"sourceAccountNumber\":\"12345678900987\"}", "/api/credit-cards/{cardReference}/repayments", CARD_REFERENCE)
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
 
@@ -262,11 +247,7 @@ class CreditCardControllerTest {
                         Instant.parse("2026-09-23T12:00:00Z")
                 ));
 
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+        authenticatedPost(objectMapper.writeValueAsString(request), "/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.transactionReference").value("a".repeat(32)))
                 .andExpect(jsonPath("$.debitedAmount").value(150.00))
@@ -276,11 +257,7 @@ class CreditCardControllerTest {
 
     @Test
     void payOutReturnsValidationProblemWhenDestinationAccountIsMissing() throws Exception {
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}")
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+        authenticatedPost("{}", "/api/credit-cards/{cardReference}/payouts", CARD_REFERENCE)
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
 
@@ -324,11 +301,7 @@ class CreditCardControllerTest {
                         Instant.parse("2026-09-23T12:00:00Z")
                 ));
 
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/close", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+        authenticatedPost(objectMapper.writeValueAsString(request), "/api/credit-cards/{cardReference}/close", CARD_REFERENCE)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.closingStatementReference").value(STATEMENT_REFERENCE))
                 .andExpect(jsonPath("$.payoffAccountNumber").value("12345678900987"))
@@ -337,11 +310,7 @@ class CreditCardControllerTest {
 
     @Test
     void closeReturnsValidationProblemWhenQuoteIdIsMissing() throws Exception {
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/close", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"payoffAccountNumber\":\"12345678900987\"}")
-                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
-                        .with(jwt().jwt(jwt -> jwt.subject(EMAIL))))
+        authenticatedPost("{\"payoffAccountNumber\":\"12345678900987\"}", "/api/credit-cards/{cardReference}/close", CARD_REFERENCE)
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
 
@@ -512,5 +481,13 @@ class CreditCardControllerTest {
                         CurrencyCode.USD
                 )
         );
+    }
+
+    private ResultActions authenticatedPost(String json, String path, Object... uriVariables) throws Exception {
+        return mockMvc.perform(post(path, uriVariables)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json)
+                .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                .with(jwt().jwt(jwt -> jwt.subject(EMAIL))));
     }
 }

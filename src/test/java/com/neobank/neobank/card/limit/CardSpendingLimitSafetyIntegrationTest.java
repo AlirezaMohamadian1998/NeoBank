@@ -21,7 +21,6 @@ import org.springframework.test.util.AopTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -60,17 +59,7 @@ class CardSpendingLimitSafetyIntegrationTest extends CardIntegrationTestSupport 
         settlementLedger.debit(new BigDecimal("10000.00"));
         internalAccountRepository.save(InternalAccount.createNew(InternalAccountPurpose.SETTLEMENT, settlementLedger));
 
-        DebitCard newDebitCard = DebitCard.createNew(
-                CARD_REFERENCE,
-                "1234",
-                YearMonth.now(clock).plusYears(5),
-                YearMonth.now(clock),
-                account,
-                CardSpendingLimits.createNew(new BigDecimal("100.00"), new BigDecimal("250.00"))
-        );
-        newDebitCard.activateCard(YearMonth.now(clock));
-
-        debitCard = debitCardRepository.save(newDebitCard);
+        debitCard = savedActiveDebitCard(CARD_REFERENCE, CardSpendingLimits.createNew(new BigDecimal("100.00"), new BigDecimal("250.00")));
     }
 
     @Test
@@ -88,7 +77,7 @@ class CardSpendingLimitSafetyIntegrationTest extends CardIntegrationTestSupport 
 
         assertThat(cardDailySpendRepository.count()).isOne();
         assertThat(spentToday()).isEqualByComparingTo("130.00");
-        assertThat(balanceOf()).isEqualByComparingTo("870.00");
+        assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("870.00");
     }
 
     @Test
@@ -112,7 +101,7 @@ class CardSpendingLimitSafetyIntegrationTest extends CardIntegrationTestSupport 
         assertThat(attemptCount.get()).isEqualTo(3);
 
         assertThat(spentToday()).isEqualByComparingTo("200.00");
-        assertThat(balanceOf()).isEqualByComparingTo("900.00");
+        assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("900.00");
         assertThat(bankTransactionRepository.count()).isOne();
     }
 
@@ -204,10 +193,6 @@ class CardSpendingLimitSafetyIntegrationTest extends CardIntegrationTestSupport 
         return cardDailySpendRepository.findByCardAndSpendDate(debitCard, LocalDate.now(clock))
                 .orElseThrow()
                 .getAmountSpent();
-    }
-
-    private BigDecimal balanceOf() {
-        return accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance();
     }
 
     private record PurchaseOutcome(Future<CardPurchaseResponse> first, Future<CardPurchaseResponse> second) {

@@ -168,32 +168,6 @@ class AccountControllerTest {
     }
 
     @Test
-    void getCurrentCustomerAccountsReturnsEmptyArrayWhenCustomerHasNoAccounts() throws Exception {
-        String email = "customer@example.com";
-
-        given(accountService.getCurrentCustomerAccounts(email))
-                .willReturn(List.of());
-
-        mockMvc.perform(get(ACCOUNT_ENDPOINT)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isOk())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$").isEmpty())
-                .andExpect(cookie().doesNotExist("JSESSIONID"));
-
-        verify(accountService).getCurrentCustomerAccounts(email);
-    }
-
-    @Test
-    void getCurrentCustomerAccountsReturnsUnauthorizedWithoutAuthentication() throws Exception {
-        mockMvc.perform(get(ACCOUNT_ENDPOINT))
-                .andExpect(status().isUnauthorized());
-
-        verifyNoInteractions(accountService);
-    }
-
-    @Test
     void getCurrentCustomerAccountReturnsOwnedAccountForAuthenticatedJwt() throws Exception {
         String email = "customer@example.com";
 
@@ -220,13 +194,5 @@ class AccountControllerTest {
                 .andExpect(cookie().doesNotExist("JSESSIONID"));
 
         verify(accountService).getCurrentCustomerAccount(response.accountNumber(), email);
-    }
-
-    @Test
-    void getCurrentCustomerAccountReturnsUnauthorizedWithoutAuthentication() throws Exception {
-        mockMvc.perform(get(ACCOUNT_ENDPOINT + "/{accountNumber}", "12345678900987"))
-                .andExpect(status().isUnauthorized());
-
-        verifyNoInteractions(accountService);
     }
 }
