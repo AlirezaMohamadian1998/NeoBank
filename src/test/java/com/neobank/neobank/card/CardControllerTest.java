@@ -18,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
@@ -82,11 +83,7 @@ class CardControllerTest {
         given(cardPaymentService.makePurchase(cardReference, request, idempotencyKey, email))
                 .willReturn(response);
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+        makePayment(cardReference, request, idempotencyKey, email)
                 .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.transactionReference").value(response.transactionReference()))
@@ -135,11 +132,7 @@ class CardControllerTest {
         given(cardPaymentService.makePurchase(cardReference, request, idempotencyKey, email))
                 .willReturn(response);
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+        makePayment(cardReference, request, idempotencyKey, email)
                 .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.transactionReference").value(response.transactionReference()));
@@ -161,11 +154,7 @@ class CardControllerTest {
                 ""
         );
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+        makePayment(cardReference, request, idempotencyKey, email)
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Validation failed"))
@@ -195,11 +184,7 @@ class CardControllerTest {
                 "Test merchant"
         );
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", invalidCardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
+        makePayment(invalidCardReference, request, idempotencyKey, email)
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Validation failed"))
@@ -298,4 +283,11 @@ class CardControllerTest {
         verifyNoInteractions(cardTransactionService);
     }
 
+    private ResultActions makePayment(String cardReference, CardPurchaseRequest request, String idempotencyKey, String email) throws Exception {
+        return mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+                .header("Idempotency-Key", idempotencyKey)
+                .with(jwt().jwt(jwt -> jwt.subject(email))));
+    }
 }
