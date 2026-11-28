@@ -1,7 +1,6 @@
 package com.neobank.neobank.card.payment;
 
 import com.neobank.neobank.account.Account;
-import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.CardStatus;
 import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
@@ -9,7 +8,6 @@ import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.ProviderRateCache;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.internalaccount.InternalAccount;
@@ -23,9 +21,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.YearMonth;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -49,17 +45,7 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
         internalAccountRepository.save(createSettlementAccount("9".repeat(32), CurrencyCode.TRY));
         internalAccountRepository.save(createSettlementAccount("8".repeat(32), CurrencyCode.USD));
 
-        DebitCard newDebitCard = DebitCard.createNew(
-                "2".repeat(32),
-                "1234",
-                YearMonth.now(clock).plusYears(5),
-                YearMonth.now(clock),
-                account,
-                TestCardLimits.generous()
-        );
-        newDebitCard.activateCard(YearMonth.now(clock));
-
-        debitCard = debitCardRepository.save(newDebitCard);
+        debitCard = savedActiveDebitCard("2".repeat(32), TestCardLimits.generous());
     }
 
     @Test
@@ -211,39 +197,10 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void customerCanPayMerchantAccountInAnotherCurrencyAndFxSnapshotIsPersisted() throws Exception {
-        Customer merchantCustomer = customerRepository.save(
-                Customer.createNew(
-                        "merchant@example.com",
-                        "{bcrypt}password-hash",
-                        "Grace Hopper"
-                )
-        );
-
-        Account merchantAccount = accountRepository.save(
-                Account.createNew(
-                        "98".repeat(7),
-                        "3".repeat(32),
-                        "merchant",
-                        AccountType.CURRENT,
-                        merchantCustomer,
-                        CurrencyCode.USD
-                )
-        );
-
-        FxProviderRates providerRates = new FxProviderRates(
-                "test-provider",
-                CurrencyCode.USD,
-                Map.of(
-                        CurrencyCode.USD, BigDecimal.ONE,
-                        CurrencyCode.EUR, new BigDecimal("0.85"),
-                        CurrencyCode.GBP, new BigDecimal("0.75"),
-                        CurrencyCode.TRY, new BigDecimal("40.00")
-                ),
-                Instant.now()
-        );
+        Account merchantAccount = savedMerchantAccount("merchant@example.com", "98".repeat(7), "3".repeat(32), CurrencyCode.USD);
 
         given(providerRateCache.getLatestRates())
-                .willReturn(providerRates);
+                .willReturn(usdBasedRates("40.00"));
 
         CardPurchaseRequest request = new CardPurchaseRequest(
                 "98".repeat(7),
@@ -550,24 +507,7 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void purchaseAppearsWithCardDetailsOnlyInPayerHistory() throws Exception {
-        Customer merchantCustomer = customerRepository.save(
-                Customer.createNew(
-                        "merchant@example.com",
-                        "{bcrypt}password-hash",
-                        "Merchant Owner"
-                )
-        );
-
-        Account merchantAccount = accountRepository.save(
-                Account.createNew(
-                        "98".repeat(7),
-                        "3".repeat(32),
-                        "merchant",
-                        AccountType.CURRENT,
-                        merchantCustomer,
-                        CurrencyCode.TRY
-                )
-        );
+        Account merchantAccount = savedMerchantAccount("merchant@example.com", "98".repeat(7), "3".repeat(32), CurrencyCode.TRY);
 
         CardPurchaseRequest request = new CardPurchaseRequest(
                 merchantAccount.getAccountNumber(),
@@ -595,7 +535,7 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
 
         mockMvc.perform(get("/api/transactions")
                         .param("type", "CARD_PURCHASE")
-                        .with(jwt().jwt(jwt -> jwt.subject(merchantCustomer.getEmail()))))
+                        .with(jwt().jwt(jwt -> jwt.subject("merchant@example.com"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].accountNumber").value(merchantAccount.getAccountNumber()))

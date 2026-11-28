@@ -8,8 +8,10 @@ import com.neobank.neobank.card.credit.CreditCardRepository;
 import com.neobank.neobank.card.credit.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.credit.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.credit.dto.CreditCardRepaymentRequest;
+import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.debit.DebitCardRepository;
 import com.neobank.neobank.card.limit.CardDailySpendRepository;
+import com.neobank.neobank.card.limit.CardSpendingLimits;
 import com.neobank.neobank.card.payment.CardPurchaseDetailsRepository;
 import com.neobank.neobank.card.payment.CardRefundDetailsRepository;
 import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
@@ -18,6 +20,7 @@ import com.neobank.neobank.creditaccount.CreditAccountRepository;
 import com.neobank.neobank.creditaccount.CreditStatementRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerRepository;
+import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.idempotency.IdempotencyRecordRepository;
 import com.neobank.neobank.internalaccount.InternalAccount;
 import com.neobank.neobank.internalaccount.InternalAccountPurpose;
@@ -43,6 +46,9 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.YearMonth;
+import java.util.Map;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -245,6 +251,44 @@ public abstract class CardIntegrationTestSupport {
         transactionTemplate.executeWithoutResult(status ->
                 creditCardRepository.findByCardReference(cardReference).orElseThrow()
                         .getCreditAccount().getLedgerAccount().credit(new BigDecimal(amount))
+        );
+    }
+
+    protected DebitCard savedActiveDebitCard(String cardReference, CardSpendingLimits limits) {
+        DebitCard debitCard = DebitCard.createNew(
+                cardReference,
+                "1234",
+                YearMonth.now(clock).plusYears(5),
+                YearMonth.now(clock),
+                account,
+                limits
+        );
+        debitCard.activateCard(YearMonth.now(clock));
+
+        return debitCardRepository.save(debitCard);
+    }
+
+    protected Account savedMerchantAccount(String email, String accountNumber, String ledgerReference, CurrencyCode currency) {
+        Customer merchantCustomer = customerRepository.save(
+                Customer.createNew(email, "{bcrypt}password-hash", "Merchant Owner")
+        );
+
+        return accountRepository.save(
+                Account.createNew(accountNumber, ledgerReference, "merchant", AccountType.CURRENT, merchantCustomer, currency)
+        );
+    }
+
+    protected FxProviderRates usdBasedRates(String tryPerUsd) {
+        return new FxProviderRates(
+                "test-provider",
+                CurrencyCode.USD,
+                Map.of(
+                        CurrencyCode.USD, BigDecimal.ONE,
+                        CurrencyCode.EUR, new BigDecimal("0.85"),
+                        CurrencyCode.GBP, new BigDecimal("0.75"),
+                        CurrencyCode.TRY, new BigDecimal(tryPerUsd)
+                ),
+                Instant.now()
         );
     }
 

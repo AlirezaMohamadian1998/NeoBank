@@ -9,7 +9,6 @@ import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.creditaccount.CreditAccount;
 import com.neobank.neobank.creditaccount.CreditStatementService;
-import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.FxRateService;
 import com.neobank.neobank.fx.ProviderRateCache;
 import com.neobank.neobank.ledger.LedgerAccount;
@@ -22,8 +21,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
@@ -269,17 +266,7 @@ class CreditCardIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void repaymentFromAccountInAnotherCurrencyUsesTheLockedRate() throws Exception {
-        given(providerRateCache.getLatestRates()).willReturn(new FxProviderRates(
-                "test-provider",
-                CurrencyCode.USD,
-                Map.of(
-                        CurrencyCode.USD, BigDecimal.ONE,
-                        CurrencyCode.EUR, new BigDecimal("0.85"),
-                        CurrencyCode.GBP, new BigDecimal("0.75"),
-                        CurrencyCode.TRY, new BigDecimal("40.00")
-                ),
-                Instant.now()
-        ));
+        given(providerRateCache.getLatestRates()).willReturn(usdBasedRates("40.00"));
 
         CreditCardIssueResponse issued = issueAndActivateCreditCard(CurrencyCode.USD, "1".repeat(32));
 
@@ -387,17 +374,7 @@ class CreditCardIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void payoutToAccountInAnotherCurrencyUsesTheLockedRate() throws Exception {
-        given(providerRateCache.getLatestRates()).willReturn(new FxProviderRates(
-                "test-provider",
-                CurrencyCode.USD,
-                Map.of(
-                        CurrencyCode.USD, BigDecimal.ONE,
-                        CurrencyCode.EUR, new BigDecimal("0.85"),
-                        CurrencyCode.GBP, new BigDecimal("0.75"),
-                        CurrencyCode.TRY, new BigDecimal("40.00")
-                ),
-                Instant.now()
-        ));
+        given(providerRateCache.getLatestRates()).willReturn(usdBasedRates("40.00"));
 
         CreditCardIssueResponse issued = issueAndActivateCreditCard(CurrencyCode.USD, "1".repeat(32));
         giveCreditBalance(issued.cardReference(), "100.00");

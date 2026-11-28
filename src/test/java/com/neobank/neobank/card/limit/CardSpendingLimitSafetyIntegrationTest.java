@@ -21,7 +21,6 @@ import org.springframework.test.util.AopTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -60,17 +59,7 @@ class CardSpendingLimitSafetyIntegrationTest extends CardIntegrationTestSupport 
         settlementLedger.debit(new BigDecimal("10000.00"));
         internalAccountRepository.save(InternalAccount.createNew(InternalAccountPurpose.SETTLEMENT, settlementLedger));
 
-        DebitCard newDebitCard = DebitCard.createNew(
-                CARD_REFERENCE,
-                "1234",
-                YearMonth.now(clock).plusYears(5),
-                YearMonth.now(clock),
-                account,
-                CardSpendingLimits.createNew(new BigDecimal("100.00"), new BigDecimal("250.00"))
-        );
-        newDebitCard.activateCard(YearMonth.now(clock));
-
-        debitCard = debitCardRepository.save(newDebitCard);
+        debitCard = savedActiveDebitCard(CARD_REFERENCE, CardSpendingLimits.createNew(new BigDecimal("100.00"), new BigDecimal("250.00")));
     }
 
     @Test

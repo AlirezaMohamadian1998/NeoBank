@@ -1,13 +1,10 @@
 package com.neobank.neobank.card.limit;
 
-import com.neobank.neobank.account.Account;
-import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.limit.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.ProviderRateCache;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,10 +14,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.YearMonth;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
@@ -45,17 +39,7 @@ class CardSpendingLimitIntegrationTest extends CardIntegrationTestSupport {
         internalAccountRepository.save(createSettlementAccount("9".repeat(32), CurrencyCode.TRY));
         internalAccountRepository.save(createSettlementAccount("8".repeat(32), CurrencyCode.USD));
 
-        DebitCard newDebitCard = DebitCard.createNew(
-                CARD_REFERENCE,
-                "1234",
-                YearMonth.now(clock).plusYears(5),
-                YearMonth.now(clock),
-                account,
-                CardSpendingLimits.createNew(new BigDecimal("100.00"), new BigDecimal("250.00"))
-        );
-        newDebitCard.activateCard(YearMonth.now(clock));
-
-        debitCard = debitCardRepository.save(newDebitCard);
+        debitCard = savedActiveDebitCard(CARD_REFERENCE, CardSpendingLimits.createNew(new BigDecimal("100.00"), new BigDecimal("250.00")));
     }
 
     @Test
@@ -103,7 +87,7 @@ class CardSpendingLimitIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void crossCurrencyPurchaseIsCountedInFundingCurrency() throws Exception {
-        stubTryPerUsd("40.00");
+        given(providerRateCache.getLatestRates()).willReturn(usdBasedRates("40.00"));
 
         purchase(CARD_REFERENCE, null, "2.00", CurrencyCode.USD, "1".repeat(32))
                 .andExpect(status().isCreated())
@@ -132,20 +116,7 @@ class CardSpendingLimitIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void refundDoesNotGiveBackDailyLimit() throws Exception {
-        Customer merchantCustomer = customerRepository.save(
-                Customer.createNew("merchant@example.com", "{bcrypt}password-hash", "Grace Hopper")
-        );
-
-        accountRepository.save(
-                Account.createNew(
-                        "98".repeat(7),
-                        "3".repeat(32),
-                        "merchant",
-                        AccountType.CURRENT,
-                        merchantCustomer,
-                        CurrencyCode.TRY
-                )
-        );
+        savedMerchantAccount("merchant@example.com", "98".repeat(7), "3".repeat(32), CurrencyCode.TRY);
 
         String body = purchase(CARD_REFERENCE, "98".repeat(7), "100.00", CurrencyCode.TRY, "1".repeat(32))
                 .andExpect(status().isCreated())
@@ -155,7 +126,7 @@ class CardSpendingLimitIntegrationTest extends CardIntegrationTestSupport {
 
         String purchaseReference = objectMapper.readValue(body, CardPurchaseResponse.class).transactionReference();
 
-        refund("98".repeat(7), purchaseReference, "a".repeat(32), merchantCustomer.getEmail())
+        refund("98".repeat(7), purchaseReference, "a".repeat(32), "merchant@example.com")
                 .andExpect(status().isCreated());
 
         assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("10000.00");
@@ -271,18 +242,4 @@ class CardSpendingLimitIntegrationTest extends CardIntegrationTestSupport {
                 .getAmountSpent();
     }
 
-    private void stubTryPerUsd(String tryPerUsd) {
-        given(providerRateCache.getLatestRates())
-                .willReturn(new FxProviderRates(
-                        "test-provider",
-                        CurrencyCode.USD,
-                        Map.of(
-                                CurrencyCode.USD, BigDecimal.ONE,
-                                CurrencyCode.EUR, new BigDecimal("0.85"),
-                                CurrencyCode.GBP, new BigDecimal("0.75"),
-                                CurrencyCode.TRY, new BigDecimal(tryPerUsd)
-                        ),
-                        Instant.now()
-                ));
-    }
 }

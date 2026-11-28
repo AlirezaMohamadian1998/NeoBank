@@ -1,12 +1,9 @@
 package com.neobank.neobank.card;
 
-import com.neobank.neobank.account.Account;
-import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.credit.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
-import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.shared.MutableClock;
 import com.neobank.neobank.shared.MutableClockConfiguration;
 import com.neobank.neobank.shared.money.CurrencyCode;
@@ -52,18 +49,7 @@ class CardTransactionsIntegrationTest extends CardIntegrationTestSupport {
         debitCardRepository.save(activeDebitCard(CARD_REFERENCE, "1234"));
         debitCardRepository.save(activeDebitCard(OTHER_CARD_REFERENCE, "5678"));
 
-        Customer merchantCustomer = customerRepository.save(
-                Customer.createNew(MERCHANT_EMAIL, "{bcrypt}password-hash", "Merchant Owner")
-        );
-
-        accountRepository.save(Account.createNew(
-                MERCHANT_ACCOUNT_NUMBER,
-                "5".repeat(32),
-                "merchant",
-                AccountType.CURRENT,
-                merchantCustomer,
-                CurrencyCode.TRY
-        ));
+        savedMerchantAccount(MERCHANT_EMAIL, MERCHANT_ACCOUNT_NUMBER, "5".repeat(32), CurrencyCode.TRY);
     }
 
     @AfterEach

@@ -2,12 +2,10 @@ package com.neobank.neobank.card.payment;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
-import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.payment.dto.CardRefundResponse;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.ProviderRateCache;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.BankTransaction;
@@ -20,9 +18,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.YearMonth;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
@@ -47,16 +42,7 @@ class CardRefundIntegrationTest extends CardIntegrationTestSupport {
 
         internalAccountRepository.save(createSettlementAccount("9".repeat(32), CurrencyCode.TRY));
 
-        DebitCard debitCard = DebitCard.createNew(
-                CARD_REFERENCE,
-                "1234",
-                YearMonth.now(clock).plusYears(5),
-                YearMonth.now(clock),
-                account,
-                TestCardLimits.generous()
-        );
-        debitCard.activateCard(YearMonth.now(clock));
-        debitCardRepository.save(debitCard);
+        savedActiveDebitCard(CARD_REFERENCE, TestCardLimits.generous());
 
         Customer merchantCustomer = customerRepository.save(
                 Customer.createNew(MERCHANT_EMAIL, "{bcrypt}password-hash", "Merchant Owner")
@@ -271,7 +257,7 @@ class CardRefundIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void crossCurrencyRefundCreditsCardAtCurrentRate() throws Exception {
-        stubUsdRates("40.00");
+        given(providerRateCache.getLatestRates()).willReturn(usdBasedRates("40.00"));
 
         // 10 USD at 40 TRY per USD debits 400 TRY from the card's account.
         String purchaseReference = purchase(MERCHANT_USD_ACCOUNT_NUMBER, "10.00", CurrencyCode.USD);
@@ -279,7 +265,7 @@ class CardRefundIntegrationTest extends CardIntegrationTestSupport {
         assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("600.00");
 
-        stubUsdRates("42.50");
+        given(providerRateCache.getLatestRates()).willReturn(usdBasedRates("42.50"));
 
         refund(MERCHANT_USD_ACCOUNT_NUMBER, purchaseReference, "a".repeat(32), MERCHANT_EMAIL)
                 .andExpect(status().isCreated())
@@ -300,24 +286,8 @@ class CardRefundIntegrationTest extends CardIntegrationTestSupport {
         return transactionReferenceOf(purchase(CARD_REFERENCE, merchantAccountNumber, amount, currency, "c".repeat(32)));
     }
 
-
     private CardRefundResponse readRefund(ResultActions resultActions) throws Exception {
         return objectMapper.readValue(resultActions.andReturn().getResponse().getContentAsString(), CardRefundResponse.class);
-    }
-
-    private void stubUsdRates(String tryPerUsd) {
-        given(providerRateCache.getLatestRates())
-                .willReturn(new FxProviderRates(
-                        "test-provider",
-                        CurrencyCode.USD,
-                        Map.of(
-                                CurrencyCode.USD, BigDecimal.ONE,
-                                CurrencyCode.EUR, new BigDecimal("0.85"),
-                                CurrencyCode.GBP, new BigDecimal("0.75"),
-                                CurrencyCode.TRY, new BigDecimal(tryPerUsd)
-                        ),
-                        Instant.now()
-                ));
     }
 
     private Account createAccount(String accountNumber, String ledgerReference, CurrencyCode currency, Customer owner) {

@@ -1,14 +1,10 @@
 package com.neobank.neobank.card.payment;
 
 import com.neobank.neobank.account.Account;
-import com.neobank.neobank.account.AccountType;
-import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
-import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.ProviderRateCache;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
@@ -28,9 +24,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.AopTestUtils;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.YearMonth;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -67,17 +60,7 @@ class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
         internalAccountRepository.save(createSettlementAccount("9".repeat(32), CurrencyCode.TRY));
         internalAccountRepository.save(createSettlementAccount("8".repeat(32), CurrencyCode.USD));
 
-        DebitCard debitCard = DebitCard.createNew(
-                "2".repeat(32),
-                "1234",
-                YearMonth.now(clock).plusYears(5),
-                YearMonth.now(clock),
-                account,
-                TestCardLimits.generous()
-        );
-        debitCard.activateCard(YearMonth.now(clock));
-
-        debitCardRepository.save(debitCard);
+        savedActiveDebitCard("2".repeat(32), TestCardLimits.generous());
     }
 
     @Test
@@ -132,24 +115,7 @@ class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
     void failureWhilePostingMerchantCreditRollsBackCardDebit() {
         String idempotencyKey = "1".repeat(32);
 
-        Customer merchantCustomer = customerRepository.save(
-                Customer.createNew(
-                        "merchant@example.com",
-                        "{bcrypt}raw-password321",
-                        "Lovelace Ada"
-                )
-        );
-
-        Account merchantAccount = accountRepository.save(
-                Account.createNew(
-                        "98".repeat(7),
-                        "3".repeat(32),
-                        "merchant",
-                        AccountType.CURRENT,
-                        merchantCustomer,
-                        CurrencyCode.TRY
-                )
-        );
+        Account merchantAccount = savedMerchantAccount("merchant@example.com", "98".repeat(7), "3".repeat(32), CurrencyCode.TRY);
 
         CardPurchaseRequest request = new CardPurchaseRequest(
                 merchantAccount.getAccountNumber(),
@@ -197,20 +163,8 @@ class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
     void failedCrossCurrencyPurchaseRollsBackFxSnapshotWithTransaction() {
         String idempotencyKey = "1".repeat(32);
 
-        FxProviderRates providerRates = new FxProviderRates(
-                "test-provider",
-                CurrencyCode.USD,
-                Map.of(
-                        CurrencyCode.USD, BigDecimal.ONE,
-                        CurrencyCode.EUR, new BigDecimal("0.85"),
-                        CurrencyCode.GBP, new BigDecimal("0.75"),
-                        CurrencyCode.TRY, new BigDecimal("40.00")
-                ),
-                Instant.now()
-        );
-
         given(providerRateCache.getLatestRates())
-                .willReturn(providerRates);
+                .willReturn(usdBasedRates("40.00"));
 
         CardPurchaseRequest request = new CardPurchaseRequest(
                 null,
