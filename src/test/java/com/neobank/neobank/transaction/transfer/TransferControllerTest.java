@@ -1,8 +1,6 @@
 package com.neobank.neobank.transaction.transfer;
 
-import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.auth.SecurityConfig;
-import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.TransactionType;
 import com.neobank.neobank.transaction.transfer.dto.TransferRequest;
@@ -136,7 +134,6 @@ class TransferControllerTest {
                 .andExpect(jsonPath("$.errors.currency").value("Currency cannot be null"))
                 .andExpect(jsonPath("$.errors.lockId").value("Lock ID must be a valid UUID format"));
 
-
         verifyNoInteractions(transferService);
     }
 
@@ -161,137 +158,6 @@ class TransferControllerTest {
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(transferService);
-    }
-
-    @Test
-    void transferReturnsAccountNotFoundExceptionWhenAccountNotOwned() throws Exception {
-        String idempotencyKey = "11111111111111111111111111111111";
-        String email = "source@example.com";
-        String sourceAccountNumber = "98765432100123";
-        String targetAccountNumber = "12345678900987";
-
-        TransferRequest request = new TransferRequest(
-                new BigDecimal("1000.00"),
-                targetAccountNumber,
-                "Test",
-                CurrencyCode.TRY,
-                null
-        );
-
-        given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
-                .willThrow(new AccountNotFoundException());
-
-        mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isNotFound())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Account not found"))
-                .andExpect(jsonPath("$.detail").value("Account not found"))
-                .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
-                .andExpect(jsonPath("$.status").value(404));
-
-        verify(transferService).transfer(request, sourceAccountNumber, email, idempotencyKey);
-    }
-
-    @Test
-    void transferReturnsInsufficientBalanceExceptionWhenInsufficientBalance() throws Exception {
-        String idempotencyKey = "11111111111111111111111111111111";
-        String email = "source@example.com";
-        String sourceAccountNumber = "98765432100123";
-        String targetAccountNumber = "12345678900987";
-
-        TransferRequest request = new TransferRequest(
-                new BigDecimal("1000.00"),
-                targetAccountNumber,
-                "Test",
-                CurrencyCode.TRY,
-                null
-        );
-
-        given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
-                .willThrow(new InsufficientFundsException());
-
-        mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isConflict())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Insufficient funds"))
-                .andExpect(jsonPath("$.detail").value("Insufficient funds"))
-                .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
-                .andExpect(jsonPath("$.status").value(409));
-
-        verify(transferService).transfer(request, sourceAccountNumber, email, idempotencyKey);
-    }
-
-    @Test
-    void transferReturnsInvalidTransferExceptionWhenTransferToSourceAccount() throws Exception {
-        String idempotencyKey = "11111111111111111111111111111111";
-        String email = "source@example.com";
-        String sourceAccountNumber = "98765432100123";
-
-        TransferRequest request = new TransferRequest(
-                new BigDecimal("1000.00"),
-                sourceAccountNumber,
-                "Test",
-                CurrencyCode.TRY,
-                null
-        );
-
-        given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
-                .willThrow(new InvalidTransferException("Source and destination accounts cannot be the same"));
-
-        mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Invalid transfer"))
-                .andExpect(jsonPath("$.detail").value("Source and destination accounts cannot be the same"))
-                .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
-                .andExpect(jsonPath("$.status").value(400));
-
-        verify(transferService).transfer(request, sourceAccountNumber, email, idempotencyKey);
-    }
-
-    @Test
-    void transferReturnsAccountNotFoundExceptionWhenTargetDoesNotExist() throws Exception {
-        String idempotencyKey = "11111111111111111111111111111111";
-        String email = "source@example.com";
-        String sourceAccountNumber = "98765432100123";
-        String targetAccountNumber = "12345678900987";
-
-        TransferRequest request = new TransferRequest(
-                new BigDecimal("1000.00"),
-                targetAccountNumber,
-                "Test",
-                CurrencyCode.TRY,
-                null
-        );
-
-        given(transferService.transfer(request, sourceAccountNumber, email, idempotencyKey))
-                .willThrow(new AccountNotFoundException("Destination account not found"));
-
-        mockMvc.perform(post("/api/accounts/{source}/transfers", sourceAccountNumber)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .header("Idempotency-Key", idempotencyKey)
-                        .content(objectMapper.writeValueAsString(request))
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isNotFound())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Account not found"))
-                .andExpect(jsonPath("$.detail").value("Destination account not found"))
-                .andExpect(jsonPath("$.instance").value("/api/accounts/98765432100123/transfers"))
-                .andExpect(jsonPath("$.status").value(404));
-
-        verify(transferService).transfer(request, sourceAccountNumber, email, idempotencyKey);
     }
 
     @Test

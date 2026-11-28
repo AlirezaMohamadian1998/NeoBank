@@ -115,18 +115,13 @@ class DepositServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
@@ -229,7 +224,7 @@ class DepositServiceTest {
                 .isSameAs(savedTransaction);
 
         assertThat(savedCustomerEntry.getLedgerAccount())
-                .isSameAs(ledgerAccount);
+                .isSameAs(account.getLedgerAccount());
 
         assertThat(savedInternalEntry.getReference())
                 .isEqualTo(internalEntryReference);
@@ -377,18 +372,13 @@ class DepositServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
@@ -419,7 +409,7 @@ class DepositServiceTest {
                 request.note()
         );
 
-        BigDecimal balanceAfter = ledgerAccount.credit(request.amount());
+        BigDecimal balanceAfter = account.getLedgerAccount().credit(request.amount());
         BigDecimal internalAccountBalanceAfter = internalLedgerAccount.debit(request.amount());
 
         bankTransaction.addEntry(
@@ -435,7 +425,7 @@ class DepositServiceTest {
                 request.amount(),
                 balanceAfter,
                 EntryDirection.CREDIT,
-                ledgerAccount
+                account.getLedgerAccount()
         );
 
         bankTransaction.complete();
@@ -456,7 +446,7 @@ class DepositServiceTest {
         given(bankTransactionRepository.findByReference(idempotencyRecord.getResultReference()))
                 .willReturn(Optional.of(bankTransaction));
 
-        ReflectionTestUtils.setField(ledgerAccount, "id", 1L);
+        ReflectionTestUtils.setField(account.getLedgerAccount(), "id", 1L);
 
         DepositResponse response = depositService.deposit(request, accountNumber, email, idempotencyKey);
 
@@ -498,18 +488,13 @@ class DepositServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
@@ -647,7 +632,7 @@ class DepositServiceTest {
                 .isSameAs(savedTransaction);
 
         assertThat(savedCustomerEntry.getLedgerAccount())
-                .isSameAs(ledgerAccount);
+                .isSameAs(account.getLedgerAccount());
 
         assertThat(savedInternalEntry.getReference())
                 .isEqualTo(internalEntryReference);
@@ -755,18 +740,13 @@ class DepositServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
@@ -820,7 +800,7 @@ class DepositServiceTest {
 
         bankTransaction.addFxInfo(fxInfo);
 
-        BigDecimal balanceAfter = ledgerAccount.credit(request.amount().multiply(fxInfo.getRate(CurrencyContext.DESTINATION)).setScale(2, RoundingMode.HALF_EVEN));
+        BigDecimal balanceAfter = account.getLedgerAccount().credit(request.amount().multiply(fxInfo.getRate(CurrencyContext.DESTINATION)).setScale(2, RoundingMode.HALF_EVEN));
         BigDecimal internalAccountBalanceAfter = internalLedgerAccount.debit(request.amount());
 
         bankTransaction.addEntry(
@@ -836,7 +816,7 @@ class DepositServiceTest {
                 request.amount().multiply(fxInfo.getRate(CurrencyContext.DESTINATION)).setScale(2, RoundingMode.HALF_EVEN),
                 balanceAfter,
                 EntryDirection.CREDIT,
-                ledgerAccount
+                account.getLedgerAccount()
         );
 
         bankTransaction.complete();
@@ -857,7 +837,7 @@ class DepositServiceTest {
         given(bankTransactionRepository.findByReference(idempotencyRecord.getResultReference()))
                 .willReturn(Optional.of(bankTransaction));
 
-        ReflectionTestUtils.setField(ledgerAccount, "id", 1L);
+        ReflectionTestUtils.setField(account.getLedgerAccount(), "id", 1L);
 
         DepositResponse response = depositService.deposit(request, accountNumber, email, idempotencyKey);
 
@@ -902,18 +882,13 @@ class DepositServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
@@ -946,18 +921,13 @@ class DepositServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
@@ -984,18 +954,13 @@ class DepositServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
@@ -1082,18 +1047,13 @@ class DepositServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         String requestHash = requestHasher

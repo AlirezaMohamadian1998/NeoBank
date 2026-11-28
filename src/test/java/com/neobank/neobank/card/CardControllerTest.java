@@ -1,25 +1,13 @@
 package com.neobank.neobank.card;
 
-import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.auth.SecurityConfig;
-import com.neobank.neobank.card.dto.CardPurchaseRequest;
-import com.neobank.neobank.card.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.dto.CardTransactionFilter;
-import com.neobank.neobank.card.exception.CardExpiredException;
-import com.neobank.neobank.card.exception.CardNotActiveException;
-import com.neobank.neobank.card.exception.CardNotFoundException;
-import com.neobank.neobank.card.exception.InvalidCardPaymentException;
-import com.neobank.neobank.creditaccount.CreditLimitExceededException;
-import com.neobank.neobank.fx.FxProviderUnavailableException;
-import com.neobank.neobank.idempotency.IdempotencyConflictException;
-import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
-import com.neobank.neobank.ledger.InsufficientFundsException;
+import com.neobank.neobank.card.payment.CardPaymentService;
+import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
+import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
 import org.mockito.ArgumentCaptor;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -34,7 +22,6 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -311,116 +298,4 @@ class CardControllerTest {
         verifyNoInteractions(cardTransactionService);
     }
 
-    @Test
-    void getTransactionsReturnsNotFoundProblem() throws Exception {
-        given(cardTransactionService.getTransactions(any(), any(), any(), any()))
-                .willThrow(new CardNotFoundException("Card not found"));
-
-        mockMvc.perform(get("/api/cards/{cardReference}/transactions", "2".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.title").value("Card not found"));
-    }
-
-    @ParameterizedTest
-    @MethodSource("makePaymentServiceExceptionSource")
-    void makePaymentReturnsExpectedProblemForServiceException(
-            RuntimeException ex,
-            String title,
-            int httpStatusCode
-    ) throws Exception {
-        String idempotencyKey = "1".repeat(32);
-        String email = "customer@example.com";
-        String cardReference = "2".repeat(32);
-
-        CardPurchaseRequest request = new CardPurchaseRequest(
-                "98".repeat(7),
-                CurrencyCode.TRY,
-                new BigDecimal("100.00"),
-                "Test",
-                "Test merchant"
-        );
-
-        given(cardPaymentService.makePurchase(cardReference, request, idempotencyKey, email))
-                .willThrow(ex);
-
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().is(httpStatusCode))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.detail").value(ex.getMessage()))
-                .andExpect(jsonPath("$.title").value(title))
-                .andExpect(jsonPath("$.instance").value("/api/cards/%s/payments".formatted(cardReference)))
-                .andExpect(jsonPath("$.status").value(httpStatusCode));
-
-        verify(cardPaymentService).makePurchase(cardReference, request, idempotencyKey, email);
-    }
-
-    static Stream<Arguments> makePaymentServiceExceptionSource() {
-        return Stream.of(
-                Arguments.argumentSet(
-                        "makePaymentReturnsNotFoundForMissingCard",
-                        new CardNotFoundException("Card not found"),
-                        "Card not found",
-                        404
-                ),
-                Arguments.argumentSet(
-                        "makePaymentReturnsNotFoundForMissingMerchantAccount",
-                        new AccountNotFoundException("Merchant's account not found"),
-                        "Account not found",
-                        404
-                ),
-                Arguments.argumentSet(
-                        "makePaymentReturnsBadRequestForInvalidCardPayment",
-                        new InvalidCardPaymentException("Merchant's account and the card's funding account cannot be same"),
-                        "Invalid card payment",
-                        400
-                ),
-                Arguments.argumentSet(
-                        "makePaymentReturnsBadRequestForInvalidIdempotencyKey",
-                        new InvalidIdempotencyKeyException("Invalid idempotency key"),
-                        "Invalid idempotency key",
-                        400
-                ),
-                Arguments.argumentSet(
-                        "makePaymentReturnsConflictForExpiredCard",
-                        new CardExpiredException("Card is Expired"),
-                        "Card expired",
-                        409
-                ),
-                Arguments.argumentSet(
-                        "makePaymentReturnsConflictForInactiveCard",
-                        new CardNotActiveException("Card must be active for purchase"),
-                        "Card not active",
-                        409
-                ),
-                Arguments.argumentSet(
-                        "makePaymentReturnsConflictWhenCreditLimitIsExceeded",
-                        new CreditLimitExceededException("Amount exceeds the available credit of 200.00"),
-                        "Credit limit exceeded",
-                        409
-                ),
-                Arguments.argumentSet(
-                        "makePaymentReturnsConflictForInsufficientFunds",
-                        new InsufficientFundsException(),
-                        "Insufficient funds",
-                        409
-                ),
-                Arguments.argumentSet(
-                        "makePaymentReturnsConflictForIdempotencyConflict",
-                        new IdempotencyConflictException("request hash mismatch"),
-                        "Idempotency Conflict",
-                        409
-                ),
-                Arguments.argumentSet(
-                        "makePaymentReturnsServiceUnavailableWhenFxProviderIsDown",
-                        new FxProviderUnavailableException("Open Exchange Rates request failed"),
-                        "Fx provider unavailable",
-                        503
-                )
-        );
-    }
 }

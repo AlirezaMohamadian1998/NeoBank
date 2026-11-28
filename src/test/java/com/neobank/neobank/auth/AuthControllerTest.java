@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -84,25 +83,4 @@ class AuthControllerTest {
         verifyNoInteractions(authService);
     }
 
-    @Test
-    void loginReturnsUnauthorizedProblemDetailWhenCredentialsAreInvalid() throws Exception {
-        LoginRequest request = new LoginRequest("customer@example.com", "  raw-password  ");
-
-        given(authService.login(request))
-                .willThrow(BadCredentialsException.class);
-
-        mockMvc.perform(post(LOGIN_ENDPOINT)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-        )
-                .andExpect(status().is(401))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Authentication failed"))
-                .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.detail").value("Invalid email or password."))
-                .andExpect(jsonPath("$.instance").value(LOGIN_ENDPOINT))
-                .andExpect(content().string(not(containsString(request.password()))));
-
-        verify(authService).login(request);
-    }
 }

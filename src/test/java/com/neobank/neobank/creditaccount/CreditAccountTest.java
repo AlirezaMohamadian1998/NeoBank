@@ -343,10 +343,11 @@ class CreditAccountTest {
     private Account payoffAccount() {
         return Account.createNew(
                 "12345678900987",
+                "7".repeat(32),
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                LedgerAccount.createNew("7".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY)
+                CurrencyCode.TRY
         );
     }
 

@@ -1,9 +1,7 @@
 package com.neobank.neobank.card;
 
-import com.neobank.neobank.card.exception.CardExpiredException;
-import com.neobank.neobank.card.exception.CardSpendingLimitsNotChangeableException;
-import com.neobank.neobank.card.exception.InvalidCardStatusTransitionException;
-import com.neobank.neobank.card.exception.UnsupportedCardStatusException;
+import com.neobank.neobank.card.limit.CardSpendingLimits;
+import com.neobank.neobank.card.limit.CardSpendingLimitsNotChangeableException;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.shared.persistence.BaseEntity;

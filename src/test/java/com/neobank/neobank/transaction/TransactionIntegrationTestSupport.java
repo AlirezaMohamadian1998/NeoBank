@@ -3,11 +3,11 @@ package com.neobank.neobank.transaction;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
-import com.neobank.neobank.card.CardDailySpendRepository;
-import com.neobank.neobank.card.CardPurchaseDetailsRepository;
-import com.neobank.neobank.card.CardRefundDetailsRepository;
 import com.neobank.neobank.card.CardRepository;
-import com.neobank.neobank.card.DebitCardRepository;
+import com.neobank.neobank.card.debit.DebitCardRepository;
+import com.neobank.neobank.card.limit.CardDailySpendRepository;
+import com.neobank.neobank.card.payment.CardPurchaseDetailsRepository;
+import com.neobank.neobank.card.payment.CardRefundDetailsRepository;
 import com.neobank.neobank.creditaccount.CreditAccountRepository;
 import com.neobank.neobank.creditaccount.CreditStatementRepository;
 import com.neobank.neobank.customer.Customer;
@@ -99,18 +99,13 @@ public abstract class TransactionIntegrationTestSupport {
                 )
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "7f3c8a21d9e64b5fa2c17e9084bd6a31",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         account = accountRepository.save(Account.createNew(
                 "12345678900987",
+                "7f3c8a21d9e64b5fa2c17e9084bd6a31",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
                 )
         );
 

@@ -4,10 +4,10 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
-import com.neobank.neobank.card.CardPurchaseDetails;
-import com.neobank.neobank.card.CardPurchaseDetailsRepository;
-import com.neobank.neobank.card.CardRefundDetails;
-import com.neobank.neobank.card.CardRefundDetailsRepository;
+import com.neobank.neobank.card.payment.CardPurchaseDetails;
+import com.neobank.neobank.card.payment.CardPurchaseDetailsRepository;
+import com.neobank.neobank.card.payment.CardRefundDetails;
+import com.neobank.neobank.card.payment.CardRefundDetailsRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
@@ -76,21 +76,16 @@ class TransactionHistoryServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "11111111111111111111111111111111",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
-        ReflectionTestUtils.setField(ledgerAccount, "id", 1L);
-
         Account account = Account.createNew(
                 "12345678900987",
+                "11111111111111111111111111111111",
                 "test",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
+
+        ReflectionTestUtils.setField(account.getLedgerAccount(), "id", 1L);
 
         PageRequest pageRequest = PageRequest.of(0, 10, Sort.by(Sort.Order.desc("appliedAmount")));
 
@@ -117,7 +112,7 @@ class TransactionHistoryServiceTest {
                 new BigDecimal("4000.00"),
                 new BigDecimal("5000.00"),
                 EntryDirection.CREDIT,
-                ledgerAccount
+                account.getLedgerAccount()
         );
 
         Page<LedgerEntry> page = new PageImpl<>(
@@ -176,36 +171,27 @@ class TransactionHistoryServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount1 = LedgerAccount.createNew(
-                "11111111111111111111111111111111",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
-        LedgerAccount ledgerAccount2 = LedgerAccount.createNew(
-                "44444444444444444444444444444444",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.USD
-        );
-
-        ReflectionTestUtils.setField(ledgerAccount1, "id", 1L);
-        ReflectionTestUtils.setField(ledgerAccount2, "id", 2L);
-
         Account account1 = Account.createNew(
                 "12345678900987",
+                "11111111111111111111111111111111",
                 "test",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount1
+                CurrencyCode.TRY
         );
+
+        ReflectionTestUtils.setField(account1.getLedgerAccount(), "id", 1L);
 
         Account account2 = Account.createNew(
                 "98765432100123",
+                "44444444444444444444444444444444",
                 "another test",
                 AccountType.SAVINGS,
                 customer,
-                ledgerAccount2
+                CurrencyCode.USD
         );
+
+        ReflectionTestUtils.setField(account2.getLedgerAccount(), "id", 2L);
 
         PageRequest pageRequest = PageRequest.of(0, 10, Sort.by(Sort.Order.desc("appliedAmount")));
 
@@ -232,7 +218,7 @@ class TransactionHistoryServiceTest {
                 new BigDecimal("4000.00"),
                 new BigDecimal("5000.00"),
                 EntryDirection.CREDIT,
-                ledgerAccount1
+                account1.getLedgerAccount()
         );
 
         BankTransaction transaction2 = BankTransaction.createNew(
@@ -248,7 +234,7 @@ class TransactionHistoryServiceTest {
                 new BigDecimal("4400.00"),
                 new BigDecimal("600.00"),
                 EntryDirection.CREDIT,
-                ledgerAccount2
+                account2.getLedgerAccount()
         );
 
         Page<LedgerEntry> page = new PageImpl<>(
@@ -284,20 +270,16 @@ class TransactionHistoryServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "11111111111111111111111111111111",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-        ReflectionTestUtils.setField(ledgerAccount, "id", 1L);
-
         Account account = Account.createNew(
                 "12345678900987",
+                "11111111111111111111111111111111",
                 "test",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
+
+        ReflectionTestUtils.setField(account.getLedgerAccount(), "id", 1L);
 
         TransactionHistoryFilter filter = new TransactionHistoryFilter(
                 account.getAccountNumber(),
@@ -322,7 +304,7 @@ class TransactionHistoryServiceTest {
                 new BigDecimal("4000.00"),
                 new BigDecimal("5000.00"),
                 EntryDirection.CREDIT,
-                ledgerAccount
+                account.getLedgerAccount()
         );
 
         PageRequest pageRequest = PageRequest.of(2, 1, Sort.by(Sort.Order.asc("appliedAmount")));
@@ -399,28 +381,24 @@ class TransactionHistoryServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount fundingLedgerAccount = LedgerAccount.createNew(
-                "1".repeat(32),
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         LedgerAccount merchantLedgerAccount = LedgerAccount.createNew(
                 "2".repeat(32),
                 LedgerAccountType.LIABILITY,
                 CurrencyCode.TRY
         );
 
-        ReflectionTestUtils.setField(fundingLedgerAccount, "id", 1L);
         ReflectionTestUtils.setField(merchantLedgerAccount, "id", 2L);
 
         Account account = Account.createNew(
                 "12".repeat(7),
+                "1".repeat(32),
                 "test",
                 AccountType.CURRENT,
                 customer,
-                fundingLedgerAccount
+                CurrencyCode.TRY
         );
+
+        ReflectionTestUtils.setField(account.getLedgerAccount(), "id", 1L);
 
         TransactionHistoryFilter filter = new TransactionHistoryFilter(
                 null,
@@ -449,7 +427,7 @@ class TransactionHistoryServiceTest {
                 new BigDecimal("250.00"),
                 new BigDecimal("750.00"),
                 EntryDirection.DEBIT,
-                fundingLedgerAccount
+                account.getLedgerAccount()
         );
 
         purchaseTransaction.addEntry(
@@ -477,7 +455,7 @@ class TransactionHistoryServiceTest {
                 new BigDecimal("1000.00"),
                 new BigDecimal("1000.00"),
                 EntryDirection.CREDIT,
-                fundingLedgerAccount
+                account.getLedgerAccount()
         );
 
         CardPurchaseDetails cardPurchaseDetails = CardPurchaseDetails.createNew(
@@ -534,22 +512,18 @@ class TransactionHistoryServiceTest {
                 CurrencyCode.TRY
         );
 
-        LedgerAccount merchantLedgerAccount = LedgerAccount.createNew(
-                "2".repeat(32),
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         ReflectionTestUtils.setField(payerLedgerAccount, "id", 1L);
-        ReflectionTestUtils.setField(merchantLedgerAccount, "id", 2L);
 
         Account merchantAccount = Account.createNew(
                 "98".repeat(7),
+                "2".repeat(32),
                 "merchant",
                 AccountType.CURRENT,
                 customer,
-                merchantLedgerAccount
+                CurrencyCode.TRY
         );
+
+        ReflectionTestUtils.setField(merchantAccount.getLedgerAccount(), "id", 2L);
 
         TransactionHistoryFilter filter = new TransactionHistoryFilter(
                 null,
@@ -586,7 +560,7 @@ class TransactionHistoryServiceTest {
                 new BigDecimal("250.00"),
                 new BigDecimal("250.00"),
                 EntryDirection.CREDIT,
-                merchantLedgerAccount
+                merchantAccount.getLedgerAccount()
         );
 
         Page<LedgerEntry> page = new PageImpl<>(
@@ -623,13 +597,13 @@ class TransactionHistoryServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount fundingLedgerAccount = LedgerAccount.createNew("1".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY);
         LedgerAccount merchantLedgerAccount = LedgerAccount.createNew("2".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY);
 
-        ReflectionTestUtils.setField(fundingLedgerAccount, "id", 1L);
         ReflectionTestUtils.setField(merchantLedgerAccount, "id", 2L);
 
-        Account account = Account.createNew("12".repeat(7), "test", AccountType.CURRENT, customer, fundingLedgerAccount);
+        Account account = Account.createNew("12".repeat(7), "1".repeat(32), "test", AccountType.CURRENT, customer, CurrencyCode.TRY);
+
+        ReflectionTestUtils.setField(account.getLedgerAccount(), "id", 1L);
 
         TransactionHistoryFilter filter = new TransactionHistoryFilter(null, null, null, null, null, null, null);
         PageRequest pageRequest = PageRequest.of(0, 10, Sort.by(Sort.Order.desc("createdAt")));
@@ -640,7 +614,7 @@ class TransactionHistoryServiceTest {
         ReflectionTestUtils.setField(purchaseTransaction, "id", 10L);
 
         LedgerEntry purchaseDebit = purchaseTransaction.addEntry(
-                "4".repeat(32), new BigDecimal("250.00"), new BigDecimal("750.00"), EntryDirection.DEBIT, fundingLedgerAccount
+                "4".repeat(32), new BigDecimal("250.00"), new BigDecimal("750.00"), EntryDirection.DEBIT, account.getLedgerAccount()
         );
         purchaseTransaction.addEntry(
                 "5".repeat(32), new BigDecimal("250.00"), new BigDecimal("250.00"), EntryDirection.CREDIT, merchantLedgerAccount
@@ -661,7 +635,7 @@ class TransactionHistoryServiceTest {
                 "7".repeat(32), new BigDecimal("250.00"), new BigDecimal("0.00"), EntryDirection.DEBIT, merchantLedgerAccount
         );
         LedgerEntry refundCredit = refundTransaction.addEntry(
-                "8".repeat(32), new BigDecimal("250.00"), new BigDecimal("1000.00"), EntryDirection.CREDIT, fundingLedgerAccount
+                "8".repeat(32), new BigDecimal("250.00"), new BigDecimal("1000.00"), EntryDirection.CREDIT, account.getLedgerAccount()
         );
         refundTransaction.complete();
 

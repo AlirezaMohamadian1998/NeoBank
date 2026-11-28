@@ -14,8 +14,6 @@ import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.idempotency.RequestHasher;
 import com.neobank.neobank.ledger.InsufficientFundsException;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.ledger.LedgerPostingService;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
@@ -233,7 +231,6 @@ class TransferServiceTest {
                 .isEqualTo(savedTransaction.getReference());
         assertThat(idempotencyRecord.getRequestHash())
                 .isEqualTo(hash(sourceAccount, destinationAccount, request, null));
-
 
         verify(accountRepository).findByAccountNumberAndCustomer_EmailIgnoreCase(
                 sourceAccount.getAccountNumber(),
@@ -554,7 +551,6 @@ class TransferServiceTest {
         verify(idempotencyService, never()).save(any());
         verifyNoInteractions(referenceGenerator);
     }
-
 
     @Test
     void crossCurrencyTransferConvertsBothAccountsWhenRequestCurrencyDiffersFromBoth() {
@@ -1292,7 +1288,6 @@ class TransferServiceTest {
         given(fxRateService.getCachedRate(sourceCustomer.getEmail(), lockId))
                 .willReturn(fxResponse);
 
-
         assertThatThrownBy(() -> transferService.transfer(
                 request,
                 sourceAccount.getAccountNumber(),
@@ -1382,18 +1377,14 @@ class TransferServiceTest {
             CurrencyCode currency,
             Customer customer
     ) {
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                ledgerReference,
-                LedgerAccountType.LIABILITY,
-                currency
-        );
 
         return Account.createNew(
                 accountNumber,
+                ledgerReference,
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                currency
         );
     }
 

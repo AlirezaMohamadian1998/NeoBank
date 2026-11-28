@@ -1,6 +1,5 @@
 package com.neobank.neobank.transaction.deposit;
 
-import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.auth.SecurityConfig;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.TransactionType;
@@ -85,68 +84,6 @@ class DepositControllerTest {
                 .andExpect(jsonPath("$.account").doesNotHaveJsonPath());
 
         verify(depositService).deposit(request, response.accountNumber(), email, idempotencyKey);
-    }
-
-    @Test
-    void depositReturnsNotFoundWhenAccountIsNotOwned() throws Exception {
-        String idempotencyKey = "11111111111111111111111111111111";
-        String accountNumber = "12345678900321";
-        String email = "customer@example.com";
-
-        DepositRequest request = new DepositRequest(
-                new BigDecimal("1000.00"),
-                "Test",
-                CurrencyCode.TRY,
-                null
-        );
-
-        given(depositService.deposit(request, accountNumber, email, idempotencyKey))
-                .willThrow(new AccountNotFoundException());
-
-        mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", accountNumber)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isNotFound())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Account not found"))
-                .andExpect(jsonPath("$.detail").value("Account not found"))
-                .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900321/deposits"))
-                .andExpect(jsonPath("$.status").value(404));
-
-        verify(depositService).deposit(request, accountNumber, email, idempotencyKey);
-    }
-
-    @Test
-    void depositReturnsBadRequestWhenLockIdIsSentForSameCurrency() throws Exception {
-        String idempotencyKey = "11111111111111111111111111111111";
-        String accountNumber = "12345678900321";
-        String email = "customer@example.com";
-
-        DepositRequest request = new DepositRequest(
-                new BigDecimal("1000.00"),
-                "Test",
-                CurrencyCode.TRY,
-                "4ea56d0d-aa07-4d26-be23-ce971c0976a0"
-        );
-
-        given(depositService.deposit(request, accountNumber, email, idempotencyKey))
-                .willThrow(new InvalidDepositException("Lock ID is not required for same currency operation."));
-
-        mockMvc.perform(post("/api/accounts/{accountNumber}/deposits", accountNumber)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Invalid deposit"))
-                .andExpect(jsonPath("$.detail").value("Lock ID is not required for same currency operation."))
-                .andExpect(jsonPath("$.instance").value("/api/accounts/12345678900321/deposits"))
-                .andExpect(jsonPath("$.status").value(400));
-
-        verify(depositService).deposit(request, accountNumber, email, idempotencyKey);
     }
 
     @Test

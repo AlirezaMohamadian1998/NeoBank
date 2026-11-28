@@ -1,7 +1,6 @@
 package com.neobank.neobank.card;
 
 import com.neobank.neobank.card.dto.CardTransactionFilter;
-import com.neobank.neobank.card.exception.CardNotFoundException;
 import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.LedgerEntryRepository;
 import com.neobank.neobank.transaction.history.LedgerEntrySpecifications;

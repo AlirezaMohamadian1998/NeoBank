@@ -1,6 +1,5 @@
 package com.neobank.neobank.card.limit;
 
-import com.neobank.neobank.card.CardSpendingLimits;
 import com.neobank.neobank.card.limit.CardLimitProperties.CurrencyLimits;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;

@@ -1,7 +1,7 @@
 package com.neobank.neobank.transaction.history;
 
-import com.neobank.neobank.card.CardPurchaseDetails;
-import com.neobank.neobank.card.CardRefundDetails;
+import com.neobank.neobank.card.payment.CardPurchaseDetails;
+import com.neobank.neobank.card.payment.CardRefundDetails;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.TransactionType;

@@ -1,9 +1,9 @@
 package com.neobank.neobank.transaction.history;
 
-import com.neobank.neobank.card.CardPurchaseDetails;
-import com.neobank.neobank.card.CardPurchaseDetailsRepository;
-import com.neobank.neobank.card.CardRefundDetails;
-import com.neobank.neobank.card.CardRefundDetailsRepository;
+import com.neobank.neobank.card.payment.CardPurchaseDetails;
+import com.neobank.neobank.card.payment.CardPurchaseDetailsRepository;
+import com.neobank.neobank.card.payment.CardRefundDetails;
+import com.neobank.neobank.card.payment.CardRefundDetailsRepository;
 import com.neobank.neobank.transaction.LedgerEntry;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import lombok.RequiredArgsConstructor;

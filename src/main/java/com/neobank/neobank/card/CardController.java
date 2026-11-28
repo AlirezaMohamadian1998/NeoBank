@@ -1,8 +1,9 @@
 package com.neobank.neobank.card;
 
-import com.neobank.neobank.card.dto.CardPurchaseRequest;
-import com.neobank.neobank.card.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.dto.CardTransactionFilter;
+import com.neobank.neobank.card.payment.CardPaymentService;
+import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
+import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
 import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;

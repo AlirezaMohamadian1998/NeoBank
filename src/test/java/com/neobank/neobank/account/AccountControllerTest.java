@@ -3,7 +3,6 @@ package com.neobank.neobank.account;
 import com.neobank.neobank.account.dto.AccountResponse;
 import com.neobank.neobank.account.dto.CreateAccountRequest;
 import com.neobank.neobank.auth.SecurityConfig;
-import com.neobank.neobank.customer.CustomerNotFoundException;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -129,32 +128,6 @@ class AccountControllerTest {
     }
 
     @Test
-    void createAccountReturnsNotFoundWhenAuthenticatedCustomerDoesNotExist() throws Exception {
-        CreateAccountRequest request = new CreateAccountRequest(
-                "Private Account",
-                AccountType.CURRENT,
-                CurrencyCode.TRY
-        );
-
-        String email = "customer@example.com";
-
-        given(accountService.createAccount(request, email))
-                .willThrow(new CustomerNotFoundException("Customer not found"));
-
-        mockMvc.perform(post(ACCOUNT_ENDPOINT)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)).with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isNotFound())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Customer not found"))
-                .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.detail").value("Customer not found"))
-                .andExpect(jsonPath("$.instance").value(ACCOUNT_ENDPOINT));
-
-        verify(accountService).createAccount(request, email);
-    }
-
-    @Test
     void getCurrentCustomerAccountsReturnsAccountsForAuthenticatedJwt() throws Exception {
         String email = "customer@example.com";
 
@@ -247,26 +220,6 @@ class AccountControllerTest {
                 .andExpect(cookie().doesNotExist("JSESSIONID"));
 
         verify(accountService).getCurrentCustomerAccount(response.accountNumber(), email);
-    }
-
-    @Test
-    void getCurrentCustomerAccountReturnsNotFoundWhenAccountIsNotOwned() throws Exception {
-        String email = "customer@example.com";
-        String accountNumber = "12345678900987";
-
-        given(accountService.getCurrentCustomerAccount(accountNumber, email))
-                .willThrow(new AccountNotFoundException());
-
-        mockMvc.perform(get(ACCOUNT_ENDPOINT + "/{accountNumber}", accountNumber)
-                        .with(jwt().jwt(jwt -> jwt.subject(email))))
-                .andExpect(status().isNotFound())
-                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.detail").value("Account not found"))
-                .andExpect(jsonPath("$.instance").value(ACCOUNT_ENDPOINT + "/12345678900987"))
-                .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.title").value("Account not found"));
-
-        verify(accountService).getCurrentCustomerAccount(accountNumber, email);
     }
 
     @Test

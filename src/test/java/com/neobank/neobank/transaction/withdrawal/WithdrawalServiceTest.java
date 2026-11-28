@@ -107,20 +107,16 @@ class WithdrawalServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-        ledgerAccount.credit(new BigDecimal("1000.00"));
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
+
+        account.getLedgerAccount().credit(new BigDecimal("1000.00"));
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
                 "7f3c8a21d9e64b5fa2c17e9084bd6a31",
@@ -203,7 +199,7 @@ class WithdrawalServiceTest {
                 .isEqualByComparingTo(request.amount());
 
         assertThat(savedCustomerEntry.getLedgerAccount())
-                .isSameAs(ledgerAccount);
+                .isSameAs(account.getLedgerAccount());
 
         assertThat(savedCustomerEntry.getBankTransaction())
                 .isSameAs(savedTransaction);
@@ -295,18 +291,13 @@ class WithdrawalServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
@@ -411,20 +402,16 @@ class WithdrawalServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-        ledgerAccount.credit(new BigDecimal("1000.00"));
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
+
+        account.getLedgerAccount().credit(new BigDecimal("1000.00"));
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
                 "7f3c8a21d9e64b5fa2c17e9084bd6a31",
@@ -446,7 +433,7 @@ class WithdrawalServiceTest {
                 request.note()
         );
 
-        BigDecimal customerBalanceAfter = ledgerAccount.debit(request.amount());
+        BigDecimal customerBalanceAfter = account.getLedgerAccount().debit(request.amount());
         BigDecimal internalBalanceAfter = internalLedgerAccount.credit(request.amount());
 
         transaction.addEntry(
@@ -462,12 +449,12 @@ class WithdrawalServiceTest {
                 request.amount(),
                 customerBalanceAfter,
                 EntryDirection.DEBIT,
-                ledgerAccount
+                account.getLedgerAccount()
         );
 
         transaction.complete();
 
-        ReflectionTestUtils.setField(ledgerAccount, "id", 1L);
+        ReflectionTestUtils.setField(account.getLedgerAccount(), "id", 1L);
 
         IdempotencyRecord idempotencyRecord = IdempotencyRecord.createNew(
                 idempotencyKey,
@@ -518,7 +505,6 @@ class WithdrawalServiceTest {
         verifyNoInteractions(referenceGenerator, internalAccountRepository);
     }
 
-
     @Test
     void crossCurrencyWithdrawalUsesRateLockAndPostsConvertedAmounts() {
         String email = "customer@example.com";
@@ -535,20 +521,16 @@ class WithdrawalServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-        ledgerAccount.credit(new BigDecimal("49000.00"));
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
+
+        account.getLedgerAccount().credit(new BigDecimal("49000.00"));
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
                 "7f3c8a21d9e64b5fa2c17e9084bd6a31",
@@ -690,7 +672,7 @@ class WithdrawalServiceTest {
                 .isSameAs(account.getCurrency());
 
         assertThat(customerEntry.getLedgerAccount())
-                .isSameAs(ledgerAccount);
+                .isSameAs(account.getLedgerAccount());
 
         assertThat(customerEntry.getBankTransaction())
                 .isSameAs(transaction);
@@ -765,20 +747,16 @@ class WithdrawalServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-        ledgerAccount.credit(new BigDecimal("49000.00"));
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
+
+        account.getLedgerAccount().credit(new BigDecimal("49000.00"));
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
                 "7f3c8a21d9e64b5fa2c17e9084bd6a31",
@@ -828,7 +806,7 @@ class WithdrawalServiceTest {
 
         transaction.addFxInfo(fxInfo);
 
-        BigDecimal customerAccountBalanceAfter = ledgerAccount.debit(request.amount().multiply(fxInfo.getRate(CurrencyContext.SOURCE)).setScale(2, RoundingMode.HALF_EVEN));
+        BigDecimal customerAccountBalanceAfter = account.getLedgerAccount().debit(request.amount().multiply(fxInfo.getRate(CurrencyContext.SOURCE)).setScale(2, RoundingMode.HALF_EVEN));
         BigDecimal internalAccountBalanceAfter = internalLedgerAccount.credit(request.amount());
 
         transaction.addEntry(
@@ -836,7 +814,7 @@ class WithdrawalServiceTest {
                 request.amount().multiply(fxInfo.getRate(CurrencyContext.SOURCE)).setScale(2, RoundingMode.HALF_EVEN),
                 customerAccountBalanceAfter,
                 EntryDirection.DEBIT,
-                ledgerAccount
+                account.getLedgerAccount()
         );
 
         transaction.addEntry(
@@ -865,7 +843,7 @@ class WithdrawalServiceTest {
         given(bankTransactionRepository.findByReference(idempotencyRecord.getResultReference()))
                 .willReturn(Optional.of(transaction));
 
-        ReflectionTestUtils.setField(ledgerAccount, "id", 1L);
+        ReflectionTestUtils.setField(account.getLedgerAccount(), "id", 1L);
 
         WithdrawalResponse response = withdrawalService.withdraw(request, accountNumber, email, idempotencyKey);
 
@@ -916,18 +894,13 @@ class WithdrawalServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
@@ -960,18 +933,13 @@ class WithdrawalServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
@@ -998,20 +966,16 @@ class WithdrawalServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-        ledgerAccount.credit(new BigDecimal("49000.00"));
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
+
+        account.getLedgerAccount().credit(new BigDecimal("49000.00"));
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
                 "7f3c8a21d9e64b5fa2c17e9084bd6a31",
@@ -1077,18 +1041,13 @@ class WithdrawalServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         WithdrawalRequest request = new WithdrawalRequest(

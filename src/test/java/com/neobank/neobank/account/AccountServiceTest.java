@@ -157,32 +157,22 @@ class AccountServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount1 = LedgerAccount.createNew(
-                "0123456789abcdef0123456789abcdef",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account1 = Account.createNew(
                 "12345678900987",
+                "0123456789abcdef0123456789abcdef",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount1
-        );
-
-        LedgerAccount ledgerAccount2 = LedgerAccount.createNew(
-                "0123456789abcdef0123456789fedcba",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.USD
+                CurrencyCode.TRY
         );
 
         Account account2 = Account.createNew(
                 "98765432101234",
+                "0123456789abcdef0123456789fedcba",
                 "Saving Account",
                 AccountType.SAVINGS,
                 customer,
-                ledgerAccount2
+                CurrencyCode.USD
         );
 
         given(accountRepository.findAllByCustomer_EmailIgnoreCaseOrderByCreatedAtDesc(email))
@@ -254,18 +244,13 @@ class AccountServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "0123456789abcdef0123456789abcdef",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 "12345678900123",
+                "0123456789abcdef0123456789abcdef",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(account.getAccountNumber(), customer.getEmail()))

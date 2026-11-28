@@ -1,6 +1,6 @@
 package com.neobank.neobank.shared.exception;
 
-import com.neobank.neobank.card.exception.CardDailySpendRaceException;
+import com.neobank.neobank.card.limit.CardDailySpendRaceException;
 import com.neobank.neobank.idempotency.IdempotencyKeyRaceException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.Nullable;

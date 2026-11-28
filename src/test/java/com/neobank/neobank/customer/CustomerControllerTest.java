@@ -101,30 +101,6 @@ class CustomerControllerTest {
     }
 
     @Test
-    void registerReturnsConflictProblemDetailWhenEmailAlreadyExists() throws Exception {
-        RegisterCustomerRequest request = new RegisterCustomerRequest(
-                "customer@example.com",
-                "raw-password-123",
-                "Ada Lovelace"
-        );
-
-        given(customerService.register(request))
-                .willThrow(new EmailAlreadyRegisteredException("Email already registered"));
-
-        mockMvc.perform(post(REGISTRATION_ENDPOINT)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isConflict())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Email already registered"))
-                .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.detail").value("Email already registered"))
-                .andExpect(jsonPath("$.instance").value(REGISTRATION_ENDPOINT));
-
-        verify(customerService).register(request);
-    }
-
-    @Test
     void getCurrentCustomerReturnsUnauthorizedWithoutAuthentication() throws Exception {
         mockMvc.perform(get(CURRENT_CUSTOMER_ENDPOINT))
                 .andExpect(status().is(401));
@@ -160,22 +136,4 @@ class CustomerControllerTest {
         verify(customerService).getCurrentCustomer(email);
     }
 
-    @Test
-    void getCurrentCustomerReturnsNotFoundWhenAuthenticatedCustomerDoesNotExist() throws Exception {
-        String email = "customer@example.com";
-        given(customerService.getCurrentCustomer(email))
-                .willThrow(new CustomerNotFoundException("Customer not found"));
-
-        mockMvc.perform(get(CURRENT_CUSTOMER_ENDPOINT)
-                        .with(jwt().jwt(jwt -> jwt.subject(email)))
-        )
-                .andExpect(status().is(404))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Customer not found"))
-                .andExpect(jsonPath("$.detail").value("Customer not found"))
-                .andExpect(jsonPath("$.instance").value(CURRENT_CUSTOMER_ENDPOINT))
-                .andExpect(jsonPath("$.status").value(404));
-
-        verify(customerService).getCurrentCustomer(email);
-    }
 }

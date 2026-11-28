@@ -3,7 +3,6 @@ package com.neobank.neobank.account;
 import com.neobank.neobank.account.dto.AccountResponse;
 import com.neobank.neobank.account.dto.CreateAccountRequest;
 import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.ledger.LedgerAccount;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
@@ -12,8 +11,8 @@ public class AccountMapper {
     public static Account toAccountEntity(
             CreateAccountRequest request,
             String accountNumber,
-            Customer customer,
-            LedgerAccount ledgerAccount
+            String ledgerReference,
+            Customer customer
     ) {
         if (request == null) {
             throw new IllegalArgumentException("Request cannot be null");
@@ -21,10 +20,11 @@ public class AccountMapper {
 
         return Account.createNew(
                 accountNumber,
+                ledgerReference,
                 request.name(),
                 request.accountType(),
                 customer,
-                ledgerAccount
+                request.currency()
         );
     }
 

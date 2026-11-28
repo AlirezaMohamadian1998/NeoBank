@@ -2,16 +2,12 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
-import com.neobank.neobank.card.dto.CardPurchaseRequest;
-import com.neobank.neobank.card.dto.CardPurchaseResponse;
-import com.neobank.neobank.card.dto.CreditCardIssueRequest;
-import com.neobank.neobank.card.dto.CreditCardIssueResponse;
-import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.credit.dto.CreditCardIssueRequest;
+import com.neobank.neobank.card.credit.dto.CreditCardIssueResponse;
+import com.neobank.neobank.card.debit.DebitCard;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.MutableClock;
 import com.neobank.neobank.shared.MutableClockConfiguration;
 import com.neobank.neobank.shared.money.CurrencyCode;
@@ -37,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Import(MutableClockConfiguration.class)
-class CardTransactionsIntegrationTest extends DebitCardIntegrationTestSupport {
+class CardTransactionsIntegrationTest extends CardIntegrationTestSupport {
 
     private static final String CARD_REFERENCE = "2".repeat(32);
     private static final String OTHER_CARD_REFERENCE = "3".repeat(32);
@@ -66,10 +62,11 @@ class CardTransactionsIntegrationTest extends DebitCardIntegrationTestSupport {
 
         accountRepository.save(Account.createNew(
                 MERCHANT_ACCOUNT_NUMBER,
+                "5".repeat(32),
                 "merchant",
                 AccountType.CURRENT,
                 merchantCustomer,
-                LedgerAccount.createNew("5".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY)
+                CurrencyCode.TRY
         ));
     }
 
@@ -185,25 +182,7 @@ class CardTransactionsIntegrationTest extends DebitCardIntegrationTestSupport {
     private String purchase(String cardReference, String amount, String idempotencyKey, int hoursAfterStart) throws Exception {
         mutableClock.setInstant(hoursAfterStart(hoursAfterStart));
 
-        CardPurchaseRequest request = new CardPurchaseRequest(
-                MERCHANT_ACCOUNT_NUMBER,
-                CurrencyCode.TRY,
-                new BigDecimal(amount),
-                null,
-                "Test merchant"
-        );
-
-        String body = mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        return objectMapper.readValue(body, CardPurchaseResponse.class).transactionReference();
+        return transactionReferenceOf(purchase(cardReference, MERCHANT_ACCOUNT_NUMBER, amount, CurrencyCode.TRY, idempotencyKey));
     }
 
     private void refund(String purchaseReference, String idempotencyKey, int hoursAfterStart) throws Exception {
@@ -241,13 +220,6 @@ class CardTransactionsIntegrationTest extends DebitCardIntegrationTestSupport {
     private void repay(String cardReference, String amount, String idempotencyKey, int hoursAfterStart) throws Exception {
         mutableClock.setInstant(hoursAfterStart(hoursAfterStart));
 
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", cardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new CreditCardRepaymentRequest(account.getAccountNumber(), new BigDecimal(amount), null)
-                        ))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isCreated());
+        repay(cardReference, amount, null, idempotencyKey).andExpect(status().isCreated());
     }
 }

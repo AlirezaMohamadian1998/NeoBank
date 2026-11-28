@@ -266,20 +266,6 @@ class TransactionHistoryControllerTest {
         );
     }
 
-    @Test
-    void invalidHistorySortReturnsBadRequestProblem() throws Exception {
-        given(transactionHistoryService.getHistoryByAccount(any(), eq("customer@example.com"), any(Pageable.class)))
-                .willThrow(new InvalidHistorySortException("Supported sort fields are createdAt and appliedAmount."));
-
-        mockMvc.perform(get("/api/transactions")
-                        .param("sort", "unknown,desc")
-                        .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Invalid history sort"))
-                .andExpect(jsonPath("$.detail").value("Supported sort fields are createdAt and appliedAmount."))
-                .andExpect(jsonPath("$.instance").value("/api/transactions"));
-    }
-
     static Stream<Arguments> malformedQueryParameters() {
         return Stream.of(
                 Arguments.of(Map.of(

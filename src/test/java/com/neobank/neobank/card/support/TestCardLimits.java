@@ -1,6 +1,6 @@
 package com.neobank.neobank.card.support;
 
-import com.neobank.neobank.card.CardSpendingLimits;
+import com.neobank.neobank.card.limit.CardSpendingLimits;
 
 import java.math.BigDecimal;
 
