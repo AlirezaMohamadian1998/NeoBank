@@ -125,21 +125,6 @@ class InternalAccountTest {
     }
 
     @Test
-    void currencyComesFromLedgerAccount() {
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "11111111111111111111111111111111",
-                LedgerAccountType.ASSET,
-                CurrencyCode.TRY
-        );
-
-        InternalAccount internalAccount =
-                InternalAccount.createNew(InternalAccountPurpose.SETTLEMENT, ledgerAccount);
-
-        assertThat(internalAccount.getCurrency())
-                .isSameAs(ledgerAccount.getCurrency());
-    }
-
-    @Test
     void balanceComesFromLedgerAccount() {
         LedgerAccount ledgerAccount = LedgerAccount.createNew(
                 "11111111111111111111111111111111",

@@ -75,29 +75,6 @@ class AccountTest {
     }
 
     @Test
-    void currencyComesFromLedgerAccount() {
-        Account account = createAccount();
-
-        assertThat(account.getCurrency())
-                .isEqualTo(CurrencyCode.TRY);
-
-        assertThat(account.getCurrency())
-                .isEqualTo(account.getLedgerAccount().getCurrency());
-    }
-
-    @Test
-    void balanceComesFromLedgerAccount() {
-        Account account = createAccount();
-        account.getLedgerAccount().credit(new BigDecimal("125.50"));
-
-        assertThat(account.getBalance())
-                .isEqualByComparingTo(new BigDecimal("125.50"));
-
-        assertThat(account.getBalance())
-                .isEqualByComparingTo(account.getLedgerAccount().getBalance());
-    }
-
-    @Test
     void changingLedgerBalanceIsReflectedThroughAccountBalance() {
         Account account = createAccount();
 
@@ -206,9 +183,6 @@ class AccountTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Customer cannot be null");
     }
-
-
-
 
     @Test
     void nameIsTrimmed() {

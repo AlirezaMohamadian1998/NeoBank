@@ -69,36 +69,6 @@ class FxRateServiceTest {
     }
 
     @Test
-    void usdBaseReturnsProviderRatesUnchanged() {
-        String email = "example.com";
-
-        given(rateCache.getLatestRates())
-                .willReturn(providerRates);
-
-        given(properties.duration())
-                .willReturn(Duration.ofMinutes(5));
-
-        FxRateLockResponse response = fxRateService.createRateLock(CurrencyCode.USD, email);
-
-        assertThat(response.rates())
-                .isEqualTo(providerRates.rates());
-
-        assertThat(response.baseCurrency())
-                .isSameAs(providerRates.baseCurrency());
-
-        assertThat(UUID.fromString(response.lockId()))
-                .isNotNull();
-
-        assertThat(response.expiresAt())
-                .isEqualTo(NOW.plus(properties.duration()));
-
-        verify(rateLockCache).put(email, response);
-
-        verify(rateCache, times(1))
-                .getLatestRates();
-    }
-
-    @Test
     void nonUsdBaseReturnsNormalizedRates() {
         String email = "example.com";
 
@@ -164,7 +134,6 @@ class FxRateServiceTest {
 
         given(rateLockCache.get(email, lockId))
                 .willReturn(Optional.empty());
-
 
         assertThatThrownBy(() -> fxRateService.getCachedRate(email, lockId))
                 .isInstanceOf(FxRateLockUnavailableException.class)

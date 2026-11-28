@@ -22,6 +22,7 @@ import com.neobank.neobank.transaction.SimulatedFailureException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.AopTestUtils;
@@ -45,6 +46,9 @@ class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
 
     @Autowired
     private CardPaymentService cardPaymentService;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @MockitoSpyBean
     private IdempotencyService idempotencyService;
@@ -249,6 +253,12 @@ class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
                 .isZero();
 
         assertThat(idempotencyRecordRepository.count())
+                .isZero();
+
+        assertThat(jdbcTemplate.queryForObject("select count(*) from fx_info", Long.class))
+                .isZero();
+
+        assertThat(jdbcTemplate.queryForObject("select count(*) from fx_rates", Long.class))
                 .isZero();
     }
 

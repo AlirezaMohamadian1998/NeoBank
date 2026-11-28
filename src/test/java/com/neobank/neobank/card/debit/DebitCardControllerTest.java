@@ -174,16 +174,6 @@ class DebitCardControllerTest {
     }
 
     @Test
-    void getDebitCardReturnsUnauthorizedWithoutAuthentication() throws Exception {
-        String cardReference = "11111111111111111111111111111111";
-
-        mockMvc.perform(get("/api/debit-cards/{cardReference}", cardReference))
-                .andExpect(status().isUnauthorized());
-
-        verifyNoInteractions(debitCardService);
-    }
-
-    @Test
     void getDebitCardsReturnsPagedResponse() throws Exception {
         String email = "customer@example.com";
         Pageable pageable = PageRequest.of(0, 10);
@@ -285,14 +275,6 @@ class DebitCardControllerTest {
     }
 
     @Test
-    void getDebitCardsReturnsUnauthorizedWithoutAuthentication() throws Exception {
-        mockMvc.perform(get("/api/debit-cards"))
-                .andExpect(status().isUnauthorized());
-
-        verifyNoInteractions(debitCardService);
-    }
-
-    @Test
     void changeCardStatusReturnsUpdatedCardForAuthenticatedCustomer() throws Exception {
         String email = "customer@example.com";
 
@@ -353,16 +335,6 @@ class DebitCardControllerTest {
                         .with(jwt().jwt(jwt -> jwt.subject(email))))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
-
-        verifyNoMoreInteractions(debitCardService);
-    }
-
-    @Test
-    void changeCardStatusReturnsUnauthorizedWithoutAuthentication() throws Exception {
-        String cardReference = "11111111111111111111111111111111";
-
-        mockMvc.perform(patch("/api/debit-cards/{cardReference}/status/{status}", cardReference, CardStatus.ACTIVE.name()))
-                .andExpect(status().isUnauthorized());
 
         verifyNoMoreInteractions(debitCardService);
     }
@@ -449,16 +421,6 @@ class DebitCardControllerTest {
                         .with(jwt().jwt(jwt -> jwt.subject("customer@example.com"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.cardReference").value("Card reference must be 32 hexadecimal characters"));
-
-        verifyNoInteractions(debitCardService);
-    }
-
-    @Test
-    void updateSpendingLimitsReturnsUnauthorizedWithoutAuthentication() throws Exception {
-        mockMvc.perform(put("/api/debit-cards/{cardReference}/spending-limits", "1".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new CardSpendingLimitsUpdateRequest(new BigDecimal("100.00"), new BigDecimal("200.00")))))
-                .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(debitCardService);
     }

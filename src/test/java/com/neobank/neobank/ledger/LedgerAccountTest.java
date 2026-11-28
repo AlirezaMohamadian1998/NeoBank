@@ -181,14 +181,6 @@ class LedgerAccountTest {
         assertThatThrownBy(() -> ledgerAccount.debit(new BigDecimal("100.01")))
                 .isInstanceOf(InsufficientFundsException.class)
                 .hasMessage("Insufficient funds");
-    }
-
-    @Test
-    void failedOperationLeavesBalanceUnchanged() {
-        ledgerAccount.credit(new BigDecimal("100.00"));
-
-        assertThatThrownBy(() -> ledgerAccount.debit(new BigDecimal("150.00")))
-                .isInstanceOf(InsufficientFundsException.class);
 
         assertThat(ledgerAccount.getBalance())
                 .isEqualByComparingTo(new BigDecimal("100.00"));
