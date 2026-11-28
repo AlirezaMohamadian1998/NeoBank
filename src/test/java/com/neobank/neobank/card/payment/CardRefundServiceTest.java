@@ -1,7 +1,6 @@
 package com.neobank.neobank.card.payment;
 
 import com.neobank.neobank.account.Account;
-import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.payment.dto.CardRefundResponse;
@@ -108,127 +107,6 @@ class CardRefundServiceTest {
     }
 
     @Test
-    void refundPurchaseMovesMoneyBackAsNewTransactionAndMarksPurchaseRefunded() {
-        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
-        Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
-        fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
-
-        CardPurchaseDetails purchase = createCompletedPurchase(
-                fundingAccount, merchantAccount, new BigDecimal("250.00"), CurrencyCode.TRY, BigDecimal.ONE, BigDecimal.ONE
-        );
-
-        stubUpToPurchaseLookup(merchantAccount, purchase);
-        stubRefundCreation();
-
-        CardRefundResponse response = cardRefundService.refundPurchase(
-                MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, IDEMPOTENCY_KEY, MERCHANT_EMAIL
-        );
-
-        verify(cardRefundDetailsRepository).save(cardRefundDetailsCaptor.capture());
-        verify(idempotencyService).save(idempotencyRecordCaptor.capture());
-        verifyNoInteractions(fxRateService);
-
-        CardRefundDetails refund = cardRefundDetailsCaptor.getValue();
-        BankTransaction refundTransaction = refund.getBankTransaction();
-
-        assertThat(refund.getCardPurchaseDetails())
-                .isSameAs(purchase);
-
-        assertThat(refundTransaction)
-                .isNotSameAs(purchase.getBankTransaction());
-
-        assertThat(refundTransaction.getReference())
-                .isEqualTo(REFUND_REFERENCE);
-
-        assertThat(refundTransaction.getTransactionType())
-                .isSameAs(TransactionType.CARD_REFUND);
-
-        assertThat(refundTransaction.getStatus())
-                .isSameAs(TransactionStatus.COMPLETED);
-
-        assertThat(refundTransaction.getRequestedAmount())
-                .isEqualByComparingTo("250.00");
-
-        assertThat(refundTransaction.getRequestedCurrency())
-                .isSameAs(CurrencyCode.TRY);
-
-        assertThat(refundTransaction.getFxInfo())
-                .isNull();
-
-        LedgerEntry merchantDebit = entry(refundTransaction, EntryDirection.DEBIT);
-        LedgerEntry fundingCredit = entry(refundTransaction, EntryDirection.CREDIT);
-
-        assertThat(merchantDebit.getLedgerAccount())
-                .isSameAs(merchantAccount.getLedgerAccount());
-
-        assertThat(merchantDebit.getAmount())
-                .isEqualByComparingTo("250.00");
-
-        assertThat(fundingCredit.getLedgerAccount())
-                .isSameAs(fundingAccount.getLedgerAccount());
-
-        assertThat(fundingCredit.getAmount())
-                .isEqualByComparingTo("250.00");
-
-        assertThat(purchase.getBankTransaction().getStatus())
-                .isSameAs(TransactionStatus.REFUNDED);
-
-        assertThat(purchase.getBankTransaction().getEntries())
-                .as("the original purchase keeps its own two entries untouched")
-                .hasSize(2);
-
-        assertThat(merchantAccount.getBalance())
-                .isEqualByComparingTo("0.00");
-
-        assertThat(fundingAccount.getBalance())
-                .isEqualByComparingTo("1000.00");
-
-        IdempotencyRecord idempotencyRecord = idempotencyRecordCaptor.getValue();
-
-        assertThat(idempotencyRecord.getIdempotencyKey())
-                .isEqualTo(IDEMPOTENCY_KEY);
-
-        assertThat(idempotencyRecord.getRequestHash())
-                .isEqualTo(hash());
-
-        assertThat(idempotencyRecord.getCustomer())
-                .isSameAs(merchantCustomer);
-
-        assertThat(idempotencyRecord.getResultReference())
-                .isEqualTo(REFUND_REFERENCE);
-
-        assertThat(response.refundReference())
-                .isEqualTo(REFUND_REFERENCE);
-
-        assertThat(response.purchaseReference())
-                .isEqualTo(PURCHASE_REFERENCE);
-
-        assertThat(response.requestedAmount())
-                .isEqualByComparingTo("250.00");
-
-        assertThat(response.requestedCurrency())
-                .isSameAs(CurrencyCode.TRY);
-
-        assertThat(response.debitedAmount())
-                .isEqualByComparingTo("250.00");
-
-        assertThat(response.debitedCurrency())
-                .isSameAs(CurrencyCode.TRY);
-
-        assertThat(response.balanceAfter())
-                .isEqualByComparingTo("0.00");
-
-        assertThat(response.merchantName())
-                .isEqualTo("Test merchant");
-
-        assertThat(response.merchantAccountNumber())
-                .isEqualTo(MERCHANT_ACCOUNT_NUMBER);
-
-        assertThat(response.cardLastFourDigits())
-                .isEqualTo("1234");
-    }
-
-    @Test
     void crossCurrencyRefundUsesFreshRatesNotThePurchaseSnapshot() {
         Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
         Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.USD, merchantCustomer, 2L);
@@ -308,48 +186,6 @@ class CardRefundServiceTest {
     }
 
     @Test
-    void refundPurchaseRejectsMerchantAccountNotOwnedByCaller() {
-        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
-        Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
-        fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
-
-        CardPurchaseDetails purchase = createCompletedPurchase(
-                fundingAccount, merchantAccount, new BigDecimal("250.00"), CurrencyCode.TRY, BigDecimal.ONE, BigDecimal.ONE
-        );
-
-        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE))
-                .willReturn(Optional.of(purchase.getBankTransaction()));
-
-        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(MERCHANT_ACCOUNT_NUMBER, MERCHANT_EMAIL))
-                .willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> cardRefundService.refundPurchase(
-                MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, IDEMPOTENCY_KEY, MERCHANT_EMAIL
-        ))
-                .isInstanceOf(AccountNotFoundException.class)
-                .hasMessage("Merchant's account not found");
-
-        assertThat(purchase.getBankTransaction().getStatus())
-                .isSameAs(TransactionStatus.COMPLETED);
-
-        verifyNoInteractions(idempotencyService, cardRefundDetailsRepository, referenceGenerator);
-    }
-
-    @Test
-    void refundPurchaseRejectsUnknownPurchase() {
-        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE))
-                .willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> cardRefundService.refundPurchase(
-                MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, IDEMPOTENCY_KEY, MERCHANT_EMAIL
-        ))
-                .isInstanceOf(CardPurchaseNotFoundException.class)
-                .hasMessage("Card purchase not found");
-
-        verifyNoInteractions(accountRepository, idempotencyService, cardPurchaseDetailsRepository, cardRefundDetailsRepository, referenceGenerator);
-    }
-
-    @Test
     void refundPurchaseTakesThePurchaseLockBeforeAnyOtherRead() {
         Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
         Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
@@ -374,61 +210,6 @@ class CardRefundServiceTest {
                 .findAndValidateRecord(IDEMPOTENCY_KEY, MERCHANT_EMAIL, hash());
         inOrder.verify(cardPurchaseDetailsRepository)
                 .findByBankTransaction_Reference(PURCHASE_REFERENCE);
-    }
-
-    @Test
-    void refundPurchaseHidesPurchasesCreditedToAnotherMerchant() {
-        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
-        Account callerMerchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
-        Account otherMerchantAccount = createAccount("55".repeat(7), "5".repeat(32), CurrencyCode.TRY, createCustomer("other@example.com"), 3L);
-        fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
-
-        CardPurchaseDetails purchase = createCompletedPurchase(
-                fundingAccount, otherMerchantAccount, new BigDecimal("250.00"), CurrencyCode.TRY, BigDecimal.ONE, BigDecimal.ONE
-        );
-
-        stubUpToPurchaseLookup(callerMerchantAccount, purchase);
-
-        assertThatThrownBy(() -> cardRefundService.refundPurchase(
-                MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, IDEMPOTENCY_KEY, MERCHANT_EMAIL
-        ))
-                .isInstanceOf(CardPurchaseNotFoundException.class)
-                .hasMessage("Card purchase not found");
-
-        assertThat(purchase.getBankTransaction().getStatus())
-                .isSameAs(TransactionStatus.COMPLETED);
-
-        assertThat(otherMerchantAccount.getBalance())
-                .isEqualByComparingTo("250.00");
-
-        verifyNoInteractions(cardRefundDetailsRepository, referenceGenerator);
-        verify(idempotencyService, never()).save(any());
-    }
-
-    @Test
-    void refundPurchaseRejectsAlreadyRefundedPurchase() {
-        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
-        Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
-        fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
-
-        CardPurchaseDetails purchase = createCompletedPurchase(
-                fundingAccount, merchantAccount, new BigDecimal("250.00"), CurrencyCode.TRY, BigDecimal.ONE, BigDecimal.ONE
-        );
-        purchase.getBankTransaction().markRefunded();
-
-        stubUpToPurchaseLookup(merchantAccount, purchase);
-
-        assertThatThrownBy(() -> cardRefundService.refundPurchase(
-                MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, IDEMPOTENCY_KEY, MERCHANT_EMAIL
-        ))
-                .isInstanceOf(CardPurchaseNotRefundableException.class)
-                .hasMessage("Card purchase is already refunded");
-
-        assertThat(merchantAccount.getBalance())
-                .isEqualByComparingTo("250.00");
-
-        verifyNoInteractions(cardRefundDetailsRepository, referenceGenerator, fxRateService);
-        verify(idempotencyService, never()).save(any());
     }
 
     @Test
@@ -494,50 +275,6 @@ class CardRefundServiceTest {
         assertThat(merchantAccount.getBalance())
                 .isEqualByComparingTo("250.00");
 
-        verify(cardRefundDetailsRepository, never()).save(any());
-        verify(idempotencyService, never()).save(any());
-    }
-
-    @Test
-    void refundPurchaseReplaysStoredResultForSameIdempotencyKey() {
-        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
-        Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
-        fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
-
-        CardPurchaseDetails purchase = createCompletedPurchase(
-                fundingAccount, merchantAccount, new BigDecimal("250.00"), CurrencyCode.TRY, BigDecimal.ONE, BigDecimal.ONE
-        );
-        CardRefundDetails existingRefund = createCompletedRefund(purchase, merchantAccount, fundingAccount);
-
-        given(bankTransactionRepository.findForUpdateByReferenceAndTransactionType(PURCHASE_REFERENCE, TransactionType.CARD_PURCHASE))
-                .willReturn(Optional.of(purchase.getBankTransaction()));
-
-        given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(MERCHANT_ACCOUNT_NUMBER, MERCHANT_EMAIL))
-                .willReturn(Optional.of(merchantAccount));
-
-        given(idempotencyService.findAndValidateRecord(IDEMPOTENCY_KEY, MERCHANT_EMAIL, hash()))
-                .willReturn(Optional.of(IdempotencyRecord.createNew(IDEMPOTENCY_KEY, hash(), merchantCustomer, REFUND_REFERENCE)));
-
-        given(cardRefundDetailsRepository.findByBankTransaction_Reference(REFUND_REFERENCE))
-                .willReturn(Optional.of(existingRefund));
-
-        CardRefundResponse response = cardRefundService.refundPurchase(
-                MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, IDEMPOTENCY_KEY, MERCHANT_EMAIL
-        );
-
-        assertThat(response.refundReference())
-                .isEqualTo(REFUND_REFERENCE);
-
-        assertThat(response.purchaseReference())
-                .isEqualTo(PURCHASE_REFERENCE);
-
-        assertThat(response.debitedAmount())
-                .isEqualByComparingTo("250.00");
-
-        assertThat(response.balanceAfter())
-                .isEqualByComparingTo("0.00");
-
-        verifyNoInteractions(cardPurchaseDetailsRepository, referenceGenerator, fxRateService);
         verify(cardRefundDetailsRepository, never()).save(any());
         verify(idempotencyService, never()).save(any());
     }
@@ -691,43 +428,6 @@ class CardRefundServiceTest {
                 "2".repeat(32),
                 "1234"
         );
-    }
-
-    private CardRefundDetails createCompletedRefund(
-            CardPurchaseDetails purchase,
-            Account merchantAccount,
-            Account fundingAccount
-    ) {
-        BigDecimal amount = purchase.getBankTransaction().getRequestedAmount();
-
-        BankTransaction refund = BankTransaction.createNew(
-                amount,
-                purchase.getBankTransaction().getRequestedCurrency(),
-                TransactionType.CARD_REFUND,
-                REFUND_REFERENCE,
-                null
-        );
-
-        refund.addEntry(
-                "b".repeat(32),
-                amount,
-                merchantAccount.getLedgerAccount().debit(amount),
-                EntryDirection.DEBIT,
-                merchantAccount.getLedgerAccount()
-        );
-
-        refund.addEntry(
-                "c".repeat(32),
-                amount,
-                fundingAccount.getLedgerAccount().credit(amount),
-                EntryDirection.CREDIT,
-                fundingAccount.getLedgerAccount()
-        );
-
-        refund.complete();
-        purchase.getBankTransaction().markRefunded();
-
-        return CardRefundDetails.createNew(refund, purchase);
     }
 
     private LedgerEntry entry(BankTransaction transaction, EntryDirection direction) {

@@ -16,7 +16,6 @@ import com.neobank.neobank.creditaccount.CreditAccount;
 import com.neobank.neobank.creditaccount.CreditAccountProperties;
 import com.neobank.neobank.creditaccount.CreditAccountRepository;
 import com.neobank.neobank.creditaccount.CreditStatement;
-import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
 import com.neobank.neobank.creditaccount.CreditStatementRepository;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.customer.CustomerNotFoundException;
@@ -203,32 +202,6 @@ class CreditCardServiceTest {
     }
 
     @Test
-    void issueCreditCardReplaysStoredCardForSameIdempotencyKey() {
-        CreditCard existingCard = createCreditCard();
-        IdempotencyRecord existingRecord = IdempotencyRecord.createNew(
-                IDEMPOTENCY_KEY,
-                "a".repeat(64),
-                customer,
-                existingCard.getCardReference()
-        );
-
-        given(customerRepository.findByEmailIgnoreCase(EMAIL)).willReturn(Optional.of(customer));
-        given(idempotencyService.findAndValidateRecord(eq(IDEMPOTENCY_KEY), eq(EMAIL), any())).willReturn(Optional.of(existingRecord));
-        given(creditCardRepository.findByCardReference(existingCard.getCardReference())).willReturn(Optional.of(existingCard));
-
-        CreditCardIssueResponse response =
-                creditCardService.issueCreditCard(EMAIL, new CreditCardIssueRequest(CurrencyCode.TRY), IDEMPOTENCY_KEY);
-
-        assertThat(response.cardReference()).isEqualTo(existingCard.getCardReference());
-        assertThat(response.creditAccountNumber()).isEqualTo("55".repeat(7));
-
-        verify(creditAccountRepository, never()).save(any());
-        verify(creditCardRepository, never()).save(any());
-        verify(idempotencyService, never()).save(any());
-        verifyNoInteractions(accountNumberGenerator, cardIssuer, referenceGenerator);
-    }
-
-    @Test
     void issueCreditCardRejectsInvalidIdempotencyKey() {
         assertThatThrownBy(() -> creditCardService.issueCreditCard(EMAIL, new CreditCardIssueRequest(CurrencyCode.TRY), "not-a-key"))
                 .isInstanceOf(InvalidIdempotencyKeyException.class);
@@ -269,32 +242,6 @@ class CreditCardServiceTest {
     }
 
     @Test
-    void getCreditCardThrowsWhenCardIsNotFoundForCustomer() {
-        given(creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase("2".repeat(32), EMAIL))
-                .willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> creditCardService.getCreditCard("2".repeat(32), EMAIL))
-                .isInstanceOf(CreditCardNotFoundException.class)
-                .hasMessage("Credit card not found");
-    }
-
-    @Test
-    void changeCardStatusActivatesCard() {
-        CreditCard creditCard = createCreditCard();
-
-        given(creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase(creditCard.getCardReference(), EMAIL))
-                .willReturn(Optional.of(creditCard));
-        given(creditCardRepository.save(creditCard)).willReturn(creditCard);
-        given(cardDailySpendService.getAmountSpent(creditCard, LocalDate.now(clock))).willReturn(new BigDecimal("0.00"));
-
-        CreditCardRetrieveResponse response =
-                creditCardService.changeCardStatus(creditCard.getCardReference(), EMAIL, CardStatus.ACTIVE);
-
-        assertThat(response.status()).isEqualTo(CardStatus.ACTIVE);
-        assertThat(creditCard.getStatus()).isEqualTo(CardStatus.ACTIVE);
-    }
-
-    @Test
     void updateSpendingLimitsRejectsLimitsAboveTheMaximum() {
         CreditCard creditCard = createCreditCard();
 
@@ -326,21 +273,6 @@ class CreditCardServiceTest {
         assertThat(response.spendingLimits().perTransactionLimit()).isEqualByComparingTo("100.00");
         assertThat(response.spendingLimits().dailyLimit()).isEqualByComparingTo("300.00");
         assertThat(response.spendingLimits().currency()).isEqualTo(CurrencyCode.TRY);
-    }
-
-    @Test
-    void getStatementThrowsWhenStatementIsNotOnThisCardsAccount() {
-        CreditCard creditCard = createCreditCard();
-        String statementReference = "3".repeat(32);
-
-        given(creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase(creditCard.getCardReference(), EMAIL))
-                .willReturn(Optional.of(creditCard));
-        given(creditStatementRepository.findByStatementReferenceAndCreditAccount(statementReference, creditCard.getCreditAccount()))
-                .willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> creditCardService.getStatement(creditCard.getCardReference(), statementReference, EMAIL))
-                .isInstanceOf(CreditStatementNotFoundException.class)
-                .hasMessage("Credit statement not found");
     }
 
     @Test

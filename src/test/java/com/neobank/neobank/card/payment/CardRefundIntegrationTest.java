@@ -109,6 +109,13 @@ class CardRefundIntegrationTest extends CardIntegrationTestSupport {
         assertThat(refundTransaction.getEntries())
                 .hasSize(2);
 
+        assertThat(refundTransaction.getFxInfo())
+                .isNull();
+
+        assertThat(idempotencyRecordRepository.findByIdempotencyKeyAndCustomer_EmailIgnoreCase("a".repeat(32), MERCHANT_EMAIL))
+                .hasValueSatisfying(idempotencyRecord -> assertThat(idempotencyRecord.getResultReference())
+                        .isEqualTo(response.refundReference()));
+
         assertThat(bankTransactionRepository.count())
                 .isEqualTo(2);
 
