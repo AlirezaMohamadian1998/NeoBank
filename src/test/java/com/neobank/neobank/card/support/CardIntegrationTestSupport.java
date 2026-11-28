@@ -139,14 +139,11 @@ public abstract class CardIntegrationTestSupport {
         account = accountRepository.save(
                 Account.createNew(
                         "12345678998745",
+                        "1".repeat(32),
                         "test",
                         AccountType.CURRENT,
                         customer,
-                        LedgerAccount.createNew(
-                                "1".repeat(32),
-                                LedgerAccountType.LIABILITY,
-                                CurrencyCode.TRY
-                        )
+                        CurrencyCode.TRY
                 )
         );
     }

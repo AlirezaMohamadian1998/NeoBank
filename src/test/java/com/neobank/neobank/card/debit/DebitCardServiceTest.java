@@ -23,8 +23,6 @@ import com.neobank.neobank.card.limit.dto.CardSpendingLimitsUpdateRequest;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.idempotency.*;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
 import org.junit.jupiter.api.BeforeEach;
@@ -119,18 +117,13 @@ class DebitCardServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         IssuedCard issuedCard = new IssuedCard(
@@ -254,18 +247,13 @@ class DebitCardServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         String requestHash = "a".repeat(64);
@@ -331,18 +319,13 @@ class DebitCardServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 accountNumber,
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         String requestHash = "a".repeat(64);
@@ -450,32 +433,22 @@ class DebitCardServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount firstLedgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account firstAccount = Account.createNew(
                 "12345678900321",
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                firstLedgerAccount
-        );
-
-        LedgerAccount secondLedgerAccount = LedgerAccount.createNew(
-                "9f3c8a21d9e64b5fa2c17e9084bd6a33",
-                LedgerAccountType.LIABILITY,
                 CurrencyCode.TRY
         );
 
         Account secondAccount = Account.createNew(
                 "12300123456789",
+                "9f3c8a21d9e64b5fa2c17e9084bd6a33",
                 "Private Account NO 2",
                 AccountType.CURRENT,
                 customer,
-                secondLedgerAccount
+                CurrencyCode.TRY
         );
 
         DebitCard firstDebitCard = DebitCard.createNew(
@@ -897,18 +870,13 @@ class DebitCardServiceTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account account = Account.createNew(
                 "12345678900321",
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         return DebitCard.createNew(

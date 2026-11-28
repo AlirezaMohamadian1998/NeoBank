@@ -18,8 +18,6 @@ import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.idempotency.RequestHasher;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.ledger.LedgerPostingService;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
@@ -374,10 +372,11 @@ class CreditCardBalanceServicePayoutTest {
     }
 
     private Account createDestinationAccount(AccountType type, CurrencyCode currency, String balance) {
-        LedgerAccount ledgerAccount = LedgerAccount.createNew("7".repeat(32), LedgerAccountType.LIABILITY, currency);
-        ledgerAccount.credit(new BigDecimal(balance));
 
-        return Account.createNew(DESTINATION_ACCOUNT_NUMBER, "Main", type, customer, ledgerAccount);
+        Account account = Account.createNew(DESTINATION_ACCOUNT_NUMBER, "7".repeat(32), "Main", type, customer, currency);
+        account.getLedgerAccount().credit(new BigDecimal(balance));
+
+        return account;
     }
 
     private static CreditCardPayoutRequest request(String lockId) {

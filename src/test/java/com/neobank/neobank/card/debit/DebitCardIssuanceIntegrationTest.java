@@ -7,8 +7,6 @@ import com.neobank.neobank.card.debit.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -219,14 +217,11 @@ class DebitCardIssuanceIntegrationTest extends CardIntegrationTestSupport {
         Account secondAccount = accountRepository.save(
                 Account.createNew(
                         "98765432101234",
+                        "2".repeat(32),
                         "test2",
                         AccountType.CURRENT,
                         customer,
-                        LedgerAccount.createNew(
-                                "2".repeat(32),
-                                LedgerAccountType.LIABILITY,
-                                CurrencyCode.USD
-                        )
+                        CurrencyCode.USD
                 )
         );
 

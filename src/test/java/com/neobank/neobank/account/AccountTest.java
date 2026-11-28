@@ -1,7 +1,7 @@
 package com.neobank.neobank.account;
 
 import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.ledger.LedgerAccount;
+import com.neobank.neobank.ledger.LedgerAccountStatus;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,27 +20,21 @@ class AccountTest {
             "0123456789abcdef0123456789abcdef";
 
     private Customer customer;
-    private LedgerAccount ledgerAccount;
 
     @BeforeEach
     void setUp() {
         customer = mock(Customer.class);
-
-        ledgerAccount = LedgerAccount.createNew(
-                VALID_LEDGER_REFERENCE,
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
     }
 
     @Test
     void validCreationPreservesAllFields() {
         Account account = Account.createNew(
                 VALID_ACCOUNT_NUMBER,
+                VALID_LEDGER_REFERENCE,
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         assertThat(account.getAccountNumber())
@@ -55,8 +49,29 @@ class AccountTest {
         assertThat(account.getCustomer())
                 .isSameAs(customer);
 
-        assertThat(account.getLedgerAccount())
-                .isSameAs(ledgerAccount);
+        assertThat(account.getLedgerAccount().getLedgerReference())
+                .isEqualTo(VALID_LEDGER_REFERENCE);
+    }
+
+    @Test
+    void createdLedgerIsAnActiveLiabilityInTheAccountCurrency() {
+        Account account = Account.createNew(
+                VALID_ACCOUNT_NUMBER,
+                VALID_LEDGER_REFERENCE,
+                "Private Account",
+                AccountType.CURRENT,
+                customer,
+                CurrencyCode.USD
+        );
+
+        assertThat(account.getLedgerAccount().getType())
+                .isEqualTo(LedgerAccountType.LIABILITY);
+
+        assertThat(account.getLedgerAccount().getStatus())
+                .isEqualTo(LedgerAccountStatus.ACTIVE);
+
+        assertThat(account.getLedgerAccount().getCurrency())
+                .isEqualTo(CurrencyCode.USD);
     }
 
     @Test
@@ -67,20 +82,19 @@ class AccountTest {
                 .isEqualTo(CurrencyCode.TRY);
 
         assertThat(account.getCurrency())
-                .isEqualTo(ledgerAccount.getCurrency());
+                .isEqualTo(account.getLedgerAccount().getCurrency());
     }
 
     @Test
     void balanceComesFromLedgerAccount() {
-        ledgerAccount.credit(new BigDecimal("125.50"));
-
         Account account = createAccount();
+        account.getLedgerAccount().credit(new BigDecimal("125.50"));
 
         assertThat(account.getBalance())
                 .isEqualByComparingTo(new BigDecimal("125.50"));
 
         assertThat(account.getBalance())
-                .isEqualByComparingTo(ledgerAccount.getBalance());
+                .isEqualByComparingTo(account.getLedgerAccount().getBalance());
     }
 
     @Test
@@ -90,12 +104,12 @@ class AccountTest {
         assertThat(account.getBalance())
                 .isEqualByComparingTo(new BigDecimal("0.00"));
 
-        ledgerAccount.credit(new BigDecimal("100.00"));
+        account.getLedgerAccount().credit(new BigDecimal("100.00"));
 
         assertThat(account.getBalance())
                 .isEqualByComparingTo(new BigDecimal("100.00"));
 
-        ledgerAccount.debit(new BigDecimal("40.00"));
+        account.getLedgerAccount().debit(new BigDecimal("40.00"));
 
         assertThat(account.getBalance())
                 .isEqualByComparingTo(new BigDecimal("60.00"));
@@ -105,10 +119,11 @@ class AccountTest {
     void nullAccountNumberIsRejected() {
         assertThatThrownBy(() -> Account.createNew(
                 null,
+                VALID_LEDGER_REFERENCE,
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(
@@ -120,10 +135,11 @@ class AccountTest {
     void shortAccountNumberIsRejected() {
         assertThatThrownBy(() -> Account.createNew(
                 "1234567890123",
+                VALID_LEDGER_REFERENCE,
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(
@@ -135,10 +151,11 @@ class AccountTest {
     void longAccountNumberIsRejected() {
         assertThatThrownBy(() -> Account.createNew(
                 "123456789012345",
+                VALID_LEDGER_REFERENCE,
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(
@@ -150,10 +167,11 @@ class AccountTest {
     void nonNumericAccountNumberIsRejected() {
         assertThatThrownBy(() -> Account.createNew(
                 "1234567890123a",
+                VALID_LEDGER_REFERENCE,
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(
@@ -165,10 +183,11 @@ class AccountTest {
     void nullAccountTypeIsRejected() {
         assertThatThrownBy(() -> Account.createNew(
                 VALID_ACCOUNT_NUMBER,
+                VALID_LEDGER_REFERENCE,
                 "Private Account",
                 null,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Account type cannot be null");
@@ -178,74 +197,28 @@ class AccountTest {
     void nullCustomerIsRejected() {
         assertThatThrownBy(() -> Account.createNew(
                 VALID_ACCOUNT_NUMBER,
+                VALID_LEDGER_REFERENCE,
                 "Private Account",
                 AccountType.CURRENT,
                 null,
-                ledgerAccount
+                CurrencyCode.TRY
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Customer cannot be null");
     }
 
-    @Test
-    void nullLedgerAccountIsRejected() {
-        assertThatThrownBy(() -> Account.createNew(
-                VALID_ACCOUNT_NUMBER,
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                null
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Ledger account cannot be null");
-    }
 
-    @Test
-    void assetLedgerAccountIsRejected() {
-        LedgerAccount assetLedgerAccount = LedgerAccount.createNew(
-                "abcdef0123456789abcdef0123456789",
-                LedgerAccountType.ASSET,
-                CurrencyCode.TRY
-        );
 
-        assertThatThrownBy(() -> Account.createNew(
-                VALID_ACCOUNT_NUMBER,
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                assetLedgerAccount
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Customer account must use a liability ledger account"
-                );
-    }
-
-    @Test
-    void closedLedgerAccountIsRejected() {
-        ledgerAccount.close();
-
-        assertThatThrownBy(() -> Account.createNew(
-                VALID_ACCOUNT_NUMBER,
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                ledgerAccount
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Customer account cannot use a closed ledger account"
-                );
-    }
 
     @Test
     void nameIsTrimmed() {
         Account account = Account.createNew(
                 VALID_ACCOUNT_NUMBER,
+                VALID_LEDGER_REFERENCE,
                 "   Private Account   ",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         assertThat(account.getName())
@@ -256,10 +229,11 @@ class AccountTest {
     void nullNameBecomesNull() {
         Account account = Account.createNew(
                 VALID_ACCOUNT_NUMBER,
+                VALID_LEDGER_REFERENCE,
                 null,
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         assertThat(account.getName())
@@ -270,10 +244,11 @@ class AccountTest {
     void blankNameBecomesNull() {
         Account account = Account.createNew(
                 VALID_ACCOUNT_NUMBER,
+                VALID_LEDGER_REFERENCE,
                 "     ",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         assertThat(account.getName())
@@ -286,10 +261,11 @@ class AccountTest {
 
         Account account = Account.createNew(
                 VALID_ACCOUNT_NUMBER,
+                VALID_LEDGER_REFERENCE,
                 name,
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
 
         assertThat(account.getName())
@@ -305,10 +281,11 @@ class AccountTest {
 
         assertThatThrownBy(() -> Account.createNew(
                 VALID_ACCOUNT_NUMBER,
+                VALID_LEDGER_REFERENCE,
                 name,
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(
@@ -319,10 +296,11 @@ class AccountTest {
     private Account createAccount() {
         return Account.createNew(
                 VALID_ACCOUNT_NUMBER,
+                VALID_LEDGER_REFERENCE,
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
     }
 }

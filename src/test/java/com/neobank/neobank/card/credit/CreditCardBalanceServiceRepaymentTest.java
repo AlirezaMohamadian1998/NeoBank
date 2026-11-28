@@ -19,8 +19,6 @@ import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.idempotency.RequestHasher;
 import com.neobank.neobank.ledger.InsufficientFundsException;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.ledger.LedgerPostingService;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
@@ -383,10 +381,11 @@ class CreditCardBalanceServiceRepaymentTest {
     }
 
     private Account createSourceAccount(AccountType type, CurrencyCode currency, String balance) {
-        LedgerAccount ledgerAccount = LedgerAccount.createNew("7".repeat(32), LedgerAccountType.LIABILITY, currency);
-        ledgerAccount.credit(new BigDecimal(balance));
 
-        return Account.createNew(SOURCE_ACCOUNT_NUMBER, "Main", type, customer, ledgerAccount);
+        Account account = Account.createNew(SOURCE_ACCOUNT_NUMBER, "7".repeat(32), "Main", type, customer, currency);
+        account.getLedgerAccount().credit(new BigDecimal(balance));
+
+        return account;
     }
 
     private static CreditCardRepaymentRequest request(String amount) {

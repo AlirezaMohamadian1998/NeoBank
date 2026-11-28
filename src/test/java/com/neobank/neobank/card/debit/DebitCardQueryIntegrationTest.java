@@ -8,8 +8,6 @@ import com.neobank.neobank.card.limit.dto.CardSpendingLimitsResponse;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.junit.jupiter.api.BeforeEach;
@@ -121,14 +119,11 @@ class DebitCardQueryIntegrationTest extends CardIntegrationTestSupport {
         Account secondAccount = accountRepository.save(
                 Account.createNew(
                         "98765432109876",
+                        "3".repeat(32),
                         "Test 2",
                         AccountType.CURRENT,
                         customer,
-                        LedgerAccount.createNew(
-                                "3".repeat(32),
-                                LedgerAccountType.LIABILITY,
-                                CurrencyCode.USD
-                        )
+                        CurrencyCode.USD
                 )
         );
 
@@ -154,14 +149,11 @@ class DebitCardQueryIntegrationTest extends CardIntegrationTestSupport {
         Account secondCustomerAccount = accountRepository.save(
                 Account.createNew(
                         "14725836906542",
+                        "5".repeat(32),
                         "Customer 2",
                         AccountType.CURRENT,
                         secondCustomer,
-                        LedgerAccount.createNew(
-                                "5".repeat(32),
-                                LedgerAccountType.LIABILITY,
-                                CurrencyCode.EUR
-                        )
+                        CurrencyCode.EUR
                 )
         );
 

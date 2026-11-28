@@ -5,8 +5,6 @@ import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.CardStatus;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -99,18 +97,13 @@ class DebitCardTest {
                 "Ada Lovelace"
         );
 
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                "abcdef0123456789abcdef0123456789",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         return Account.createNew(
                 "12345678901234",
+                "abcdef0123456789abcdef0123456789",
                 "Primary account",
                 accountType,
                 customer,
-                ledgerAccount
+                CurrencyCode.TRY
         );
     }
 }

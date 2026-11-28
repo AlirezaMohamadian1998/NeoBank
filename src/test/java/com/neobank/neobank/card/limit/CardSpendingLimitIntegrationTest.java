@@ -9,8 +9,6 @@ import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.ProviderRateCache;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -141,10 +139,11 @@ class CardSpendingLimitIntegrationTest extends CardIntegrationTestSupport {
         accountRepository.save(
                 Account.createNew(
                         "98".repeat(7),
+                        "3".repeat(32),
                         "merchant",
                         AccountType.CURRENT,
                         merchantCustomer,
-                        LedgerAccount.createNew("3".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY)
+                        CurrencyCode.TRY
                 )
         );
 

@@ -14,7 +14,6 @@ import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.internalaccount.InternalAccountPurpose;
 import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.ledger.LedgerPostingService;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.BankTransaction;
@@ -140,14 +139,11 @@ class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
         Account merchantAccount = accountRepository.save(
                 Account.createNew(
                         "98".repeat(7),
+                        "3".repeat(32),
                         "merchant",
                         AccountType.CURRENT,
                         merchantCustomer,
-                        LedgerAccount.createNew(
-                                "3".repeat(32),
-                                LedgerAccountType.LIABILITY,
-                                CurrencyCode.TRY
-                        )
+                        CurrencyCode.TRY
                 )
         );
 

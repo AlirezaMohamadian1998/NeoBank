@@ -2,7 +2,6 @@ package com.neobank.neobank.account;
 
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountStatus;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.persistence.BaseEntity;
@@ -40,10 +39,11 @@ public class Account extends BaseEntity {
 
     public static Account createNew(
             String accountNumber,
+            String ledgerReference,
             String name,
             AccountType type,
             Customer customer,
-            LedgerAccount ledgerAccount
+            CurrencyCode currency
     ) {
         if (accountNumber == null || !accountNumber.matches("[0-9]{14}")) {
             throw new IllegalArgumentException(
@@ -59,18 +59,6 @@ public class Account extends BaseEntity {
             throw new IllegalArgumentException("Customer cannot be null");
         }
 
-        if (ledgerAccount == null) {
-            throw new IllegalArgumentException("Ledger account cannot be null");
-        }
-
-        if (ledgerAccount.getType() != LedgerAccountType.LIABILITY) {
-            throw new IllegalArgumentException("Customer account must use a liability ledger account");
-        }
-
-        if (ledgerAccount.getStatus() != LedgerAccountStatus.ACTIVE) {
-            throw new IllegalArgumentException("Customer account cannot use a closed ledger account");
-        }
-
         String normalizedName = null;
 
         if (name != null) {
@@ -84,6 +72,12 @@ public class Account extends BaseEntity {
                 );
             }
         }
+
+        LedgerAccount ledgerAccount = LedgerAccount.createNew(
+                ledgerReference,
+                LedgerAccountType.LIABILITY,
+                currency
+        );
 
         return new Account(
                 accountNumber,

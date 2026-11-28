@@ -1517,21 +1517,18 @@ class CardPaymentServiceTest {
             Customer customer,
             Long ledgerAccountId
     ) {
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                ledgerReference,
-                LedgerAccountType.LIABILITY,
-                currency
-        );
 
-        ReflectionTestUtils.setField(ledgerAccount, "id", ledgerAccountId);
-
-        return Account.createNew(
+        Account account = Account.createNew(
                 accountNumber,
+                ledgerReference,
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                currency
         );
+        ReflectionTestUtils.setField(account.getLedgerAccount(), "id", ledgerAccountId);
+
+        return account;
     }
 
     private InternalAccount createSettlementAccount(String ledgerReference, CurrencyCode currency, Long ledgerAccountId) {

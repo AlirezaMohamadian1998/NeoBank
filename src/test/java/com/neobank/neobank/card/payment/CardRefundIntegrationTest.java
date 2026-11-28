@@ -9,8 +9,6 @@ import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.ProviderRateCache;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.BankTransaction;
 import com.neobank.neobank.transaction.TransactionStatus;
@@ -328,10 +326,11 @@ class CardRefundIntegrationTest extends CardIntegrationTestSupport {
     private Account createAccount(String accountNumber, String ledgerReference, CurrencyCode currency, Customer owner) {
         return Account.createNew(
                 accountNumber,
+                ledgerReference,
                 "merchant",
                 AccountType.CURRENT,
                 owner,
-                LedgerAccount.createNew(ledgerReference, LedgerAccountType.LIABILITY, currency)
+                currency
         );
     }
 }

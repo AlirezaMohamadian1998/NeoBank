@@ -176,13 +176,7 @@ class CreditCardClosingIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void closingWithoutGraceChargesTheQuotedInterest() throws Exception {
-        Account payoffAccount = accountRepository.save(Account.createNew(
-                "98765432100123",
-                "payoff",
-                AccountType.CURRENT,
-                customer,
-                fundedLedger("2".repeat(32), "1000.00")
-        ));
+        Account payoffAccount = savedPayoffAccount("1000.00");
 
         CreditCardIssueResponse issued = issueAndActivateCreditCard("2026-01-15T10:00:00Z");
         purchase(issued.cardReference(), "600.00", "2".repeat(32), "2026-01-20T10:00:00Z");
@@ -268,13 +262,7 @@ class CreditCardClosingIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void refundAfterClosingGoesToThePayoffAccount() throws Exception {
-        Account payoffAccount = accountRepository.save(Account.createNew(
-                "98765432100123",
-                "payoff",
-                AccountType.CURRENT,
-                customer,
-                fundedLedger("2".repeat(32), "1000.00")
-        ));
+        Account payoffAccount = savedPayoffAccount("1000.00");
 
         CreditCardIssueResponse issued = issueAndActivateCreditCard("2026-01-15T10:00:00Z");
         String purchaseReference = purchase(issued.cardReference(), "600.00", "2".repeat(32), "2026-01-20T10:00:00Z");
@@ -387,10 +375,10 @@ class CreditCardClosingIntegrationTest extends CardIntegrationTestSupport {
         });
     }
 
-    private LedgerAccount fundedLedger(String ledgerReference, String balance) {
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(ledgerReference, LedgerAccountType.LIABILITY, CurrencyCode.TRY);
-        ledgerAccount.credit(new BigDecimal(balance));
-        return ledgerAccount;
+    private Account savedPayoffAccount(String balance) {
+        Account payoffAccount = Account.createNew("98765432100123", "2".repeat(32), "payoff", AccountType.CURRENT, customer, CurrencyCode.TRY);
+        payoffAccount.getLedgerAccount().credit(new BigDecimal(balance));
+        return accountRepository.save(payoffAccount);
     }
 
     private List<CreditStatement> statements() {

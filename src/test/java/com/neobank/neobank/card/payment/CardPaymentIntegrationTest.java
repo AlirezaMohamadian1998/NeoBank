@@ -14,8 +14,6 @@ import com.neobank.neobank.fx.ProviderRateCache;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.internalaccount.InternalAccount;
 import com.neobank.neobank.internalaccount.InternalAccountPurpose;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -228,14 +226,11 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
         Account merchantAccount = accountRepository.save(
                 Account.createNew(
                         "98".repeat(7),
+                        "3".repeat(32),
                         "merchant",
                         AccountType.CURRENT,
                         merchantCustomer,
-                        LedgerAccount.createNew(
-                                "3".repeat(32),
-                                LedgerAccountType.LIABILITY,
-                                CurrencyCode.USD
-                        )
+                        CurrencyCode.USD
                 )
         );
 
@@ -614,14 +609,11 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
         Account merchantAccount = accountRepository.save(
                 Account.createNew(
                         "98".repeat(7),
+                        "3".repeat(32),
                         "merchant",
                         AccountType.CURRENT,
                         merchantCustomer,
-                        LedgerAccount.createNew(
-                                "3".repeat(32),
-                                LedgerAccountType.LIABILITY,
-                                CurrencyCode.TRY
-                        )
+                        CurrencyCode.TRY
                 )
         );
 

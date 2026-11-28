@@ -8,8 +8,6 @@ import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.MutableClock;
 import com.neobank.neobank.shared.MutableClockConfiguration;
 import com.neobank.neobank.shared.money.CurrencyCode;
@@ -64,10 +62,11 @@ class CardTransactionsIntegrationTest extends CardIntegrationTestSupport {
 
         accountRepository.save(Account.createNew(
                 MERCHANT_ACCOUNT_NUMBER,
+                "5".repeat(32),
                 "merchant",
                 AccountType.CURRENT,
                 merchantCustomer,
-                LedgerAccount.createNew("5".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY)
+                CurrencyCode.TRY
         ));
     }
 

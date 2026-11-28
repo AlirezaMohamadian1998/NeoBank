@@ -15,7 +15,6 @@ import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.idempotency.RequestHasher;
 import com.neobank.neobank.ledger.InsufficientFundsException;
 import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.ledger.LedgerPostingService;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.shared.reference.ReferenceGenerator;
@@ -621,21 +620,18 @@ class CardRefundServiceTest {
             Customer customer,
             Long ledgerAccountId
     ) {
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                ledgerReference,
-                LedgerAccountType.LIABILITY,
-                currency
-        );
 
-        ReflectionTestUtils.setField(ledgerAccount, "id", ledgerAccountId);
-
-        return Account.createNew(
+        Account account = Account.createNew(
                 accountNumber,
+                ledgerReference,
                 "Private Account",
                 AccountType.CURRENT,
                 customer,
-                ledgerAccount
+                currency
         );
+        ReflectionTestUtils.setField(account.getLedgerAccount(), "id", ledgerAccountId);
+
+        return account;
     }
 
     private CardPurchaseDetails createCompletedPurchase(

@@ -6,7 +6,6 @@ import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.ledger.LedgerPostingService;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
 import com.neobank.neobank.shared.money.CurrencyCode;
@@ -65,18 +64,13 @@ class TransferTransactionSafetyIntegrationTest extends TransactionIntegrationTes
 
         Account sourceAccount = account;
 
-        LedgerAccount targetLedger = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account targetAccount = Account.createNew(
                 "98765432100123",
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Target Account",
                 AccountType.CURRENT,
                 targetCustomer,
-                targetLedger
+                CurrencyCode.TRY
         );
 
         accountRepository.save(targetAccount);
@@ -147,18 +141,13 @@ class TransferTransactionSafetyIntegrationTest extends TransactionIntegrationTes
 
         Account sourceAccount = account;
 
-        LedgerAccount targetLedger = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account targetAccount = Account.createNew(
                 "98765432100123",
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Target Account",
                 AccountType.CURRENT,
                 targetCustomer,
-                targetLedger
+                CurrencyCode.TRY
         );
 
         accountRepository.save(targetAccount);
@@ -282,18 +271,13 @@ class TransferTransactionSafetyIntegrationTest extends TransactionIntegrationTes
 
         Account sourceAccount = account;
 
-        LedgerAccount targetLedger = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account targetAccount = Account.createNew(
                 "98765432100123",
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Target Account",
                 AccountType.CURRENT,
                 targetCustomer,
-                targetLedger
+                CurrencyCode.TRY
         );
 
         accountRepository.save(targetAccount);
@@ -444,18 +428,13 @@ class TransferTransactionSafetyIntegrationTest extends TransactionIntegrationTes
 
         Account sourceAccount = account;
 
-        LedgerAccount targetLedger = LedgerAccount.createNew(
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                LedgerAccountType.LIABILITY,
-                CurrencyCode.TRY
-        );
-
         Account targetAccount = Account.createNew(
                 "98765432100123",
+                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                 "Target Account",
                 AccountType.CURRENT,
                 targetCustomer,
-                targetLedger
+                CurrencyCode.TRY
         );
 
         accountRepository.save(targetAccount);

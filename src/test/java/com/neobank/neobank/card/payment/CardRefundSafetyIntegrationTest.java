@@ -10,8 +10,6 @@ import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.SimulatedFailureException;
 import com.neobank.neobank.transaction.TransactionStatus;
@@ -84,10 +82,11 @@ class CardRefundSafetyIntegrationTest extends CardIntegrationTestSupport {
 
         accountRepository.save(Account.createNew(
                 MERCHANT_ACCOUNT_NUMBER,
+                "5".repeat(32),
                 "merchant",
                 AccountType.CURRENT,
                 merchantCustomer,
-                LedgerAccount.createNew("5".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY)
+                CurrencyCode.TRY
         ));
 
         purchaseReference = cardPaymentService.makePurchase(

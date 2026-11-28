@@ -10,8 +10,6 @@ import com.neobank.neobank.fx.ProviderRateCache;
 import com.neobank.neobank.fx.dto.FxRateLockResponse;
 import com.neobank.neobank.internalaccount.InternalAccount;
 import com.neobank.neobank.internalaccount.InternalAccountPurpose;
-import com.neobank.neobank.ledger.LedgerAccount;
-import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.MySqlTestContainerConfiguration;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import com.neobank.neobank.transaction.deposit.dto.DepositRequest;
@@ -489,7 +487,6 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
             assertThat(savedTransaction.getNote())
                     .isEqualTo(response.note());
 
-
             assertThat(savedTransaction.getId())
                     .isNotNull();
 
@@ -910,7 +907,6 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
             assertThat(savedTransaction.getNote())
                     .isEqualTo(response.note());
 
-
             assertThat(savedTransaction.getId())
                     .isNotNull();
 
@@ -1106,18 +1102,13 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
             Account sourceAccount = account;
 
-            LedgerAccount targetLedger = LedgerAccount.createNew(
-                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                    LedgerAccountType.LIABILITY,
-                    CurrencyCode.TRY
-            );
-
             Account targetAccount = Account.createNew(
                     "98765432100123",
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                     "Target Account",
                     AccountType.CURRENT,
                     targetCustomer,
-                    targetLedger
+                    CurrencyCode.TRY
             );
 
             accountRepository.save(targetAccount);
@@ -1289,18 +1280,13 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
             Account sourceAccount = account;
 
-            LedgerAccount targetLedger = LedgerAccount.createNew(
-                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                    LedgerAccountType.LIABILITY,
-                    CurrencyCode.EUR
-            );
-
             Account targetAccount = Account.createNew(
                     "98765432100123",
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                     "Target Account",
                     AccountType.CURRENT,
                     targetCustomer,
-                    targetLedger
+                    CurrencyCode.EUR
             );
 
             accountRepository.save(targetAccount);
@@ -1551,18 +1537,13 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
             Account sourceAccount = account;
 
-            LedgerAccount targetLedger = LedgerAccount.createNew(
-                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                    LedgerAccountType.LIABILITY,
-                    CurrencyCode.TRY
-            );
-
             Account targetAccount = Account.createNew(
                     "98765432100123",
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                     "Target Account",
                     AccountType.CURRENT,
                     targetCustomer,
-                    targetLedger
+                    CurrencyCode.TRY
             );
 
             accountRepository.save(targetAccount);
@@ -1620,18 +1601,13 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
             Account sourceAccount = account;
 
-            LedgerAccount targetLedger = LedgerAccount.createNew(
-                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                    LedgerAccountType.LIABILITY,
-                    CurrencyCode.TRY
-            );
-
             Account targetAccount = Account.createNew(
                     "98765432100123",
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                     "Target Account",
                     AccountType.CURRENT,
                     targetCustomer,
-                    targetLedger
+                    CurrencyCode.TRY
             );
 
             accountRepository.save(targetAccount);
@@ -1702,18 +1678,13 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
 
             Account sourceAccount = account;
 
-            LedgerAccount targetLedger = LedgerAccount.createNew(
-                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                    LedgerAccountType.LIABILITY,
-                    CurrencyCode.TRY
-            );
-
             Account targetAccount = Account.createNew(
                     "98765432100123",
+                    "8f3c8a21d9e64b5fa2c17e9084bd6a32",
                     "Target Account",
                     AccountType.CURRENT,
                     targetCustomer,
-                    targetLedger
+                    CurrencyCode.TRY
             );
 
             accountRepository.save(targetAccount);
@@ -1993,19 +1964,14 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     internalAccountTRY.getLedgerAccount()
             );
 
-            LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                    "7".repeat(32),
-                    LedgerAccountType.LIABILITY,
-                    CurrencyCode.TRY
-            );
-
             Account account2 = accountRepository.save(
                     Account.createNew(
                             "14725836995175",
+                            "7".repeat(32),
                             "Test 2",
                             AccountType.CURRENT,
                             customer,
-                            ledgerAccount
+                            CurrencyCode.TRY
                     )
             );
 
@@ -2022,7 +1988,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     new BigDecimal("1200.00"),
                     new BigDecimal("1200.00"),
                     EntryDirection.CREDIT,
-                    ledgerAccount
+                    account2.getLedgerAccount()
             );
 
             LedgerEntry internalDepositEntryAcc2 = depositTransactionAcc2.addEntry(
@@ -2041,19 +2007,14 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     )
             );
 
-            LedgerAccount ledgerAccountForCustomer2 = LedgerAccount.createNew(
-                    "8".repeat(32),
-                    LedgerAccountType.LIABILITY,
-                    CurrencyCode.USD
-            );
-
             Account accountForCustomer2 = accountRepository.save(
                     Account.createNew(
                             "96385274132145",
+                            "8".repeat(32),
                             "Test 3",
                             AccountType.CURRENT,
                             customer2,
-                            ledgerAccountForCustomer2
+                            CurrencyCode.USD
                     )
             );
 
@@ -2070,7 +2031,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     new BigDecimal("1200.00"),
                     new BigDecimal("1200.00"),
                     EntryDirection.CREDIT,
-                    ledgerAccountForCustomer2
+                    accountForCustomer2.getLedgerAccount()
             );
 
             LedgerEntry internalDepositEntryForCustomer2 = depositTransactionForCustomer2.addEntry(
@@ -2109,7 +2070,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.content").isArray())
                     .andExpect(jsonPath("$.content[*].version").doesNotHaveJsonPath())
-                    .andExpect(jsonPath("$.content[*].ledgerAccount").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.content[*].account2.getLedgerAccount()").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.content[*].customer").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.content[*].account").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.content[*].ledgerAccountReference").doesNotHaveJsonPath())
@@ -2180,7 +2141,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.content").isArray())
                     .andExpect(jsonPath("$.content[*].version").doesNotHaveJsonPath())
-                    .andExpect(jsonPath("$.content[*].ledgerAccount").doesNotHaveJsonPath())
+                    .andExpect(jsonPath("$.content[*].account2.getLedgerAccount()").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.content[*].customer").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.content[*].account").doesNotHaveJsonPath())
                     .andExpect(jsonPath("$.content[*].ledgerAccountReference").doesNotHaveJsonPath())
@@ -2283,19 +2244,14 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     )
             );
 
-            LedgerAccount ledgerAccountForCustomer2 = LedgerAccount.createNew(
-                    "8".repeat(32),
-                    LedgerAccountType.LIABILITY,
-                    CurrencyCode.USD
-            );
-
             Account accountForCustomer2 = accountRepository.save(
                     Account.createNew(
                             "96385274132145",
+                            "8".repeat(32),
                             "Test 3",
                             AccountType.CURRENT,
                             customer2,
-                            ledgerAccountForCustomer2
+                            CurrencyCode.USD
                     )
             );
 
@@ -2312,7 +2268,7 @@ class TransactionApiIntegrationTest extends TransactionIntegrationTestSupport {
                     new BigDecimal("1200.00"),
                     new BigDecimal("1200.00"),
                     EntryDirection.CREDIT,
-                    ledgerAccountForCustomer2
+                    accountForCustomer2.getLedgerAccount()
             );
 
             LedgerEntry internalDepositEntryForCustomer2 = depositTransactionForCustomer2.addEntry(
