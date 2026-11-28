@@ -16,8 +16,10 @@ import com.neobank.neobank.idempotency.IdempotencyKeyRaceException;
 import com.neobank.neobank.idempotency.IdempotencyResultNotFoundException;
 import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
 import com.neobank.neobank.ledger.InsufficientFundsException;
+import com.neobank.neobank.transaction.deposit.InvalidDepositException;
 import com.neobank.neobank.transaction.history.InvalidHistorySortException;
 import com.neobank.neobank.transaction.transfer.InvalidTransferException;
+import com.neobank.neobank.transaction.withdrawal.InvalidWithdrawalException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.Nullable;
 import org.springframework.dao.ConcurrencyFailureException;
@@ -170,6 +172,30 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
         problemDetail.setTitle("Invalid transfer");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidDepositException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidDepositException(
+            InvalidDepositException ex,
+            WebRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
+        problemDetail.setTitle("Invalid deposit");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(InvalidWithdrawalException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidWithdrawalException(
+            InvalidWithdrawalException ex,
+            WebRequest request
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
+        problemDetail.setTitle("Invalid withdrawal");
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
     }
