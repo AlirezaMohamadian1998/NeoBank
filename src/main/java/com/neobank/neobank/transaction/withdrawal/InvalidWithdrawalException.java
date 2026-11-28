@@ -1,7 +1,10 @@
 package com.neobank.neobank.transaction.withdrawal;
 
-public class InvalidWithdrawalException extends RuntimeException {
+import com.neobank.neobank.shared.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class InvalidWithdrawalException extends ApiException {
     public InvalidWithdrawalException(String message) {
-        super(message);
+        super(HttpStatus.BAD_REQUEST, "Invalid withdrawal", message);
     }
 }

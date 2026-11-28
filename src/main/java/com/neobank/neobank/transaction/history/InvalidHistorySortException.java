@@ -1,7 +1,10 @@
 package com.neobank.neobank.transaction.history;
 
-public class InvalidHistorySortException extends RuntimeException {
+import com.neobank.neobank.shared.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class InvalidHistorySortException extends ApiException {
     public InvalidHistorySortException(String message) {
-        super(message);
+        super(HttpStatus.BAD_REQUEST, "Invalid history sort", message);
     }
 }

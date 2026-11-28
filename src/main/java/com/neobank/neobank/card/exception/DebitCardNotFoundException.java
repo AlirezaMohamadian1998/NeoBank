@@ -1,7 +1,10 @@
 package com.neobank.neobank.card.exception;
 
-public class DebitCardNotFoundException extends RuntimeException {
+import com.neobank.neobank.shared.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class DebitCardNotFoundException extends ApiException {
     public DebitCardNotFoundException(String message) {
-        super(message);
+        super(HttpStatus.NOT_FOUND, "Debit card not found", message);
     }
 }

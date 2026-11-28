@@ -1,7 +1,10 @@
 package com.neobank.neobank.card.exception;
 
-public class InvalidCreditCardPayoutException extends RuntimeException {
+import com.neobank.neobank.shared.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class InvalidCreditCardPayoutException extends ApiException {
     public InvalidCreditCardPayoutException(String message) {
-        super(message);
+        super(HttpStatus.BAD_REQUEST, "Invalid credit card payout", message);
     }
 }
