@@ -123,7 +123,7 @@ Every row in a transaction list includes the `transactionReference` of the movem
 
 - The request names the amount and the currency of the cash (`requestedCurrency`).
 - The bank side is the internal settlement account in that currency. The customer's account is credited or debited in its own currency.
-- When the two currencies differ, the request must include an FX rate lock whose base is the requested currency. A lock sent for a same-currency operation is rejected.
+- When the two currencies differ, the request must include an FX rate lock whose base is the requested currency. A lock sent for a same-currency operation is rejected with `400 Bad Request`.
 - A withdrawal larger than the balance is rejected with `409 Conflict`.
 
 ### Transfers
