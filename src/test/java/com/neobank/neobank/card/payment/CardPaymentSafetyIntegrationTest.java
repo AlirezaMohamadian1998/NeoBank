@@ -5,14 +5,13 @@ import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.ProviderRateCache;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
-import com.neobank.neobank.internalaccount.InternalAccount;
 import com.neobank.neobank.internalaccount.InternalAccountPurpose;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
@@ -43,7 +42,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 
-class CardPaymentSafetyIntegrationTest extends DebitCardIntegrationTestSupport {
+class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
 
     @Autowired
     private CardPaymentService cardPaymentService;
@@ -491,20 +490,5 @@ class CardPaymentSafetyIntegrationTest extends DebitCardIntegrationTestSupport {
 
         assertThat(ledgerEntryRepository.count())
                 .isEqualTo(4);
-    }
-
-    private InternalAccount createSettlementAccount(String ledgerReference, CurrencyCode currency) {
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                ledgerReference,
-                LedgerAccountType.ASSET,
-                currency
-        );
-
-        ledgerAccount.debit(new BigDecimal("10000.00"));
-
-        return InternalAccount.createNew(
-                InternalAccountPurpose.SETTLEMENT,
-                ledgerAccount
-        );
     }
 }

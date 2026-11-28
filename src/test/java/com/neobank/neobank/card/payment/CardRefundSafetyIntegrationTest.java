@@ -5,7 +5,7 @@ import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.payment.dto.CardRefundResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
@@ -41,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 
-class CardRefundSafetyIntegrationTest extends DebitCardIntegrationTestSupport {
+class CardRefundSafetyIntegrationTest extends CardIntegrationTestSupport {
 
     private static final String CARD_REFERENCE = "2".repeat(32);
     private static final String MERCHANT_EMAIL = "merchant@example.com";

@@ -2,7 +2,7 @@ package com.neobank.neobank.card.debit;
 
 import com.neobank.neobank.card.CardStatus;
 import com.neobank.neobank.card.debit.dto.DebitCardRetrieveResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import org.junit.jupiter.api.Test;
@@ -17,7 +17,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-class DebitCardLifecycleIntegrationTest extends DebitCardIntegrationTestSupport {
+class DebitCardLifecycleIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void customerCanChangeOwnedCardStatusAndChangesArePersisted() throws Exception {

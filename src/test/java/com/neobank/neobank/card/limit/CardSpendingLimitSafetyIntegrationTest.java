@@ -5,7 +5,7 @@ import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.payment.CardPaymentService;
 import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.internalaccount.InternalAccount;
 import com.neobank.neobank.internalaccount.InternalAccountPurpose;
@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.doAnswer;
 
-class CardSpendingLimitSafetyIntegrationTest extends DebitCardIntegrationTestSupport {
+class CardSpendingLimitSafetyIntegrationTest extends CardIntegrationTestSupport {
 
     private static final String CARD_REFERENCE = "2".repeat(32);
 

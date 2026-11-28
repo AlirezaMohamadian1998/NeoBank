@@ -1,7 +1,7 @@
 package com.neobank.neobank.card.debit;
 
 import com.neobank.neobank.card.debit.dto.DebitCardIssueResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.idempotency.IdempotencyService;
 import com.neobank.neobank.transaction.SimulatedFailureException;
@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.doAnswer;
 
-class DebitCardIssuanceSafetyIntegrationTest extends DebitCardIntegrationTestSupport {
+class DebitCardIssuanceSafetyIntegrationTest extends CardIntegrationTestSupport {
 
     private static final long CONCURRENCY_TIMEOUT_SECONDS = 20;
 

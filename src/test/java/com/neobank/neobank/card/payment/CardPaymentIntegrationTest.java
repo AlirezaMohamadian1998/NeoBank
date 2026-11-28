@@ -6,7 +6,7 @@ import com.neobank.neobank.card.CardStatus;
 import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxProviderRates;
@@ -36,7 +36,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
+class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
 
     @MockitoBean
     private ProviderRateCache providerRateCache;
@@ -664,20 +664,5 @@ class CardPaymentIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(jsonPath("$.content[0].merchantName").doesNotExist())
                 .andExpect(jsonPath("$.content[0].cardReference").doesNotExist())
                 .andExpect(jsonPath("$.content[0].cardLastFourDigits").doesNotExist());
-    }
-
-    private InternalAccount createSettlementAccount(String ledgerReference, CurrencyCode currency) {
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(
-                ledgerReference,
-                LedgerAccountType.ASSET,
-                currency
-        );
-
-        ledgerAccount.debit(new BigDecimal("10000.00"));
-
-        return InternalAccount.createNew(
-                InternalAccountPurpose.SETTLEMENT,
-                ledgerAccount
-        );
     }
 }

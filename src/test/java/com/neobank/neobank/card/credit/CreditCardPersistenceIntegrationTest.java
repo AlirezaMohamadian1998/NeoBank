@@ -1,7 +1,7 @@
 package com.neobank.neobank.card.credit;
 
 import com.neobank.neobank.card.Card;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.creditaccount.CreditAccount;
 import com.neobank.neobank.shared.money.CurrencyCode;
@@ -15,7 +15,7 @@ import java.time.YearMonth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class CreditCardPersistenceIntegrationTest extends DebitCardIntegrationTestSupport {
+class CreditCardPersistenceIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void creditCardIsLoadedAsCreditCardWithItsCreditAccount() {

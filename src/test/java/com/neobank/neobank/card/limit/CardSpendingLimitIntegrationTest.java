@@ -4,14 +4,11 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.debit.DebitCard;
 import com.neobank.neobank.card.limit.dto.CardSpendingLimitsUpdateRequest;
-import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.ProviderRateCache;
-import com.neobank.neobank.internalaccount.InternalAccount;
-import com.neobank.neobank.internalaccount.InternalAccountPurpose;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
@@ -33,7 +30,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
+class CardSpendingLimitIntegrationTest extends CardIntegrationTestSupport {
 
     private static final String CARD_REFERENCE = "2".repeat(32);
 
@@ -65,7 +62,7 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
 
     @Test
     void purchaseOverPerTransactionLimitIsRejectedWithoutPersistingAnything() throws Exception {
-        purchase(null, "100.01", CurrencyCode.TRY, "1".repeat(32))
+        purchase(CARD_REFERENCE, null, "100.01", CurrencyCode.TRY, "1".repeat(32))
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Card limit exceeded"))
@@ -81,17 +78,17 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
 
     @Test
     void purchasesAddUpUntilDailyLimitIsReached() throws Exception {
-        purchase(null, "100.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
-        purchase(null, "100.00", CurrencyCode.TRY, "3".repeat(32)).andExpect(status().isCreated());
+        purchase(CARD_REFERENCE, null, "100.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
+        purchase(CARD_REFERENCE, null, "100.00", CurrencyCode.TRY, "3".repeat(32)).andExpect(status().isCreated());
 
-        purchase(null, "50.01", CurrencyCode.TRY, "4".repeat(32))
+        purchase(CARD_REFERENCE, null, "50.01", CurrencyCode.TRY, "4".repeat(32))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Card limit exceeded"))
                 .andExpect(jsonPath("$.detail").value("Purchase exceeds the card's daily limit"));
 
         assertThat(spentToday()).isEqualByComparingTo("200.00");
 
-        purchase(null, "50.00", CurrencyCode.TRY, "5".repeat(32)).andExpect(status().isCreated());
+        purchase(CARD_REFERENCE, null, "50.00", CurrencyCode.TRY, "5".repeat(32)).andExpect(status().isCreated());
 
         assertThat(spentToday()).isEqualByComparingTo("250.00");
         assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("9750.00");
@@ -100,8 +97,8 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
 
     @Test
     void replayedPurchaseIsNotCountedTwice() throws Exception {
-        purchase(null, "100.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
-        purchase(null, "100.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
+        purchase(CARD_REFERENCE, null, "100.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
+        purchase(CARD_REFERENCE, null, "100.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
 
         assertThat(spentToday()).isEqualByComparingTo("100.00");
     }
@@ -110,13 +107,13 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
     void crossCurrencyPurchaseIsCountedInFundingCurrency() throws Exception {
         stubTryPerUsd("40.00");
 
-        purchase(null, "2.00", CurrencyCode.USD, "1".repeat(32))
+        purchase(CARD_REFERENCE, null, "2.00", CurrencyCode.USD, "1".repeat(32))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.debitedAmount").value(80.00));
 
         assertThat(spentToday()).isEqualByComparingTo("80.00");
 
-        purchase(null, "3.00", CurrencyCode.USD, "3".repeat(32))
+        purchase(CARD_REFERENCE, null, "3.00", CurrencyCode.USD, "3".repeat(32))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value("Purchase exceeds the card's per-transaction limit"));
     }
@@ -129,7 +126,7 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
         yesterday.add(new BigDecimal("50.00"), debitCard.getSpendingLimits());
         cardDailySpendRepository.save(yesterday);
 
-        purchase(null, "100.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
+        purchase(CARD_REFERENCE, null, "100.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
 
         assertThat(spentToday()).isEqualByComparingTo("100.00");
         assertThat(cardDailySpendRepository.count()).isEqualTo(2);
@@ -151,7 +148,7 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
                 )
         );
 
-        String body = purchase("98".repeat(7), "100.00", CurrencyCode.TRY, "1".repeat(32))
+        String body = purchase(CARD_REFERENCE, "98".repeat(7), "100.00", CurrencyCode.TRY, "1".repeat(32))
                 .andExpect(status().isCreated())
                 .andReturn()
                 .getResponse()
@@ -170,7 +167,7 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
 
     @Test
     void cardResponsesShowLimitsAndTodaysSpending() throws Exception {
-        purchase(null, "40.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
+        purchase(CARD_REFERENCE, null, "40.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/debit-cards/{cardReference}", CARD_REFERENCE)
                         .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
@@ -201,18 +198,18 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(jsonPath("$.spendingLimits.perTransactionLimit").value(500.00))
                 .andExpect(jsonPath("$.spendingLimits.dailyLimit").value(1000.00));
 
-        purchase(null, "300.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
+        purchase(CARD_REFERENCE, null, "300.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
 
         assertThat(spentToday()).isEqualByComparingTo("300.00");
     }
 
     @Test
     void loweringDailyLimitBelowTodaysSpendingBlocksFurtherPurchases() throws Exception {
-        purchase(null, "100.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
+        purchase(CARD_REFERENCE, null, "100.00", CurrencyCode.TRY, "1".repeat(32)).andExpect(status().isCreated());
 
         updateLimits(CARD_REFERENCE, "50.00", "80.00", customer.getEmail()).andExpect(status().isOk());
 
-        purchase(null, "1.00", CurrencyCode.TRY, "3".repeat(32))
+        purchase(CARD_REFERENCE, null, "1.00", CurrencyCode.TRY, "3".repeat(32))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value("Purchase exceeds the card's daily limit"));
     }
@@ -271,22 +268,6 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
         return debitCardRepository.findByCardReference(CARD_REFERENCE).orElseThrow().getSpendingLimits();
     }
 
-    private ResultActions purchase(String merchantAccountNumber, String amount, CurrencyCode currency, String idempotencyKey) throws Exception {
-        CardPurchaseRequest request = new CardPurchaseRequest(
-                merchantAccountNumber,
-                currency,
-                new BigDecimal(amount),
-                null,
-                "Test merchant"
-        );
-
-        return mockMvc.perform(post("/api/cards/{cardReference}/payments", CARD_REFERENCE)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request))
-                .header("Idempotency-Key", idempotencyKey)
-                .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))));
-    }
-
     private BigDecimal spentToday() {
         return cardDailySpendRepository.findByCardAndSpendDate(debitCard, LocalDate.now(clock))
                 .orElseThrow()
@@ -310,12 +291,5 @@ class CardSpendingLimitIntegrationTest extends DebitCardIntegrationTestSupport {
                         ),
                         Instant.now()
                 ));
-    }
-
-    private InternalAccount createSettlementAccount(String ledgerReference, CurrencyCode currency) {
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(ledgerReference, LedgerAccountType.ASSET, currency);
-        ledgerAccount.debit(new BigDecimal("10000.00"));
-
-        return InternalAccount.createNew(InternalAccountPurpose.SETTLEMENT, ledgerAccount);
     }
 }

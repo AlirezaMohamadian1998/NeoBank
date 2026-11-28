@@ -5,7 +5,7 @@ import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.CardStatus;
 import com.neobank.neobank.card.debit.dto.DebitCardRetrieveResponse;
 import com.neobank.neobank.card.limit.dto.CardSpendingLimitsResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.ledger.LedgerAccount;
@@ -31,7 +31,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-class DebitCardQueryIntegrationTest extends DebitCardIntegrationTestSupport {
+class DebitCardQueryIntegrationTest extends CardIntegrationTestSupport {
 
     private static final RecursiveComparisonConfiguration BIG_DECIMAL_BY_VALUE = RecursiveComparisonConfiguration.builder()
             .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)

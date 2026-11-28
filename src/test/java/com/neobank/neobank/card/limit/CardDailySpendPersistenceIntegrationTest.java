@@ -1,7 +1,7 @@
 package com.neobank.neobank.card.limit;
 
 import com.neobank.neobank.card.debit.DebitCard;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -14,7 +14,7 @@ import java.time.YearMonth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class CardDailySpendPersistenceIntegrationTest extends DebitCardIntegrationTestSupport {
+class CardDailySpendPersistenceIntegrationTest extends CardIntegrationTestSupport {
 
     private static final LocalDate TODAY = LocalDate.of(2026, 11, 20);
 

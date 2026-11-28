@@ -2,10 +2,7 @@ package com.neobank.neobank.card.credit;
 
 import com.neobank.neobank.card.credit.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.credit.dto.CreditCardIssueResponse;
-import com.neobank.neobank.card.credit.dto.CreditCardRepaymentRequest;
-import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
-import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.creditaccount.CreditAccount;
 import com.neobank.neobank.creditaccount.CreditStatement;
 import com.neobank.neobank.creditaccount.CreditStatementService;
@@ -40,16 +37,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Import(MutableClockConfiguration.class)
-class CreditCardTransactionsIntegrationTest extends DebitCardIntegrationTestSupport {
+class CreditCardTransactionsIntegrationTest extends CardIntegrationTestSupport {
 
     @Autowired
     private MutableClock mutableClock;
 
     @Autowired
     private CreditStatementService creditStatementService;
-
-    @Autowired
-    private CreditCardRepository creditCardRepository;
 
     @BeforeEach
     void setUpInterestIncomeAccount() {
@@ -71,7 +65,7 @@ class CreditCardTransactionsIntegrationTest extends DebitCardIntegrationTestSupp
         String firstPurchaseReference = purchase(issued.cardReference(), "1000.00", "2".repeat(32), "2026-01-20T10:00:00Z");
         String secondPurchaseReference = purchase(issued.cardReference(), "300.00", "3".repeat(32), "2026-01-21T10:00:00Z");
         refund(secondPurchaseReference, "4".repeat(32), "2026-01-25T10:00:00Z");
-        repay(issued.cardReference(), "400.00", "5".repeat(32), "2026-02-01T10:00:00Z");
+        repayAt(issued.cardReference(), "400.00", "5".repeat(32), "2026-02-01T10:00:00Z");
         purchase(issued.cardReference(), "50.00", "6".repeat(32), "2026-02-15T00:00:00Z");
 
         close(issued.cardReference(), "2026-02-15T00:15:00Z");
@@ -162,7 +156,7 @@ class CreditCardTransactionsIntegrationTest extends DebitCardIntegrationTestSupp
         refund(refundedPurchaseReference, "4".repeat(32), "2026-01-25T10:00:00Z");
         close(issued.cardReference(), "2026-02-15T00:15:00Z");
 
-        repay(issued.cardReference(), "100.00", "5".repeat(32), "2026-02-20T10:00:00Z");
+        repayAt(issued.cardReference(), "100.00", "5".repeat(32), "2026-02-20T10:00:00Z");
         close(issued.cardReference(), "2026-03-15T00:15:00Z");
 
         purchase(issued.cardReference(), "50.00", "6".repeat(32), "2026-03-20T10:00:00Z");
@@ -189,9 +183,9 @@ class CreditCardTransactionsIntegrationTest extends DebitCardIntegrationTestSupp
         CreditCardIssueResponse issued = issueAndActivateCreditCard("2026-01-15T10:00:00Z");
 
         purchase(issued.cardReference(), "600.00", "2".repeat(32), "2026-01-20T10:00:00Z");
-        repay(issued.cardReference(), "100.00", "3".repeat(32), "2026-01-25T10:00:00Z");
+        repayAt(issued.cardReference(), "100.00", "3".repeat(32), "2026-01-25T10:00:00Z");
         purchase(issued.cardReference(), "50.00", "4".repeat(32), "2026-02-01T10:00:00Z");
-        repay(issued.cardReference(), "20.00", "5".repeat(32), "2026-02-05T10:00:00Z");
+        repayAt(issued.cardReference(), "20.00", "5".repeat(32), "2026-02-05T10:00:00Z");
 
         JsonNode repayments = transactions(issued.cardReference(), "?type=CREDIT_CARD_REPAYMENT");
 
@@ -285,25 +279,7 @@ class CreditCardTransactionsIntegrationTest extends DebitCardIntegrationTestSupp
     private String purchase(String cardReference, String amount, String idempotencyKey, String at) throws Exception {
         mutableClock.setInstant(Instant.parse(at));
 
-        CardPurchaseRequest request = new CardPurchaseRequest(
-                account.getAccountNumber(),
-                CurrencyCode.TRY,
-                new BigDecimal(amount),
-                null,
-                "Test merchant"
-        );
-
-        String body = mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        return objectMapper.readValue(body, CardPurchaseResponse.class).transactionReference();
+        return transactionReferenceOf(purchase(cardReference, account.getAccountNumber(), amount, CurrencyCode.TRY, idempotencyKey));
     }
 
     private void refund(String purchaseReference, String idempotencyKey, String at) throws Exception {
@@ -316,16 +292,9 @@ class CreditCardTransactionsIntegrationTest extends DebitCardIntegrationTestSupp
                 .andExpect(status().isCreated());
     }
 
-    private void repay(String cardReference, String amount, String idempotencyKey, String at) throws Exception {
+    private void repayAt(String cardReference, String amount, String idempotencyKey, String at) throws Exception {
         mutableClock.setInstant(Instant.parse(at));
 
-        mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", cardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new CreditCardRepaymentRequest(account.getAccountNumber(), new BigDecimal(amount), null)
-                        ))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isCreated());
+        repay(cardReference, amount, null, idempotencyKey).andExpect(status().isCreated());
     }
 }

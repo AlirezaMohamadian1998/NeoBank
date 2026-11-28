@@ -3,16 +3,12 @@ package com.neobank.neobank.card.payment;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.debit.DebitCard;
-import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
-import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.payment.dto.CardRefundResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxProviderRates;
 import com.neobank.neobank.fx.ProviderRateCache;
-import com.neobank.neobank.internalaccount.InternalAccount;
-import com.neobank.neobank.internalaccount.InternalAccountPurpose;
 import com.neobank.neobank.ledger.LedgerAccount;
 import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
@@ -37,7 +33,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-class CardRefundIntegrationTest extends DebitCardIntegrationTestSupport {
+class CardRefundIntegrationTest extends CardIntegrationTestSupport {
 
     private static final String CARD_REFERENCE = "2".repeat(32);
     private static final String MERCHANT_EMAIL = "merchant@example.com";
@@ -297,25 +293,7 @@ class CardRefundIntegrationTest extends DebitCardIntegrationTestSupport {
     }
 
     private String purchase(String merchantAccountNumber, String amount, CurrencyCode currency) throws Exception {
-        CardPurchaseRequest request = new CardPurchaseRequest(
-                merchantAccountNumber,
-                currency,
-                new BigDecimal(amount),
-                null,
-                "Test merchant"
-        );
-
-        String body = mockMvc.perform(post("/api/cards/{cardReference}/payments", CARD_REFERENCE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "c".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        return objectMapper.readValue(body, CardPurchaseResponse.class).transactionReference();
+        return transactionReferenceOf(purchase(CARD_REFERENCE, merchantAccountNumber, amount, currency, "c".repeat(32)));
     }
 
     private ResultActions refund(String merchantAccountNumber, String purchaseReference, String idempotencyKey, String email) throws Exception {
@@ -355,12 +333,5 @@ class CardRefundIntegrationTest extends DebitCardIntegrationTestSupport {
                 owner,
                 LedgerAccount.createNew(ledgerReference, LedgerAccountType.LIABILITY, currency)
         );
-    }
-
-    private InternalAccount createSettlementAccount(String ledgerReference, CurrencyCode currency) {
-        LedgerAccount ledgerAccount = LedgerAccount.createNew(ledgerReference, LedgerAccountType.ASSET, currency);
-        ledgerAccount.debit(new BigDecimal("10000.00"));
-
-        return InternalAccount.createNew(InternalAccountPurpose.SETTLEMENT, ledgerAccount);
     }
 }

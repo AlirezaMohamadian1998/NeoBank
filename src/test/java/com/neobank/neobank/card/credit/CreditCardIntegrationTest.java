@@ -4,11 +4,10 @@ import com.neobank.neobank.card.credit.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.credit.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.credit.dto.CreditCardPayoutRequest;
 import com.neobank.neobank.card.credit.dto.CreditCardPayoutResponse;
-import com.neobank.neobank.card.credit.dto.CreditCardRepaymentRequest;
 import com.neobank.neobank.card.credit.dto.CreditCardRepaymentResponse;
 import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
 import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.creditaccount.CreditAccount;
 import com.neobank.neobank.creditaccount.CreditStatementService;
 import com.neobank.neobank.fx.FxProviderRates;
@@ -22,7 +21,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -34,7 +32,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
+class CreditCardIntegrationTest extends CardIntegrationTestSupport {
 
     @MockitoBean
     private ProviderRateCache providerRateCache;
@@ -43,13 +41,7 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
     private FxRateService fxRateService;
 
     @Autowired
-    private CreditCardRepository creditCardRepository;
-
-    @Autowired
     private CreditStatementService creditStatementService;
-
-    @Autowired
-    private TransactionTemplate transactionTemplate;
 
     @Test
     void issuingTwiceWithSameIdempotencyKeyCreatesOneCreditCardAndAccount() throws Exception {
@@ -72,17 +64,17 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
 
-        purchase(issued.cardReference(), "100000.00", "2".repeat(32))
+        purchase(issued.cardReference(), account.getAccountNumber(), "100000.00", CurrencyCode.TRY, "2".repeat(32))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.linkedAccountNumber").value(issued.creditAccountNumber()))
                 .andExpect(jsonPath("$.balanceAfter").value(100000.00));
 
-        purchase(issued.cardReference(), "50000.01", "3".repeat(32))
+        purchase(issued.cardReference(), account.getAccountNumber(), "50000.01", CurrencyCode.TRY, "3".repeat(32))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Credit limit exceeded"))
                 .andExpect(jsonPath("$.detail").value("Amount exceeds the available credit of 50000.00"));
 
-        purchase(issued.cardReference(), "50000.00", "4".repeat(32))
+        purchase(issued.cardReference(), account.getAccountNumber(), "50000.00", CurrencyCode.TRY, "4".repeat(32))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/credit-cards/{cardReference}", issued.cardReference())
@@ -167,14 +159,14 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
     void repaymentFreesUpCreditAndShowsInTheSourceAccountHistory() throws Exception {
         CreditCardIssueResponse issued = issueAndActivateCreditCard();
 
-        purchase(issued.cardReference(), "150000.00", "2".repeat(32))
+        purchase(issued.cardReference(), account.getAccountNumber(), "150000.00", CurrencyCode.TRY, "2".repeat(32))
                 .andExpect(status().isCreated());
 
-        purchase(issued.cardReference(), "0.01", "3".repeat(32))
+        purchase(issued.cardReference(), account.getAccountNumber(), "0.01", CurrencyCode.TRY, "3".repeat(32))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Credit limit exceeded"));
 
-        repay(issued.cardReference(), "50000.00", "4".repeat(32))
+        repay(issued.cardReference(), "50000.00", null, "4".repeat(32))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.creditAccountNumber").value(issued.creditAccountNumber()))
                 .andExpect(jsonPath("$.sourceAccountNumber").value(account.getAccountNumber()))
@@ -206,17 +198,17 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
     void repayingTwiceWithSameIdempotencyKeyRepaysOnce() throws Exception {
         CreditCardIssueResponse issued = issueAndActivateCreditCard();
 
-        purchase(issued.cardReference(), "1000.00", "2".repeat(32))
+        purchase(issued.cardReference(), account.getAccountNumber(), "1000.00", CurrencyCode.TRY, "2".repeat(32))
                 .andExpect(status().isCreated());
 
         CreditCardRepaymentResponse first = objectMapper.readValue(
-                repay(issued.cardReference(), "400.00", "3".repeat(32))
+                repay(issued.cardReference(), "400.00", null, "3".repeat(32))
                         .andExpect(status().isCreated())
                         .andReturn().getResponse().getContentAsString(),
                 CreditCardRepaymentResponse.class
         );
 
-        repay(issued.cardReference(), "400.00", "3".repeat(32))
+        repay(issued.cardReference(), "400.00", null, "3".repeat(32))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.transactionReference").value(first.transactionReference()))
                 .andExpect(jsonPath("$.sourceAccountBalanceAfter").value(600.00))
@@ -230,10 +222,10 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
     void repaymentOverTheOutstandingBalanceIsRejected() throws Exception {
         CreditCardIssueResponse issued = issueAndActivateCreditCard();
 
-        purchase(issued.cardReference(), "1000.00", "2".repeat(32))
+        purchase(issued.cardReference(), account.getAccountNumber(), "1000.00", CurrencyCode.TRY, "2".repeat(32))
                 .andExpect(status().isCreated());
 
-        repay(issued.cardReference(), "1000.01", "3".repeat(32))
+        repay(issued.cardReference(), "1000.01", null, "3".repeat(32))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Repayment exceeds balance"))
                 .andExpect(jsonPath("$.detail").value("Repayment exceeds the outstanding balance of 1000.00"));
@@ -247,13 +239,13 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
         CreditCardIssueResponse issued = issueAndActivateCreditCard();
 
         String purchaseReference = objectMapper.readValue(
-                purchase(issued.cardReference(), "1000.00", "2".repeat(32))
+                purchase(issued.cardReference(), account.getAccountNumber(), "1000.00", CurrencyCode.TRY, "2".repeat(32))
                         .andExpect(status().isCreated())
                         .andReturn().getResponse().getContentAsString(),
                 CardPurchaseResponse.class
         ).transactionReference();
 
-        repay(issued.cardReference(), "1000.00", "3".repeat(32))
+        repay(issued.cardReference(), "1000.00", null, "3".repeat(32))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.creditCardBalanceAfter").value(0.00));
 
@@ -274,7 +266,7 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(jsonPath("$.balance").value(-1000.00))
                 .andExpect(jsonPath("$.availableCredit").value(151000.00));
 
-        repay(issued.cardReference(), "0.01", "5".repeat(32))
+        repay(issued.cardReference(), "0.01", null, "5".repeat(32))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value("Repayment exceeds the outstanding balance of 0.00"));
     }
@@ -324,7 +316,7 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
     void repaymentFromAccountInAnotherCurrencyWithoutALockIsRejected() throws Exception {
         CreditCardIssueResponse issued = issueCreditCard(CurrencyCode.USD, "1".repeat(32));
 
-        repay(issued.cardReference(), "10.00", "2".repeat(32))
+        repay(issued.cardReference(), "10.00", null, "2".repeat(32))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Fx rate lock unavailable"))
                 .andExpect(jsonPath("$.detail").value("Lock ID is required for cross-currency repayment"));
@@ -389,7 +381,7 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
     void payoutWithDebtIsRejected() throws Exception {
         CreditCardIssueResponse issued = issueAndActivateCreditCard();
 
-        purchase(issued.cardReference(), "100.00", "2".repeat(32))
+        purchase(issued.cardReference(), account.getAccountNumber(), "100.00", CurrencyCode.TRY, "2".repeat(32))
                 .andExpect(status().isCreated());
 
         payOut(issued.cardReference(), null, "3".repeat(32))
@@ -440,7 +432,7 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(jsonPath("$.title").value("Credit account closed"))
                 .andExpect(jsonPath("$.detail").value("Credit account is closed"));
 
-        repay(issued.cardReference(), "10.00", "3".repeat(32))
+        repay(issued.cardReference(), "10.00", null, "3".repeat(32))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Credit account closed"));
     }
@@ -457,27 +449,6 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
                 .andExpect(status().isOk());
 
         return issued;
-    }
-
-    private ResultActions repay(String cardReference, String amount, String idempotencyKey) throws Exception {
-        return repay(cardReference, amount, null, idempotencyKey);
-    }
-
-    private ResultActions repay(String cardReference, String amount, String lockId, String idempotencyKey) throws Exception {
-        return mockMvc.perform(post("/api/credit-cards/{cardReference}/repayments", cardReference)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(
-                        new CreditCardRepaymentRequest(account.getAccountNumber(), new BigDecimal(amount), lockId)
-                ))
-                .header("Idempotency-Key", idempotencyKey)
-                .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))));
-    }
-
-    private void giveCreditBalance(String cardReference, String amount) {
-        transactionTemplate.executeWithoutResult(status ->
-                creditCardRepository.findByCardReference(cardReference).orElseThrow()
-                        .getCreditAccount().getLedgerAccount().credit(new BigDecimal(amount))
-        );
     }
 
     private ResultActions payOut(String cardReference, String lockId, String idempotencyKey) throws Exception {
@@ -509,21 +480,5 @@ class CreditCardIntegrationTest extends DebitCardIntegrationTestSupport {
                 .getContentAsString();
 
         return objectMapper.readValue(body, CreditCardIssueResponse.class);
-    }
-
-    private ResultActions purchase(String cardReference, String amount, String idempotencyKey) throws Exception {
-        CardPurchaseRequest request = new CardPurchaseRequest(
-                account.getAccountNumber(),
-                CurrencyCode.TRY,
-                new BigDecimal(amount),
-                null,
-                "Test merchant"
-        );
-
-        return mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request))
-                .header("Idempotency-Key", idempotencyKey)
-                .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))));
     }
 }

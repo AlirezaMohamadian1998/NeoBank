@@ -4,7 +4,7 @@ import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.CardStatus;
 import com.neobank.neobank.card.debit.dto.DebitCardIssueResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.idempotency.IdempotencyRecord;
 import com.neobank.neobank.ledger.LedgerAccount;
@@ -21,7 +21,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-class DebitCardIssuanceIntegrationTest extends DebitCardIntegrationTestSupport {
+class DebitCardIssuanceIntegrationTest extends CardIntegrationTestSupport {
 
     @Test
     void authenticatedCustomerCanIssueDebitCardForOwnedCurrentAccount() throws Exception {

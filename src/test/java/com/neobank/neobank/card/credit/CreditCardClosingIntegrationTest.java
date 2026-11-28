@@ -7,9 +7,7 @@ import com.neobank.neobank.card.credit.dto.CreditCardClosingResponse;
 import com.neobank.neobank.card.credit.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.credit.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.credit.dto.PayoffQuoteResponse;
-import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
-import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
-import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
+import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.creditaccount.CreditStatement;
 import com.neobank.neobank.creditaccount.CreditStatementJob;
 import com.neobank.neobank.internalaccount.InternalAccount;
@@ -28,7 +26,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
@@ -45,19 +42,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Import(MutableClockConfiguration.class)
-class CreditCardClosingIntegrationTest extends DebitCardIntegrationTestSupport {
+class CreditCardClosingIntegrationTest extends CardIntegrationTestSupport {
 
     @Autowired
     private MutableClock mutableClock;
 
     @Autowired
-    private CreditCardRepository creditCardRepository;
-
-    @Autowired
     private CreditStatementJob creditStatementJob;
-
-    @Autowired
-    private TransactionTemplate transactionTemplate;
 
     @BeforeEach
     void setUpInterestIncomeAccount() {
@@ -402,13 +393,6 @@ class CreditCardClosingIntegrationTest extends DebitCardIntegrationTestSupport {
         return ledgerAccount;
     }
 
-    private void giveCreditBalance(String cardReference, String amount) {
-        transactionTemplate.executeWithoutResult(status ->
-                creditCardRepository.findByCardReference(cardReference).orElseThrow()
-                        .getCreditAccount().getLedgerAccount().credit(new BigDecimal(amount))
-        );
-    }
-
     private List<CreditStatement> statements() {
         return creditStatementRepository.findAll(Sort.by("statementDate"));
     }
@@ -442,22 +426,6 @@ class CreditCardClosingIntegrationTest extends DebitCardIntegrationTestSupport {
     private String purchase(String cardReference, String amount, String idempotencyKey, String at) throws Exception {
         mutableClock.setInstant(Instant.parse(at));
 
-        String body = mockMvc.perform(post("/api/cards/{cardReference}/payments", cardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new CardPurchaseRequest(
-                                account.getAccountNumber(),
-                                CurrencyCode.TRY,
-                                new BigDecimal(amount),
-                                null,
-                                "Test merchant"
-                        )))
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        return objectMapper.readValue(body, CardPurchaseResponse.class).transactionReference();
+        return transactionReferenceOf(purchase(cardReference, account.getAccountNumber(), amount, CurrencyCode.TRY, idempotencyKey));
     }
 }
