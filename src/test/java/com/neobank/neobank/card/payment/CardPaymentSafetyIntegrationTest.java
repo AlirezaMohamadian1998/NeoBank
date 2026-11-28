@@ -109,7 +109,7 @@ class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
                 .isInstanceOf(SimulatedFailureException.class)
                 .hasMessage("Simulated failure after flush");
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("1000.00");
 
         assertThat(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY).orElseThrow().getBalance())
@@ -174,10 +174,10 @@ class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
                 .isInstanceOf(SimulatedFailureException.class)
                 .hasMessage("Simulated failure occurred");
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("1000.00");
 
-        assertThat(accountRepository.findByAccountNumber(merchantAccount.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(merchantAccount.getAccountNumber()))
                 .isEqualByComparingTo("0.00");
 
         assertThat(cardPurchaseDetailsRepository.count())
@@ -237,7 +237,7 @@ class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
                 .isInstanceOf(SimulatedFailureException.class)
                 .hasMessage("Simulated failure after flush");
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("1000.00");
 
         assertThat(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.USD).orElseThrow().getBalance())
@@ -349,7 +349,7 @@ class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
         assertThat(response1.balanceAfter())
                 .isEqualByComparingTo("500.00");
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("500.00");
 
         assertThat(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY).orElseThrow().getBalance())
@@ -479,7 +479,7 @@ class CardPaymentSafetyIntegrationTest extends CardIntegrationTestSupport {
         assertThat(response2.balanceAfter())
                 .isEqualByComparingTo("500.00");
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("500.00");
 
         assertThat(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY).orElseThrow().getBalance())

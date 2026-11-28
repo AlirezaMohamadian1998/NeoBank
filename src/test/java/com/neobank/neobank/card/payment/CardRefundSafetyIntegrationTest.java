@@ -282,7 +282,4 @@ class CardRefundSafetyIntegrationTest extends CardIntegrationTestSupport {
                 .isEqualTo(4);
     }
 
-    private BigDecimal balanceOf(String accountNumber) {
-        return accountRepository.findByAccountNumber(accountNumber).orElseThrow().getBalance();
-    }
 }

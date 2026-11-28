@@ -72,11 +72,7 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        MvcResult mvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        MvcResult mvcResult = purchase("2".repeat(32), request, "1".repeat(32), customer.getEmail())
                 .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.transactionReference").isNotEmpty())
@@ -257,11 +253,7 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        MvcResult mvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        MvcResult mvcResult = purchase("2".repeat(32), request, "1".repeat(32), customer.getEmail())
                 .andExpect(status().isCreated())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andReturn();
@@ -283,10 +275,10 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
         assertThat(response.balanceAfter())
                 .isEqualByComparingTo("6000.00");
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("6000.00");
 
-        assertThat(accountRepository.findByAccountNumber(merchantAccount.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(merchantAccount.getAccountNumber()))
                 .isEqualByComparingTo("100.00");
 
         assertThat(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY).orElseThrow().getBalance())
@@ -340,19 +332,11 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        MvcResult firstMvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        MvcResult firstMvcResult = purchase("2".repeat(32), request, "1".repeat(32), customer.getEmail())
                 .andExpect(status().isCreated())
                 .andReturn();
 
-        MvcResult secondMvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        MvcResult secondMvcResult = purchase("2".repeat(32), request, "1".repeat(32), customer.getEmail())
                 .andExpect(status().isCreated())
                 .andReturn();
 
@@ -362,7 +346,7 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
         assertThat(secondResponse)
                 .isEqualTo(firstResponse);
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("9750.00");
 
         assertThat(bankTransactionRepository.count())
@@ -388,11 +372,7 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        MvcResult firstMvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        MvcResult firstMvcResult = purchase("2".repeat(32), request, "1".repeat(32), customer.getEmail())
                 .andExpect(status().isCreated())
                 .andReturn();
 
@@ -401,11 +381,7 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(CardStatus.FROZEN.name()));
 
-        MvcResult replayMvcResult = mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        MvcResult replayMvcResult = purchase("2".repeat(32), request, "1".repeat(32), customer.getEmail())
                 .andExpect(status().isCreated())
                 .andReturn();
 
@@ -415,17 +391,13 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
         assertThat(replayResponse)
                 .isEqualTo(firstResponse);
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "5".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        purchase("2".repeat(32), request, "5".repeat(32), customer.getEmail())
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Card not active"))
                 .andExpect(jsonPath("$.detail").value("Card must be active for purchase"));
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("9750.00");
 
         assertThat(bankTransactionRepository.count())
@@ -453,23 +425,15 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(firstRequest))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        purchase("2".repeat(32), firstRequest, "1".repeat(32), customer.getEmail())
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(secondRequest))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        purchase("2".repeat(32), secondRequest, "1".repeat(32), customer.getEmail())
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Idempotency Conflict"));
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("9750.00");
 
         assertThat(bankTransactionRepository.count())
@@ -497,16 +461,12 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(otherCustomer.getEmail()))))
+        purchase("2".repeat(32), request, "1".repeat(32), otherCustomer.getEmail())
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Card not found"));
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("10000.00");
 
         assertThat(bankTransactionRepository.count())
@@ -539,16 +499,12 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", inactiveCardReference)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        purchase(inactiveCardReference, request, "1".repeat(32), customer.getEmail())
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Card not active"));
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("10000.00");
 
         assertThat(bankTransactionRepository.count())
@@ -568,16 +524,12 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        purchase("2".repeat(32), request, "1".repeat(32), customer.getEmail())
                 .andExpect(status().isConflict())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Insufficient funds"));
 
-        assertThat(accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance())
+        assertThat(balanceOf(account.getAccountNumber()))
                 .isEqualByComparingTo("10000.00");
 
         assertThat(internalAccountRepository.findByPurposeAndCurrency(InternalAccountPurpose.SETTLEMENT, CurrencyCode.TRY).orElseThrow().getBalance())
@@ -625,11 +577,7 @@ class CardPaymentIntegrationTest extends CardIntegrationTestSupport {
                 "Test merchant"
         );
 
-        mockMvc.perform(post("/api/cards/{cardReference}/payments", "2".repeat(32))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        purchase("2".repeat(32), request, "1".repeat(32), customer.getEmail())
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/transactions")

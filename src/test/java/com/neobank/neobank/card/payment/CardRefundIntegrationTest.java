@@ -301,18 +301,9 @@ class CardRefundIntegrationTest extends CardIntegrationTestSupport {
         return transactionReferenceOf(purchase(CARD_REFERENCE, merchantAccountNumber, amount, currency, "c".repeat(32)));
     }
 
-    private ResultActions refund(String merchantAccountNumber, String purchaseReference, String idempotencyKey, String email) throws Exception {
-        return mockMvc.perform(post("/api/accounts/{merchantAccountNumber}/card-refunds/{purchaseReference}", merchantAccountNumber, purchaseReference)
-                .header("Idempotency-Key", idempotencyKey)
-                .with(jwt().jwt(jwt -> jwt.subject(email))));
-    }
 
     private CardRefundResponse readRefund(ResultActions resultActions) throws Exception {
         return objectMapper.readValue(resultActions.andReturn().getResponse().getContentAsString(), CardRefundResponse.class);
-    }
-
-    private BigDecimal balanceOf(String accountNumber) {
-        return accountRepository.findByAccountNumber(accountNumber).orElseThrow().getBalance();
     }
 
     private void stubUsdRates(String tryPerUsd) {

@@ -155,9 +155,7 @@ class CardSpendingLimitIntegrationTest extends CardIntegrationTestSupport {
 
         String purchaseReference = objectMapper.readValue(body, CardPurchaseResponse.class).transactionReference();
 
-        mockMvc.perform(post("/api/accounts/{merchantAccountNumber}/card-refunds/{purchaseReference}", "98".repeat(7), purchaseReference)
-                        .header("Idempotency-Key", "a".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(merchantCustomer.getEmail()))))
+        refund("98".repeat(7), purchaseReference, "a".repeat(32), merchantCustomer.getEmail())
                 .andExpect(status().isCreated());
 
         assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("10000.00");
@@ -271,10 +269,6 @@ class CardSpendingLimitIntegrationTest extends CardIntegrationTestSupport {
         return cardDailySpendRepository.findByCardAndSpendDate(debitCard, LocalDate.now(clock))
                 .orElseThrow()
                 .getAmountSpent();
-    }
-
-    private BigDecimal balanceOf(String accountNumber) {
-        return accountRepository.findByAccountNumber(accountNumber).orElseThrow().getBalance();
     }
 
     private void stubTryPerUsd(String tryPerUsd) {

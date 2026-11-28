@@ -1,6 +1,5 @@
 package com.neobank.neobank.card.credit;
 
-import com.neobank.neobank.card.credit.dto.CreditCardIssueRequest;
 import com.neobank.neobank.card.credit.dto.CreditCardIssueResponse;
 import com.neobank.neobank.card.support.CardIntegrationTestSupport;
 import com.neobank.neobank.creditaccount.CreditAccount;
@@ -19,7 +18,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Sort;
-import org.springframework.http.MediaType;
 import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
@@ -31,8 +29,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -257,23 +253,7 @@ class CreditCardTransactionsIntegrationTest extends CardIntegrationTestSupport {
     private CreditCardIssueResponse issueAndActivateCreditCard(String at) throws Exception {
         mutableClock.setInstant(Instant.parse(at));
 
-        String body = mockMvc.perform(post("/api/credit-cards")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new CreditCardIssueRequest(CurrencyCode.TRY)))
-                        .header("Idempotency-Key", "1".repeat(32))
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        CreditCardIssueResponse issued = objectMapper.readValue(body, CreditCardIssueResponse.class);
-
-        mockMvc.perform(patch("/api/credit-cards/{cardReference}/status/{status}", issued.cardReference(), "ACTIVE")
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
-                .andExpect(status().isOk());
-
-        return issued;
+        return issueAndActivateCreditCard(CurrencyCode.TRY, "1".repeat(32));
     }
 
     private String purchase(String cardReference, String amount, String idempotencyKey, String at) throws Exception {
@@ -285,10 +265,7 @@ class CreditCardTransactionsIntegrationTest extends CardIntegrationTestSupport {
     private void refund(String purchaseReference, String idempotencyKey, String at) throws Exception {
         mutableClock.setInstant(Instant.parse(at));
 
-        mockMvc.perform(post("/api/accounts/{merchantAccountNumber}/card-refunds/{purchaseReference}",
-                        account.getAccountNumber(), purchaseReference)
-                        .header("Idempotency-Key", idempotencyKey)
-                        .with(jwt().jwt(jwt -> jwt.subject(customer.getEmail()))))
+        refund(account.getAccountNumber(), purchaseReference, idempotencyKey, customer.getEmail())
                 .andExpect(status().isCreated());
     }
 

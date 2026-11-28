@@ -88,7 +88,7 @@ class CardSpendingLimitSafetyIntegrationTest extends CardIntegrationTestSupport 
 
         assertThat(cardDailySpendRepository.count()).isOne();
         assertThat(spentToday()).isEqualByComparingTo("130.00");
-        assertThat(balanceOf()).isEqualByComparingTo("870.00");
+        assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("870.00");
     }
 
     @Test
@@ -112,7 +112,7 @@ class CardSpendingLimitSafetyIntegrationTest extends CardIntegrationTestSupport 
         assertThat(attemptCount.get()).isEqualTo(3);
 
         assertThat(spentToday()).isEqualByComparingTo("200.00");
-        assertThat(balanceOf()).isEqualByComparingTo("900.00");
+        assertThat(balanceOf(account.getAccountNumber())).isEqualByComparingTo("900.00");
         assertThat(bankTransactionRepository.count()).isOne();
     }
 
@@ -204,10 +204,6 @@ class CardSpendingLimitSafetyIntegrationTest extends CardIntegrationTestSupport 
         return cardDailySpendRepository.findByCardAndSpendDate(debitCard, LocalDate.now(clock))
                 .orElseThrow()
                 .getAmountSpent();
-    }
-
-    private BigDecimal balanceOf() {
-        return accountRepository.findByAccountNumber(account.getAccountNumber()).orElseThrow().getBalance();
     }
 
     private record PurchaseOutcome(Future<CardPurchaseResponse> first, Future<CardPurchaseResponse> second) {
