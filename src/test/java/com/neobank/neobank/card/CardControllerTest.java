@@ -2,13 +2,12 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.auth.SecurityConfig;
-import com.neobank.neobank.card.dto.CardPurchaseRequest;
-import com.neobank.neobank.card.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.dto.CardTransactionFilter;
-import com.neobank.neobank.card.exception.CardExpiredException;
-import com.neobank.neobank.card.exception.CardNotActiveException;
-import com.neobank.neobank.card.exception.CardNotFoundException;
-import com.neobank.neobank.card.exception.InvalidCardPaymentException;
+import com.neobank.neobank.card.payment.CardNotActiveException;
+import com.neobank.neobank.card.payment.CardPaymentService;
+import com.neobank.neobank.card.payment.InvalidCardPaymentException;
+import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
+import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
 import com.neobank.neobank.creditaccount.CreditLimitExceededException;
 import com.neobank.neobank.fx.FxProviderUnavailableException;
 import com.neobank.neobank.idempotency.IdempotencyConflictException;

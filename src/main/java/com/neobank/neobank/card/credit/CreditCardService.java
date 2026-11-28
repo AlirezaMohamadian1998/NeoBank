@@ -1,0 +1,270 @@
+package com.neobank.neobank.card.credit;
+
+import com.neobank.neobank.account.AccountNumberGenerator;
+import com.neobank.neobank.card.CardStatus;
+import com.neobank.neobank.card.credit.dto.CreditCardIssueRequest;
+import com.neobank.neobank.card.credit.dto.CreditCardIssueResponse;
+import com.neobank.neobank.card.credit.dto.CreditCardRetrieveResponse;
+import com.neobank.neobank.card.credit.dto.CreditCardTransactionFilter;
+import com.neobank.neobank.card.credit.dto.CreditStatementResponse;
+import com.neobank.neobank.card.issuing.CardIssuer;
+import com.neobank.neobank.card.issuing.IssuedCard;
+import com.neobank.neobank.card.limit.CardDailySpendService;
+import com.neobank.neobank.card.limit.CardLimitProperties;
+import com.neobank.neobank.card.limit.CardSpendingLimits;
+import com.neobank.neobank.card.limit.dto.CardSpendingLimitsUpdateRequest;
+import com.neobank.neobank.creditaccount.CreditAccount;
+import com.neobank.neobank.creditaccount.CreditAccountProperties;
+import com.neobank.neobank.creditaccount.CreditAccountRepository;
+import com.neobank.neobank.creditaccount.CreditStatement;
+import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
+import com.neobank.neobank.creditaccount.CreditStatementRepository;
+import com.neobank.neobank.customer.Customer;
+import com.neobank.neobank.customer.CustomerNotFoundException;
+import com.neobank.neobank.customer.CustomerRepository;
+import com.neobank.neobank.idempotency.*;
+import com.neobank.neobank.shared.reference.ReferenceGenerator;
+import com.neobank.neobank.transaction.BankTransaction;
+import com.neobank.neobank.transaction.LedgerEntry;
+import com.neobank.neobank.transaction.LedgerEntryRepository;
+import com.neobank.neobank.transaction.history.LedgerEntrySpecifications;
+import com.neobank.neobank.transaction.history.TransactionHistoryItemAssembler;
+import com.neobank.neobank.transaction.history.TransactionHistorySortHelper;
+import com.neobank.neobank.transaction.history.dto.TransactionHistoryItem;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.resilience.annotation.Retryable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+@Service
+@RequiredArgsConstructor
+public class CreditCardService {
+
+    private final CreditCardRepository creditCardRepository;
+
+    private final CreditAccountRepository creditAccountRepository;
+
+    private final CreditStatementRepository creditStatementRepository;
+
+    private final LedgerEntryRepository ledgerEntryRepository;
+
+    private final TransactionHistoryItemAssembler transactionHistoryItemAssembler;
+
+    private final CustomerRepository customerRepository;
+
+    private final IdempotencyService idempotencyService;
+
+    private final RequestHasher requestHasher;
+
+    private final ReferenceGenerator referenceGenerator;
+
+    private final AccountNumberGenerator accountNumberGenerator;
+
+    private final CardIssuer cardIssuer;
+
+    private final CardLimitProperties cardLimitProperties;
+
+    private final CreditAccountProperties creditAccountProperties;
+
+    private final CardDailySpendService cardDailySpendService;
+
+    private final Clock clock;
+
+    @Transactional
+    @Retryable(
+            maxRetries = 4,
+            maxDelay = 4000,
+            delay = 200,
+            jitter = 50,
+            multiplier = 2,
+            includes = {
+                    ConcurrencyFailureException.class,
+                    IdempotencyKeyRaceException.class
+            }
+    )
+    public CreditCardIssueResponse issueCreditCard(String customerEmail, CreditCardIssueRequest request, String idempotencyKey) {
+        IdempotencyService.requireValidKey(idempotencyKey);
+
+        Customer customer = customerRepository.findByEmailIgnoreCase(customerEmail)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found"));
+
+        String requestHash = requestHasher.hashRequest(String.join(
+                "|",
+                "ISSUE_CREDIT_CARD",
+                customerEmail,
+                request.currency().name()
+        ));
+
+        Optional<IdempotencyRecord> existingIdempotencyRecord =
+                idempotencyService.findAndValidateRecord(idempotencyKey, customerEmail, requestHash);
+
+        if(existingIdempotencyRecord.isPresent()) {
+            CreditCard existingCreditCard = creditCardRepository.findByCardReference(existingIdempotencyRecord.get().getResultReference())
+                    .orElseThrow(() -> new IdempotencyResultNotFoundException("Couldn't find credit card with the given reference."));
+
+            return CreditCardMapper.toIssueResponse(existingCreditCard);
+        }
+
+        CreditAccount creditAccount = creditAccountRepository.save(CreditAccount.createNew(
+                accountNumberGenerator.generateUnique(),
+                referenceGenerator.generate(),
+                customer,
+                request.currency(),
+                creditAccountProperties.getDefaultCreditLimit(request.currency()),
+                creditAccountProperties.getDefaultAnnualInterestRate(request.currency()),
+                LocalDate.now(clock)
+        ));
+
+        YearMonth currentYearMonth = YearMonth.now(clock);
+        IssuedCard issuedCard = cardIssuer.issue(currentYearMonth);
+
+        CreditCard creditCard = creditCardRepository.save(CreditCard.createNew(
+                referenceGenerator.generate(),
+                issuedCard.lastFourDigits(),
+                issuedCard.expirationYearMonth(),
+                currentYearMonth,
+                creditAccount,
+                cardLimitProperties.getDefaultLimits(request.currency())
+        ));
+
+        idempotencyService.save(IdempotencyRecord.createNew(
+                idempotencyKey,
+                requestHash,
+                customer,
+                creditCard.getCardReference()
+        ));
+
+        return CreditCardMapper.toIssueResponse(creditCard);
+    }
+
+    @Transactional(readOnly = true)
+    public CreditCardRetrieveResponse getCreditCard(String cardReference, String email) {
+        CreditCard creditCard = findOwnedCreditCard(cardReference, email);
+
+        BigDecimal spentToday = cardDailySpendService.getAmountSpent(creditCard, LocalDate.now(clock));
+
+        return CreditCardMapper.toRetrieveResponse(creditCard, spentToday);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CreditCardRetrieveResponse> getCreditCards(String email, Pageable pageable) {
+        Page<CreditCard> creditCards =
+                creditCardRepository.findAllByCreditAccount_Customer_EmailIgnoreCaseOrderByCreatedAtDescIdDesc(email, pageable);
+
+        Map<Long, BigDecimal> spentTodayByCardId =
+                cardDailySpendService.getAmountSpentPerCard(creditCards.getContent(), LocalDate.now(clock));
+
+        return creditCards.map(creditCard ->
+                CreditCardMapper.toRetrieveResponse(creditCard, spentTodayByCardId.get(creditCard.getId()))
+        );
+    }
+
+    @Transactional
+    public CreditCardRetrieveResponse updateSpendingLimits(String cardReference, String email, CardSpendingLimitsUpdateRequest request) {
+        CreditCard creditCard = findOwnedCreditCard(cardReference, email);
+
+        CardSpendingLimits newLimits = CardSpendingLimits.createNew(request.perTransactionLimit(), request.dailyLimit());
+        CardSpendingLimits maximum = cardLimitProperties.getMaximumLimits(creditCard.getCreditAccount().getCurrency());
+
+        creditCard.changeSpendingLimits(newLimits, maximum);
+
+        CreditCard savedCreditCard = creditCardRepository.save(creditCard);
+        BigDecimal spentToday = cardDailySpendService.getAmountSpent(savedCreditCard, LocalDate.now(clock));
+
+        return CreditCardMapper.toRetrieveResponse(savedCreditCard, spentToday);
+    }
+
+    @Transactional
+    public CreditCardRetrieveResponse changeCardStatus(String cardReference, String email, CardStatus targetStatus) {
+        CreditCard creditCard = findOwnedCreditCard(cardReference, email);
+
+        creditCard.changeStatus(targetStatus, YearMonth.now(clock));
+
+        CreditCard savedCreditCard = creditCardRepository.save(creditCard);
+        BigDecimal spentToday = cardDailySpendService.getAmountSpent(savedCreditCard, LocalDate.now(clock));
+
+        return CreditCardMapper.toRetrieveResponse(savedCreditCard, spentToday);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CreditStatementResponse> getStatements(String cardReference, String email, Pageable pageable) {
+        CreditAccount creditAccount = findOwnedCreditCard(cardReference, email).getCreditAccount();
+
+        return creditStatementRepository.findByCreditAccountOrderByStatementDateDesc(creditAccount, pageable)
+                .map(CreditCardMapper::toStatementResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public CreditStatementResponse getStatement(String cardReference, String statementReference, String email) {
+        CreditAccount creditAccount = findOwnedCreditCard(cardReference, email).getCreditAccount();
+
+        return creditStatementRepository.findByStatementReferenceAndCreditAccount(statementReference, creditAccount)
+                .map(CreditCardMapper::toStatementResponse)
+                .orElseThrow(() -> new CreditStatementNotFoundException("Credit statement not found"));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TransactionHistoryItem> getTransactions(
+            String cardReference,
+            CreditCardTransactionFilter filter,
+            String email,
+            Pageable pageable
+    ) {
+        CreditAccount creditAccount = findOwnedCreditCard(cardReference, email).getCreditAccount();
+
+        Specification<LedgerEntry> spec =
+                LedgerEntrySpecifications.belongsToAccount(List.of(creditAccount.getLedgerAccount().getId()))
+                        .and(LedgerEntrySpecifications.hasTransactionType(filter.type()))
+                        .and(LedgerEntrySpecifications.createdAfterOrEqual(filter.dateFrom()))
+                        .and(LedgerEntrySpecifications.createdBefore(filter.dateTo()));
+
+        Page<LedgerEntry> entries =
+                ledgerEntryRepository.findAll(spec, TransactionHistorySortHelper.normalize(pageable));
+
+        return transactionHistoryItemAssembler.toItems(entries, entry -> creditAccount.getAccountNumber());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TransactionHistoryItem> getStatementLines(
+            String cardReference,
+            String statementReference,
+            String email,
+            Pageable pageable
+    ) {
+        CreditAccount creditAccount = findOwnedCreditCard(cardReference, email).getCreditAccount();
+
+        CreditStatement statement = creditStatementRepository
+                .findByStatementReferenceAndCreditAccount(statementReference, creditAccount)
+                .orElseThrow(() -> new CreditStatementNotFoundException("Credit statement not found"));
+
+        BankTransaction interestTransaction = statement.getInterestTransaction();
+
+        Page<LedgerEntry> entries = ledgerEntryRepository.findStatementLines(
+                creditAccount.getLedgerAccount(),
+                statement.getPeriodStart().atStartOfDay(ZoneOffset.UTC).toInstant(),
+                statement.getStatementDate().atStartOfDay(ZoneOffset.UTC).toInstant(),
+                interestTransaction == null ? null : interestTransaction.getId(),
+                TransactionHistorySortHelper.normalize(pageable)
+        );
+
+        return transactionHistoryItemAssembler.toItems(entries, entry -> creditAccount.getAccountNumber());
+    }
+
+    private CreditCard findOwnedCreditCard(String cardReference, String email) {
+        return creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase(cardReference, email)
+                .orElseThrow(() -> new CreditCardNotFoundException("Credit card not found"));
+    }
+}

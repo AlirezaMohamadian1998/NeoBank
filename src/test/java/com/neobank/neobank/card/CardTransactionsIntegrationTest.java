@@ -2,11 +2,12 @@ package com.neobank.neobank.card;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountType;
-import com.neobank.neobank.card.dto.CardPurchaseRequest;
-import com.neobank.neobank.card.dto.CardPurchaseResponse;
-import com.neobank.neobank.card.dto.CreditCardIssueRequest;
-import com.neobank.neobank.card.dto.CreditCardIssueResponse;
-import com.neobank.neobank.card.dto.CreditCardRepaymentRequest;
+import com.neobank.neobank.card.credit.dto.CreditCardIssueRequest;
+import com.neobank.neobank.card.credit.dto.CreditCardIssueResponse;
+import com.neobank.neobank.card.credit.dto.CreditCardRepaymentRequest;
+import com.neobank.neobank.card.debit.DebitCard;
+import com.neobank.neobank.card.payment.dto.CardPurchaseRequest;
+import com.neobank.neobank.card.payment.dto.CardPurchaseResponse;
 import com.neobank.neobank.card.support.DebitCardIntegrationTestSupport;
 import com.neobank.neobank.card.support.TestCardLimits;
 import com.neobank.neobank.customer.Customer;
