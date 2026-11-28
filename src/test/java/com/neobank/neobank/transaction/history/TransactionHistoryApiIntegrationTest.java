@@ -51,7 +51,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 account.getLedgerAccount()
         );
 
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
+        depositTransaction.addEntry(
                 "3".repeat(32),
                 new BigDecimal("120.00"),
                 new BigDecimal("10120.00"),
@@ -67,7 +67,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 null
         );
 
-        LedgerEntry customerDepositEntry2 = depositTransaction2.addEntry(
+        depositTransaction2.addEntry(
                 "8".repeat(32),
                 new BigDecimal("140.00"),
                 new BigDecimal("260.00"),
@@ -75,7 +75,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 account.getLedgerAccount()
         );
 
-        LedgerEntry internalDepositEntry2 = depositTransaction2.addEntry(
+        depositTransaction2.addEntry(
                 "9".repeat(32),
                 new BigDecimal("140.00"),
                 new BigDecimal("10260.00"),
@@ -99,7 +99,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 account.getLedgerAccount()
         );
 
-        LedgerEntry internalWithdrawalEntry = withdrawalTransaction.addEntry(
+        withdrawalTransaction.addEntry(
                 "6".repeat(32),
                 new BigDecimal("100.00"),
                 new BigDecimal("10160.00"),
@@ -234,7 +234,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 account.getLedgerAccount()
         );
 
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
+        depositTransaction.addEntry(
                 "3".repeat(32),
                 new BigDecimal("120.00"),
                 new BigDecimal("10120.00"),
@@ -269,7 +269,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 account2.getLedgerAccount()
         );
 
-        LedgerEntry internalDepositEntryAcc2 = depositTransactionAcc2.addEntry(
+        depositTransactionAcc2.addEntry(
                 "6".repeat(32),
                 new BigDecimal("1200.00"),
                 new BigDecimal("11320.00"),
@@ -304,7 +304,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 null
         );
 
-        LedgerEntry customerDepositEntryForCustomer2 = depositTransactionForCustomer2.addEntry(
+        depositTransactionForCustomer2.addEntry(
                 "10".repeat(16),
                 new BigDecimal("1200.00"),
                 new BigDecimal("1200.00"),
@@ -312,7 +312,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 accountForCustomer2.getLedgerAccount()
         );
 
-        LedgerEntry internalDepositEntryForCustomer2 = depositTransactionForCustomer2.addEntry(
+        depositTransactionForCustomer2.addEntry(
                 "11".repeat(16),
                 new BigDecimal("1200.00"),
                 new BigDecimal("11200.00"),
@@ -498,7 +498,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 null
         );
 
-        LedgerEntry customerDepositEntry = depositTransaction.addEntry(
+        depositTransaction.addEntry(
                 "2".repeat(32),
                 new BigDecimal("120.00"),
                 new BigDecimal("120.00"),
@@ -506,7 +506,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 account.getLedgerAccount()
         );
 
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
+        depositTransaction.addEntry(
                 "3".repeat(32),
                 new BigDecimal("120.00"),
                 new BigDecimal("10120.00"),
@@ -541,7 +541,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 null
         );
 
-        LedgerEntry customerDepositEntryForCustomer2 = depositTransactionForCustomer2.addEntry(
+        depositTransactionForCustomer2.addEntry(
                 "10".repeat(16),
                 new BigDecimal("1200.00"),
                 new BigDecimal("1200.00"),
@@ -549,7 +549,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
                 accountForCustomer2.getLedgerAccount()
         );
 
-        LedgerEntry internalDepositEntryForCustomer2 = depositTransactionForCustomer2.addEntry(
+        depositTransactionForCustomer2.addEntry(
                 "11".repeat(16),
                 new BigDecimal("1200.00"),
                 new BigDecimal("11200.00"),

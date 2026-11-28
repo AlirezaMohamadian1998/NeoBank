@@ -93,9 +93,6 @@ class CardPaymentServiceTest {
     @Captor
     private ArgumentCaptor<CardPurchaseDetails> cardPurchaseDetailsCaptor;
 
-    @Captor
-    private ArgumentCaptor<IdempotencyRecord> idempotencyRecordCaptor;
-
     @BeforeEach
     void setUp() {
         LedgerPostingService ledgerPostingService = new LedgerPostingService(referenceGenerator);

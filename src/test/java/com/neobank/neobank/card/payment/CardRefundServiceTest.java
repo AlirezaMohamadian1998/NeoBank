@@ -77,9 +77,6 @@ class CardRefundServiceTest {
     @Captor
     private ArgumentCaptor<CardRefundDetails> cardRefundDetailsCaptor;
 
-    @Captor
-    private ArgumentCaptor<IdempotencyRecord> idempotencyRecordCaptor;
-
     private final RequestHasher requestHasher = new RequestHasher();
 
     private final JsonMapper objectMapper = JsonMapper.builder().build();

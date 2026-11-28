@@ -76,7 +76,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 sourceLedgerAccount
         );
 
-        LedgerEntry targetEntry = transaction.addEntry(
+        transaction.addEntry(
                 "5".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("1500.00"),
@@ -140,7 +140,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 null
         );
 
-        LedgerEntry sourceEntry = transaction.addEntry(
+        transaction.addEntry(
                 "4".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("500.00"),
@@ -148,7 +148,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 sourceLedgerAccount
         );
 
-        LedgerEntry targetEntry = transaction.addEntry(
+        transaction.addEntry(
                 "5".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("1500.00"),
@@ -209,7 +209,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
+        depositTransaction.addEntry(
                 "5".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -233,7 +233,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalWithdrawalEntry = withdrawalTransaction.addEntry(
+        withdrawalTransaction.addEntry(
                 "8".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -312,7 +312,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
+        depositTransaction.addEntry(
                 "5".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -328,7 +328,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 null
         );
 
-        LedgerEntry customerWithdrawalEntry = withdrawalTransaction.addEntry(
+        withdrawalTransaction.addEntry(
                 "7".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("500.00"),
@@ -336,7 +336,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalWithdrawalEntry = withdrawalTransaction.addEntry(
+        withdrawalTransaction.addEntry(
                 "8".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -417,7 +417,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
+        depositTransaction.addEntry(
                 "5".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -433,7 +433,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 null
         );
 
-        LedgerEntry customerWithdrawalEntry = withdrawalTransaction.addEntry(
+        withdrawalTransaction.addEntry(
                 "7".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("500.00"),
@@ -441,7 +441,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalWithdrawalEntry = withdrawalTransaction.addEntry(
+        withdrawalTransaction.addEntry(
                 "8".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -537,7 +537,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
+        depositTransaction.addEntry(
                 "5".repeat(32),
                 new BigDecimal("1500.00"),
                 new BigDecimal("100000.00"),
@@ -561,7 +561,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalWithdrawalEntry = withdrawalTransaction.addEntry(
+        withdrawalTransaction.addEntry(
                 "8".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -577,7 +577,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 null
         );
 
-        LedgerEntry customerWithdrawalEntryOverMax = withdrawalTransactionOverMax.addEntry(
+        withdrawalTransactionOverMax.addEntry(
                 "11".repeat(16),
                 new BigDecimal("2000.00"),
                 new BigDecimal("0.00"),
@@ -585,7 +585,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalWithdrawalEntryOverMax = withdrawalTransactionOverMax.addEntry(
+        withdrawalTransactionOverMax.addEntry(
                 "12".repeat(16),
                 new BigDecimal("2000.00"),
                 new BigDecimal("100000.00"),
@@ -600,7 +600,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 null
         );
 
-        LedgerEntry customerDepositEntryBelowMin = depositTransactionBelowMin.addEntry(
+        depositTransactionBelowMin.addEntry(
                 "14".repeat(16),
                 new BigDecimal("500.00"),
                 new BigDecimal("500.00"),
@@ -608,7 +608,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalDepositEntryBelowMin = depositTransactionBelowMin.addEntry(
+        depositTransactionBelowMin.addEntry(
                 "15".repeat(16),
                 new BigDecimal("500.00"),
                 new BigDecimal("100000.00"),
@@ -677,7 +677,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 null
         );
 
-        LedgerEntry customerDepositEntry = depositTransaction.addEntry(
+        depositTransaction.addEntry(
                 "4".repeat(32),
                 new BigDecimal("1500.00"),
                 new BigDecimal("3000.00"),
@@ -685,7 +685,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
+        depositTransaction.addEntry(
                 "5".repeat(32),
                 new BigDecimal("1500.00"),
                 new BigDecimal("100000.00"),
@@ -709,7 +709,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalWithdrawalEntry1 = withdrawalTransaction1.addEntry(
+        withdrawalTransaction1.addEntry(
                 "8".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -725,7 +725,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 null
         );
 
-        LedgerEntry customerWithdrawalEntry2 = withdrawalTransaction2.addEntry(
+        withdrawalTransaction2.addEntry(
                 "11".repeat(16),
                 new BigDecimal("2000.00"),
                 new BigDecimal("0.00"),
@@ -733,7 +733,7 @@ class LedgerEntrySpecificationsIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalWithdrawalEntry2 = withdrawalTransaction2.addEntry(
+        withdrawalTransaction2.addEntry(
                 "12".repeat(16),
                 new BigDecimal("2000.00"),
                 new BigDecimal("100000.00"),
@@ -829,7 +829,7 @@ class LedgerEntrySpecificationsDateIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalDepositEntry = depositTransaction.addEntry(
+        depositTransaction.addEntry(
                 "5".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -849,7 +849,7 @@ class LedgerEntrySpecificationsDateIntegrationTest {
                 null
         );
 
-        LedgerEntry customerWithdrawalEntry = withdrawalTransaction.addEntry(
+        withdrawalTransaction.addEntry(
                 "7".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("500.00"),
@@ -857,7 +857,7 @@ class LedgerEntrySpecificationsDateIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalWithdrawalEntry = withdrawalTransaction.addEntry(
+        withdrawalTransaction.addEntry(
                 "8".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -879,7 +879,7 @@ class LedgerEntrySpecificationsDateIntegrationTest {
                 null
         );
 
-        LedgerEntry customerDepositEntryBeforeStart = depositTransactionBeforeStart.addEntry(
+        depositTransactionBeforeStart.addEntry(
                 "b".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("1500.00"),
@@ -887,7 +887,7 @@ class LedgerEntrySpecificationsDateIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalDepositEntryBeforeStart = depositTransactionBeforeStart.addEntry(
+        depositTransactionBeforeStart.addEntry(
                 "c".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),
@@ -909,7 +909,7 @@ class LedgerEntrySpecificationsDateIntegrationTest {
                 null
         );
 
-        LedgerEntry customerWithdrawalEntryAtEnd = withdrawalTransactionAtEnd.addEntry(
+        withdrawalTransactionAtEnd.addEntry(
                 "e".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("500.00"),
@@ -917,7 +917,7 @@ class LedgerEntrySpecificationsDateIntegrationTest {
                 ledgerAccount
         );
 
-        LedgerEntry internalWithdrawalEntryAtEnd = withdrawalTransactionAtEnd.addEntry(
+        withdrawalTransactionAtEnd.addEntry(
                 "f".repeat(32),
                 new BigDecimal("1000.00"),
                 new BigDecimal("100000.00"),

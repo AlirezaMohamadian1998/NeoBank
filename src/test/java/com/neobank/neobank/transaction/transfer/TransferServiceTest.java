@@ -554,7 +554,7 @@ class TransferServiceTest {
                 sourceAccount.getLedgerAccount()
         );
 
-        LedgerEntry destinationEntry = transaction.addEntry(
+        transaction.addEntry(
                 DESTINATION_ENTRY_REFERENCE,
                 destinationMoneyMovementAmount,
                 destinationAccount.getBalance(),

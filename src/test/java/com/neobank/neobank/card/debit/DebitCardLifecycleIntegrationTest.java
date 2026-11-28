@@ -143,7 +143,7 @@ class DebitCardLifecycleIntegrationTest extends CardIntegrationTestSupport {
     void customerCannotChangeAnotherCustomersCardStatus() throws Exception {
         String cardReference = "2".repeat(32);
 
-        DebitCard debitCard = debitCardRepository.save(
+        debitCardRepository.save(
                 DebitCard.createNew(
                         cardReference,
                         "1234",
@@ -185,7 +185,7 @@ class DebitCardLifecycleIntegrationTest extends CardIntegrationTestSupport {
 
         YearMonth now = YearMonth.now(clock);
 
-        DebitCard debitCard = debitCardRepository.save(
+        debitCardRepository.save(
                 DebitCard.createNew(
                         cardReference,
                         "1234",
