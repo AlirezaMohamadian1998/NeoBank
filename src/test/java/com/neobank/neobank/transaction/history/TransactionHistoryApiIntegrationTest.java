@@ -111,8 +111,7 @@ class TransactionHistoryApiIntegrationTest extends TransactionApiIntegrationTest
         depositTransaction2.complete();
         withdrawalTransaction.complete();
 
-        List<BankTransaction> savedTransactions =
-                bankTransactionRepository.saveAll(List.of(depositTransaction, depositTransaction2, withdrawalTransaction));
+        bankTransactionRepository.saveAll(List.of(depositTransaction, depositTransaction2, withdrawalTransaction));
 
         MvcResult result = mockMvc.perform(get("/api/transactions")
                         .param("accountNumber", account.getAccountNumber())
