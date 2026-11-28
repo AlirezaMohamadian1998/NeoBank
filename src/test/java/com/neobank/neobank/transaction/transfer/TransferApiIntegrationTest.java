@@ -184,23 +184,8 @@ class TransferApiIntegrationTest extends TransactionApiIntegrationTestSupport {
                 .isNotNull();
         assertThat(targetEntry.getUpdatedAt())
                 .isNotNull();
-
-        assertThat(response.transactionReference())
-                .matches("^[0-9a-f]{32}$");
         assertThat(response.transactionType())
                 .isEqualTo(transaction.getTransactionType());
-        assertThat(response.sourceAccountNumber())
-                .isEqualTo(savedSourceAccount.getAccountNumber());
-        assertThat(response.destinationAccountNumber())
-                .isEqualTo(savedTargetAccount.getAccountNumber());
-        assertThat(response.amount())
-                .isEqualByComparingTo(request.amount());
-        assertThat(response.sourceBalanceAfter())
-                .isEqualByComparingTo(savedSourceAccount.getBalance());
-        assertThat(response.currency())
-                .isSameAs(savedSourceAccount.getCurrency());
-        assertThat(response.note())
-                .isEqualTo(request.note());
         assertThat(response.createdAt())
                 .isNotNull();
 

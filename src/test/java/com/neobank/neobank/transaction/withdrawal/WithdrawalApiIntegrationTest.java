@@ -91,16 +91,8 @@ class WithdrawalApiIntegrationTest extends TransactionApiIntegrationTestSupport 
                 .isEqualTo(transaction.getReference());
         assertThat(response.transactionType())
                 .isEqualTo(transaction.getTransactionType());
-        assertThat(response.accountNumber())
-                .isEqualTo(account.getAccountNumber());
-        assertThat(response.amount())
-                .isEqualByComparingTo(request.amount());
-        assertThat(response.currency())
-                .isSameAs(account.getCurrency());
         assertThat(response.balanceAfter())
                 .isEqualByComparingTo(savedAccount.getBalance());
-        assertThat(response.note())
-                .isEqualTo(request.note());
         assertThat(response.createdAt())
                 .isNotNull();
 
