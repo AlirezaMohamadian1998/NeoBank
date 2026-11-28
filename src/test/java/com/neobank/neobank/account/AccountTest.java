@@ -6,6 +6,9 @@ import com.neobank.neobank.ledger.LedgerAccountType;
 import com.neobank.neobank.shared.money.CurrencyCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 
@@ -92,58 +95,13 @@ class AccountTest {
                 .isEqualByComparingTo(new BigDecimal("60.00"));
     }
 
-    @Test
-    void nullAccountNumberIsRejected() {
-        assertThatThrownBy(() -> Account.createNew(
-                null,
-                VALID_LEDGER_REFERENCE,
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Account number must be exactly 14 numeric characters"
-                );
-    }
 
-    @Test
-    void shortAccountNumberIsRejected() {
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"1234567890123", "123456789012345", "1234567890123a"})
+    void invalidAccountNumberIsRejected(String accountNumber) {
         assertThatThrownBy(() -> Account.createNew(
-                "1234567890123",
-                VALID_LEDGER_REFERENCE,
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Account number must be exactly 14 numeric characters"
-                );
-    }
-
-    @Test
-    void longAccountNumberIsRejected() {
-        assertThatThrownBy(() -> Account.createNew(
-                "123456789012345",
-                VALID_LEDGER_REFERENCE,
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Account number must be exactly 14 numeric characters"
-                );
-    }
-
-    @Test
-    void nonNumericAccountNumberIsRejected() {
-        assertThatThrownBy(() -> Account.createNew(
-                "1234567890123a",
+                accountNumber,
                 VALID_LEDGER_REFERENCE,
                 "Private Account",
                 AccountType.CURRENT,
@@ -199,27 +157,15 @@ class AccountTest {
                 .isEqualTo("Private Account");
     }
 
-    @Test
-    void nullNameBecomesNull() {
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = "     ")
+    void missingNameBecomesNull(String name) {
         Account account = Account.createNew(
                 VALID_ACCOUNT_NUMBER,
                 VALID_LEDGER_REFERENCE,
-                null,
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        );
-
-        assertThat(account.getName())
-                .isNull();
-    }
-
-    @Test
-    void blankNameBecomesNull() {
-        Account account = Account.createNew(
-                VALID_ACCOUNT_NUMBER,
-                VALID_LEDGER_REFERENCE,
-                "     ",
+                name,
                 AccountType.CURRENT,
                 customer,
                 CurrencyCode.TRY

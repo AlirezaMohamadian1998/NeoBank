@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.Set;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -95,56 +97,23 @@ class BankTransactionTest {
                 .isEmpty();
     }
 
-    @Test
-    void nullRequestedAmountIsRejected() {
+    @ParameterizedTest
+    @CsvSource({
+            ", Amount must not be null",
+            "0, Amount must be greater than zero",
+            "-1.00, Amount must be greater than zero",
+            "10.001, Amount must not have more than 2 decimal places"
+    })
+    void invalidRequestedAmountIsRejected(BigDecimal amount, String message) {
         assertThatThrownBy(() -> BankTransaction.createNew(
-                null,
+                amount,
                 CurrencyCode.TRY,
                 TransactionType.DEPOSIT,
                 VALID_TRANSACTION_REFERENCE,
                 null
         ))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must not be null");
-    }
-
-    @Test
-    void zeroRequestedAmountIsRejected() {
-        assertThatThrownBy(() -> BankTransaction.createNew(
-                BigDecimal.ZERO,
-                CurrencyCode.TRY,
-                TransactionType.DEPOSIT,
-                VALID_TRANSACTION_REFERENCE,
-                null
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must be greater than zero");
-    }
-
-    @Test
-    void negativeRequestedAmountIsRejected() {
-        assertThatThrownBy(() -> BankTransaction.createNew(
-                new BigDecimal("-1.00"),
-                CurrencyCode.TRY,
-                TransactionType.DEPOSIT,
-                VALID_TRANSACTION_REFERENCE,
-                null
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must be greater than zero");
-    }
-
-    @Test
-    void requestedAmountWithMoreThanTwoMeaningfulDecimalPlacesIsRejected() {
-        assertThatThrownBy(() -> BankTransaction.createNew(
-                new BigDecimal("10.001"),
-                CurrencyCode.TRY,
-                TransactionType.DEPOSIT,
-                VALID_TRANSACTION_REFERENCE,
-                null
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Amount must not have more than 2 decimal places");
+                .hasMessage(message);
     }
 
     @Test
@@ -173,77 +142,24 @@ class BankTransactionTest {
                 .hasMessage("Transaction type cannot be null");
     }
 
-    @Test
-    void nullReferenceIsRejected() {
+    @ParameterizedTest
+    @CsvSource({
+            ", Reference cannot be null",
+            "'', Reference must be exactly 32 hexadecimal characters",
+            "0123456789abcdef0123456789abcde, Reference must be exactly 32 hexadecimal characters",
+            "0123456789abcdef0123456789abcdef0, Reference must be exactly 32 hexadecimal characters",
+            "0123456789abcdef0123456789abcdeg, Reference must be exactly 32 hexadecimal characters"
+    })
+    void invalidReferenceIsRejected(String reference, String message) {
         assertThatThrownBy(() -> BankTransaction.createNew(
                 new BigDecimal("100.00"),
                 CurrencyCode.TRY,
                 TransactionType.DEPOSIT,
-                null,
+                reference,
                 null
         ))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Reference cannot be null");
-    }
-
-    @Test
-    void malformedReferenceIsRejected() {
-        assertThatThrownBy(() -> BankTransaction.createNew(
-                new BigDecimal("100.00"),
-                CurrencyCode.TRY,
-                TransactionType.DEPOSIT,
-                "",
-                null
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Reference must be exactly 32 hexadecimal characters"
-                );
-    }
-
-    @Test
-    void shortReferenceIsRejected() {
-        assertThatThrownBy(() -> BankTransaction.createNew(
-                new BigDecimal("100.00"),
-                CurrencyCode.TRY,
-                TransactionType.DEPOSIT,
-                "0123456789abcdef0123456789abcde",
-                null
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Reference must be exactly 32 hexadecimal characters"
-                );
-    }
-
-    @Test
-    void longReferenceIsRejected() {
-        assertThatThrownBy(() -> BankTransaction.createNew(
-                new BigDecimal("100.00"),
-                CurrencyCode.TRY,
-                TransactionType.DEPOSIT,
-                "0123456789abcdef0123456789abcdef0",
-                null
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Reference must be exactly 32 hexadecimal characters"
-                );
-    }
-
-    @Test
-    void nonHexadecimalReferenceIsRejected() {
-        assertThatThrownBy(() -> BankTransaction.createNew(
-                new BigDecimal("100.00"),
-                CurrencyCode.TRY,
-                TransactionType.DEPOSIT,
-                "0123456789abcdef0123456789abcdeg",
-                null
-        ))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "Reference must be exactly 32 hexadecimal characters"
-                );
+                .hasMessage(message);
     }
 
     @Test
