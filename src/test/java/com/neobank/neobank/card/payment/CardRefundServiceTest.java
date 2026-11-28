@@ -2,7 +2,6 @@ package com.neobank.neobank.card.payment;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.payment.dto.CardRefundResponse;
 import com.neobank.neobank.creditaccount.CreditAccountRepository;
 import com.neobank.neobank.customer.Customer;
@@ -34,6 +33,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.neobank.neobank.support.TestFixtures.currentAccount;
+import static com.neobank.neobank.support.TestFixtures.customer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -103,12 +104,12 @@ class CardRefundServiceTest {
                 referenceGenerator
         );
 
-        merchantCustomer = createCustomer(MERCHANT_EMAIL);
+        merchantCustomer = customer(MERCHANT_EMAIL);
     }
 
     @Test
     void crossCurrencyRefundUsesFreshRatesNotThePurchaseSnapshot() {
-        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
+        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer("customer@example.com"), 1L);
         Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.USD, merchantCustomer, 2L);
         fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
 
@@ -187,7 +188,7 @@ class CardRefundServiceTest {
 
     @Test
     void refundPurchaseTakesThePurchaseLockBeforeAnyOtherRead() {
-        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
+        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer("customer@example.com"), 1L);
         Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
         fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
 
@@ -214,7 +215,7 @@ class CardRefundServiceTest {
 
     @Test
     void refundPurchaseFailsWithoutMarkingPurchaseWhenMerchantCannotCoverRefund() {
-        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
+        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer("customer@example.com"), 1L);
         Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
         fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
 
@@ -250,7 +251,7 @@ class CardRefundServiceTest {
 
     @Test
     void refundPurchaseRejectsWhenTheAccountToRefundToIsClosed() {
-        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
+        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer("customer@example.com"), 1L);
         Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
         fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
 
@@ -281,7 +282,7 @@ class CardRefundServiceTest {
 
     @Test
     void refundPurchaseFailsWhenStoredIdempotencyResultIsMissing() {
-        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, createCustomer("customer@example.com"), 1L);
+        Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer("customer@example.com"), 1L);
         Account merchantAccount = createAccount(MERCHANT_ACCOUNT_NUMBER, "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
         fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
 
@@ -342,14 +343,6 @@ class CardRefundServiceTest {
         ));
     }
 
-    private Customer createCustomer(String email) {
-        return Customer.createNew(
-                email,
-                "{bcrypt}raw-password123",
-                "Ada Lovelace"
-        );
-    }
-
     private Account createAccount(
             String accountNumber,
             String ledgerReference,
@@ -358,14 +351,7 @@ class CardRefundServiceTest {
             Long ledgerAccountId
     ) {
 
-        Account account = Account.createNew(
-                accountNumber,
-                ledgerReference,
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                currency
-        );
+        Account account = currentAccount(accountNumber, ledgerReference, customer, currency);
         ReflectionTestUtils.setField(account.getLedgerAccount(), "id", ledgerAccountId);
 
         return account;

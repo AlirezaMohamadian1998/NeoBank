@@ -2,7 +2,6 @@ package com.neobank.neobank.transaction.history;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.payment.CardPurchaseDetails;
 import com.neobank.neobank.card.payment.CardPurchaseDetailsRepository;
 import com.neobank.neobank.card.payment.CardRefundDetails;
@@ -31,6 +30,8 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
+import static com.neobank.neobank.support.TestFixtures.currentAccount;
+import static com.neobank.neobank.support.TestFixtures.customer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -65,11 +66,7 @@ class TransactionHistoryServiceTest {
 
     @Test
     void historyLoadsCardPurchaseDetailsInOneQueryForPayerPurchaseEntries() {
-        Customer customer = Customer.createNew(
-                "customer@example.com",
-                "{bcrypt}password-hash",
-                "Ada Lovelace"
-        );
+        Customer customer = customer("customer@example.com");
 
         LedgerAccount merchantLedgerAccount = LedgerAccount.createNew(
                 "2".repeat(32),
@@ -79,14 +76,7 @@ class TransactionHistoryServiceTest {
 
         ReflectionTestUtils.setField(merchantLedgerAccount, "id", 2L);
 
-        Account account = Account.createNew(
-                "12".repeat(7),
-                "1".repeat(32),
-                "test",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        );
+        Account account = currentAccount("12".repeat(7), "1".repeat(32), customer, CurrencyCode.TRY);
 
         ReflectionTestUtils.setField(account.getLedgerAccount(), "id", 1L);
 
@@ -190,11 +180,7 @@ class TransactionHistoryServiceTest {
 
     @Test
     void historySkipsCardPurchaseDetailsLookupWhenPageHasNoPayerPurchaseEntries() {
-        Customer customer = Customer.createNew(
-                "merchant@example.com",
-                "{bcrypt}password-hash",
-                "Ada Lovelace"
-        );
+        Customer customer = customer("merchant@example.com");
 
         LedgerAccount payerLedgerAccount = LedgerAccount.createNew(
                 "1".repeat(32),
@@ -204,14 +190,7 @@ class TransactionHistoryServiceTest {
 
         ReflectionTestUtils.setField(payerLedgerAccount, "id", 1L);
 
-        Account merchantAccount = Account.createNew(
-                "98".repeat(7),
-                "2".repeat(32),
-                "merchant",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        );
+        Account merchantAccount = currentAccount("98".repeat(7), "2".repeat(32), customer, CurrencyCode.TRY);
 
         ReflectionTestUtils.setField(merchantAccount.getLedgerAccount(), "id", 2L);
 
@@ -281,17 +260,13 @@ class TransactionHistoryServiceTest {
 
     @Test
     void historyLoadsCardRefundDetailsInOneQueryForCardholderRefundEntries() {
-        Customer customer = Customer.createNew(
-                "customer@example.com",
-                "{bcrypt}password-hash",
-                "Ada Lovelace"
-        );
+        Customer customer = customer("customer@example.com");
 
         LedgerAccount merchantLedgerAccount = LedgerAccount.createNew("2".repeat(32), LedgerAccountType.LIABILITY, CurrencyCode.TRY);
 
         ReflectionTestUtils.setField(merchantLedgerAccount, "id", 2L);
 
-        Account account = Account.createNew("12".repeat(7), "1".repeat(32), "test", AccountType.CURRENT, customer, CurrencyCode.TRY);
+        Account account = currentAccount("12".repeat(7), "1".repeat(32), customer, CurrencyCode.TRY);
 
         ReflectionTestUtils.setField(account.getLedgerAccount(), "id", 1L);
 

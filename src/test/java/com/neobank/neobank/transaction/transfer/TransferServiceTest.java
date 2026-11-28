@@ -3,7 +3,6 @@ package com.neobank.neobank.transaction.transfer;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxRateLockUnavailableException;
 import com.neobank.neobank.fx.FxRateService;
@@ -36,6 +35,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.neobank.neobank.support.TestFixtures.currentAccount;
+import static com.neobank.neobank.support.TestFixtures.customer;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -93,7 +94,7 @@ class TransferServiceTest {
     void transferThrowsInvalidTransferExceptionWhenSourceAndDestinationHaveSameAccountNumber() {
         String idempotencyKey = "11111111111111111111111111111111";
         String sameAccountNumber = "12345678900987";
-        Customer sourceCustomer = createCustomer("source@example.com");
+        Customer sourceCustomer = customer("source@example.com");
         Account sourceAccount = createAccount(
                 sameAccountNumber,
                 SOURCE_LEDGER_REFERENCE,
@@ -136,7 +137,7 @@ class TransferServiceTest {
     void transferThrowsAccountNotFoundExceptionWhenDestinationAccountDoesNotExist() {
         String idempotencyKey = "11111111111111111111111111111111";
         String destinationAccountNumber = "98765432100123";
-        Customer sourceCustomer = createCustomer("source@example.com");
+        Customer sourceCustomer = customer("source@example.com");
         Account sourceAccount = createAccount(
                 "12345678900987",
                 SOURCE_LEDGER_REFERENCE,
@@ -180,8 +181,8 @@ class TransferServiceTest {
     @Test
     void transferThrowsInsufficientFundsWhenSourceBalanceIsLessThanAmount() {
         String idempotencyKey = "11111111111111111111111111111111";
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
         Account sourceAccount = createAccount(
                 "12345678900987",
                 SOURCE_LEDGER_REFERENCE,
@@ -260,8 +261,8 @@ class TransferServiceTest {
 
     @Test
     void transferBetweenSameCurrencyAccountsUsesLockWhenRequestCurrencyDiffers() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
 
         String idempotencyKey = "11111111111111111111111111111111";
         String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
@@ -479,8 +480,8 @@ class TransferServiceTest {
 
     @Test
     void crossCurrencyIdempotentReplayDoesNotReloadRateLock() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
 
         String idempotencyKey = "11111111111111111111111111111111";
         String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
@@ -620,8 +621,8 @@ class TransferServiceTest {
 
     @Test
     void crossCurrencyTransferWithoutLockIsRejected() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
 
         String idempotencyKey = "11111111111111111111111111111111";
 
@@ -667,8 +668,8 @@ class TransferServiceTest {
 
     @Test
     void sameCurrencyTransferWithLockIsRejected() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
 
         String idempotencyKey = "11111111111111111111111111111111";
 
@@ -713,8 +714,8 @@ class TransferServiceTest {
 
     @Test
     void crossCurrencyTransferRejectsLockWithDifferentBaseCurrency() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
 
         String idempotencyKey = "11111111111111111111111111111111";
         String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
@@ -783,8 +784,8 @@ class TransferServiceTest {
 
     @Test
     void transferThrowsIdempotencyResultNotFoundExceptionWhenResultDoesNotExist() {
-        Customer sourceCustomer = createCustomer("source@example.com");
-        Customer destinationCustomer = createCustomer("target@example.com");
+        Customer sourceCustomer = customer("source@example.com");
+        Customer destinationCustomer = customer("target@example.com");
         String idempotencyKey = "11111111111111111111111111111111";
 
         Account sourceAccount = createAccount(
@@ -844,14 +845,6 @@ class TransferServiceTest {
         verifyNoInteractions(referenceGenerator, fxRateService);
     }
 
-    private Customer createCustomer(String email) {
-        return Customer.createNew(
-                email,
-                "{bcrypt}raw-password123",
-                "Ada Lovelace"
-        );
-    }
-
     private Account createAccount(
             String accountNumber,
             String ledgerReference,
@@ -859,14 +852,7 @@ class TransferServiceTest {
             Customer customer
     ) {
 
-        return Account.createNew(
-                accountNumber,
-                ledgerReference,
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                currency
-        );
+        return currentAccount(accountNumber, ledgerReference, customer, currency);
     }
 
     private TransferRequest createTransferRequest(

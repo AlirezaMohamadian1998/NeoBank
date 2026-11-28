@@ -2,7 +2,6 @@ package com.neobank.neobank.card.debit;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.CardStatus;
 import com.neobank.neobank.card.debit.dto.DebitCardIssueResponse;
 import com.neobank.neobank.card.issuing.CardIssuer;
@@ -28,6 +27,8 @@ import java.time.Instant;
 import java.time.YearMonth;
 import java.util.Optional;
 
+import static com.neobank.neobank.support.TestFixtures.currentAccount;
+import static com.neobank.neobank.support.TestFixtures.customer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
@@ -90,20 +91,9 @@ class DebitCardServiceTest {
         String email = "customer@example.com";
         String cardReference = "2".repeat(32);
 
-        Customer customer = Customer.createNew(
-                email,
-                "{bcrypt}encoded-password",
-                "Ada Lovelace"
-        );
+        Customer customer = customer(email);
 
-        Account account = Account.createNew(
-                accountNumber,
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        );
+        Account account = currentAccount(accountNumber, "8f3c8a21d9e64b5fa2c17e9084bd6a32", customer, CurrencyCode.TRY);
 
         IssuedCard issuedCard = new IssuedCard(
                 "1234",
@@ -203,20 +193,9 @@ class DebitCardServiceTest {
         String accountNumber = "12345678900321";
         String email = "customer@example.com";
 
-        Customer customer = Customer.createNew(
-                email,
-                "{bcrypt}encoded-password",
-                "Ada Lovelace"
-        );
+        Customer customer = customer(email);
 
-        Account account = Account.createNew(
-                accountNumber,
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        );
+        Account account = currentAccount(accountNumber, "8f3c8a21d9e64b5fa2c17e9084bd6a32", customer, CurrencyCode.TRY);
 
         String requestHash = "a".repeat(64);
 

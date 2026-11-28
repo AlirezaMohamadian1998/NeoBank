@@ -3,7 +3,6 @@ package com.neobank.neobank.card.payment;
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountNotFoundException;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.card.CardExpiredException;
 import com.neobank.neobank.card.CardRepository;
 import com.neobank.neobank.card.CardStatus;
@@ -49,6 +48,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+import static com.neobank.neobank.support.TestFixtures.currentAccount;
+import static com.neobank.neobank.support.TestFixtures.customer;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -116,8 +117,8 @@ class CardPaymentServiceTest {
 
     @Test
     void crossCurrencyPurchaseConvertsBothSidesWhenMerchantAccountUsesAnotherCurrency() {
-        Customer customer = createCustomer("customer@example.com");
-        Customer merchantCustomer = createCustomer("merchant@example.com");
+        Customer customer = customer("customer@example.com");
+        Customer merchantCustomer = customer("merchant@example.com");
 
         Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
         Account merchantAccount = createAccount("98".repeat(7), "4".repeat(32), CurrencyCode.EUR, merchantCustomer, 2L);
@@ -189,8 +190,8 @@ class CardPaymentServiceTest {
 
     @Test
     void purchaseUsesFxWhenOnlyMerchantAccountCurrencyDiffers() {
-        Customer customer = createCustomer("customer@example.com");
-        Customer merchantCustomer = createCustomer("merchant@example.com");
+        Customer customer = customer("customer@example.com");
+        Customer merchantCustomer = customer("merchant@example.com");
 
         Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
         Account merchantAccount = createAccount("98".repeat(7), "4".repeat(32), CurrencyCode.EUR, merchantCustomer, 2L);
@@ -261,7 +262,7 @@ class CardPaymentServiceTest {
 
     @Test
     void crossCurrencyPurchaseRoundsConvertedAmountHalfEvenToTwoDecimals() {
-        Customer customer = createCustomer("customer@example.com");
+        Customer customer = customer("customer@example.com");
 
         Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
         fundingAccount.getLedgerAccount().credit(new BigDecimal("100.00"));
@@ -346,7 +347,7 @@ class CardPaymentServiceTest {
 
     @Test
     void makePurchaseThrowsAccountNotFoundExceptionWhenMerchantAccountDoesNotExist() {
-        Customer customer = createCustomer("customer@example.com");
+        Customer customer = customer("customer@example.com");
 
         Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
         fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
@@ -384,7 +385,7 @@ class CardPaymentServiceTest {
 
     @Test
     void makePurchaseThrowsIllegalStateExceptionWhenSettlementAccountIsNotConfigured() {
-        Customer customer = createCustomer("customer@example.com");
+        Customer customer = customer("customer@example.com");
 
         Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
 
@@ -418,7 +419,7 @@ class CardPaymentServiceTest {
 
     @Test
     void makePurchaseThrowsInvalidCardPaymentExceptionWhenMerchantAccountIsFundingAccount() {
-        Customer customer = createCustomer("customer@example.com");
+        Customer customer = customer("customer@example.com");
 
         Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
         fundingAccount.getLedgerAccount().credit(new BigDecimal("1000.00"));
@@ -456,8 +457,8 @@ class CardPaymentServiceTest {
 
     @Test
     void makePurchaseThrowsCardExpiredExceptionWhenCardIsExpired() {
-        Customer customer = createCustomer("customer@example.com");
-        Customer merchantCustomer = createCustomer("merchant@example.com");
+        Customer customer = customer("customer@example.com");
+        Customer merchantCustomer = customer("merchant@example.com");
 
         Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
         Account merchantAccount = createAccount("98".repeat(7), "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
@@ -502,8 +503,8 @@ class CardPaymentServiceTest {
     @ParameterizedTest
     @MethodSource("nonActiveCardStatusSource")
     void makePurchaseThrowsCardNotActiveExceptionWhenCardIsNotActive(CardStatus status) {
-        Customer customer = createCustomer("customer@example.com");
-        Customer merchantCustomer = createCustomer("merchant@example.com");
+        Customer customer = customer("customer@example.com");
+        Customer merchantCustomer = customer("merchant@example.com");
 
         Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
         Account merchantAccount = createAccount("98".repeat(7), "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
@@ -545,8 +546,8 @@ class CardPaymentServiceTest {
 
     @Test
     void makePurchaseThrowsIdempotencyResultNotFoundExceptionWhenReplayResultDoesNotExist() {
-        Customer customer = createCustomer("customer@example.com");
-        Customer merchantCustomer = createCustomer("merchant@example.com");
+        Customer customer = customer("customer@example.com");
+        Customer merchantCustomer = customer("merchant@example.com");
 
         Account fundingAccount = createAccount("12".repeat(7), "3".repeat(32), CurrencyCode.TRY, customer, 1L);
         Account merchantAccount = createAccount("98".repeat(7), "4".repeat(32), CurrencyCode.TRY, merchantCustomer, 2L);
@@ -603,14 +604,6 @@ class CardPaymentServiceTest {
         );
     }
 
-    private Customer createCustomer(String email) {
-        return Customer.createNew(
-                email,
-                "{bcrypt}raw-password123",
-                "Ada Lovelace"
-        );
-    }
-
     private Account createAccount(
             String accountNumber,
             String ledgerReference,
@@ -619,14 +612,7 @@ class CardPaymentServiceTest {
             Long ledgerAccountId
     ) {
 
-        Account account = Account.createNew(
-                accountNumber,
-                ledgerReference,
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                currency
-        );
+        Account account = currentAccount(accountNumber, ledgerReference, customer, currency);
         ReflectionTestUtils.setField(account.getLedgerAccount(), "id", ledgerAccountId);
 
         return account;

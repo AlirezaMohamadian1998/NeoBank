@@ -2,7 +2,6 @@ package com.neobank.neobank.transaction.withdrawal;
 
 import com.neobank.neobank.account.Account;
 import com.neobank.neobank.account.AccountRepository;
-import com.neobank.neobank.account.AccountType;
 import com.neobank.neobank.customer.Customer;
 import com.neobank.neobank.fx.FxRateLockUnavailableException;
 import com.neobank.neobank.fx.FxRateService;
@@ -40,6 +39,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.neobank.neobank.support.TestFixtures.currentAccount;
+import static com.neobank.neobank.support.TestFixtures.customer;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -97,20 +98,9 @@ class WithdrawalServiceTest {
         String accountNumber = "12345678900987";
         String idempotencyKey = "11111111111111111111111111111111";
 
-        Customer customer = Customer.createNew(
-                email,
-                "{bcrypt}raw-password123",
-                "Ada Lovelace"
-        );
+        Customer customer = customer(email);
 
-        Account account = Account.createNew(
-                accountNumber,
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        );
+        Account account = currentAccount(accountNumber, "8f3c8a21d9e64b5fa2c17e9084bd6a32", customer, CurrencyCode.TRY);
 
         LedgerAccount internalLedgerAccount = LedgerAccount.createNew(
                 "7f3c8a21d9e64b5fa2c17e9084bd6a31",
@@ -187,20 +177,9 @@ class WithdrawalServiceTest {
         String internalEntryReference = "5f3c8a21d9e64b5fa2c17e9084bd6a34";
         String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
 
-        Customer customer = Customer.createNew(
-                email,
-                "{bcrypt}raw-password123",
-                "Ada Lovelace"
-        );
+        Customer customer = customer(email);
 
-        Account account = Account.createNew(
-                accountNumber,
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        );
+        Account account = currentAccount(accountNumber, "8f3c8a21d9e64b5fa2c17e9084bd6a32", customer, CurrencyCode.TRY);
 
         account.getLedgerAccount().credit(new BigDecimal("49000.00"));
 
@@ -334,20 +313,9 @@ class WithdrawalServiceTest {
                 null
         );
 
-        Customer customer = Customer.createNew(
-                email,
-                "{bcrypt}encoded-password",
-                "Ada Lovelace"
-        );
+        Customer customer = customer(email);
 
-        Account account = Account.createNew(
-                accountNumber,
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        );
+        Account account = currentAccount(accountNumber, "8f3c8a21d9e64b5fa2c17e9084bd6a32", customer, CurrencyCode.TRY);
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
@@ -373,20 +341,9 @@ class WithdrawalServiceTest {
                 lockId
         );
 
-        Customer customer = Customer.createNew(
-                email,
-                "{bcrypt}encoded-password",
-                "Ada Lovelace"
-        );
+        Customer customer = customer(email);
 
-        Account account = Account.createNew(
-                accountNumber,
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        );
+        Account account = currentAccount(accountNumber, "8f3c8a21d9e64b5fa2c17e9084bd6a32", customer, CurrencyCode.TRY);
 
         given(accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, email))
                 .willReturn(Optional.of(account));
@@ -406,20 +363,9 @@ class WithdrawalServiceTest {
         String transactionReference = "6f3c8a21d9e64b5fa2c17e9084bd6a30";
         String lockId = "4ea56d0d-aa07-4d26-be23-ce971c0976a0";
 
-        Customer customer = Customer.createNew(
-                email,
-                "{bcrypt}raw-password123",
-                "Ada Lovelace"
-        );
+        Customer customer = customer(email);
 
-        Account account = Account.createNew(
-                accountNumber,
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        );
+        Account account = currentAccount(accountNumber, "8f3c8a21d9e64b5fa2c17e9084bd6a32", customer, CurrencyCode.TRY);
 
         account.getLedgerAccount().credit(new BigDecimal("49000.00"));
 
@@ -481,20 +427,9 @@ class WithdrawalServiceTest {
         String idempotencyKey = "11111111111111111111111111111111";
         String transactionReference = "6f3c8a21d9e64b5fa2c17e9084bd6a30";
 
-        Customer customer = Customer.createNew(
-                email,
-                "{bcrypt}raw-password123",
-                "Ada Lovelace"
-        );
+        Customer customer = customer(email);
 
-        Account account = Account.createNew(
-                accountNumber,
-                "8f3c8a21d9e64b5fa2c17e9084bd6a32",
-                "Private Account",
-                AccountType.CURRENT,
-                customer,
-                CurrencyCode.TRY
-        );
+        Account account = currentAccount(accountNumber, "8f3c8a21d9e64b5fa2c17e9084bd6a32", customer, CurrencyCode.TRY);
 
         WithdrawalRequest request = new WithdrawalRequest(
                 new BigDecimal("1000.00"),
