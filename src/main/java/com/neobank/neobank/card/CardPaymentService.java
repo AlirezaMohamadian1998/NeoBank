@@ -81,9 +81,7 @@ public class CardPaymentService {
             String idempotencyKey,
             String customerEmail
     ) {
-        if(!idempotencyKey.matches("[a-f0-9]{32}")) {
-            throw new InvalidIdempotencyKeyException("Idempotency key is invalid");
-        }
+        IdempotencyService.requireValidKey(idempotencyKey);
 
         Card card =
                 cardRepository.findByCardReference(cardReference)

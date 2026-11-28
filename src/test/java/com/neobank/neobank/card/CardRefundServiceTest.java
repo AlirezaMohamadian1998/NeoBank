@@ -305,7 +305,7 @@ class CardRefundServiceTest {
                 MERCHANT_ACCOUNT_NUMBER, PURCHASE_REFERENCE, "not-a-valid-key", MERCHANT_EMAIL
         ))
                 .isInstanceOf(InvalidIdempotencyKeyException.class)
-                .hasMessage("Idempotency key is invalid");
+                .hasMessage("Invalid idempotency key");
 
         verifyNoInteractions(accountRepository, idempotencyService, bankTransactionRepository, cardRefundDetailsRepository);
     }

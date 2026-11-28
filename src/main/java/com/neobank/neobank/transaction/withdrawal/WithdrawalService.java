@@ -56,9 +56,7 @@ public class WithdrawalService {
             }
     )
     public WithdrawalResponse withdraw(WithdrawalRequest request, String accountNumber, String customerEmail, String idempotencyKey) {
-        if(!idempotencyKey.matches("[a-f0-9]{32}")) {
-            throw new InvalidIdempotencyKeyException("Invalid idempotency key");
-        }
+        IdempotencyService.requireValidKey(idempotencyKey);
 
         var account = accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, customerEmail)
                 .orElseThrow(AccountNotFoundException::new);

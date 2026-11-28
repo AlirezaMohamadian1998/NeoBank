@@ -62,9 +62,7 @@ public class DepositService {
             String customerEmail,
             String idempotencyKey
     ) {
-        if(!idempotencyKey.matches("[a-f0-9]{32}")) {
-            throw new InvalidIdempotencyKeyException("Invalid idempotency key");
-        }
+        IdempotencyService.requireValidKey(idempotencyKey);
 
         Account account = accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, customerEmail)
                 .orElseThrow(() -> new AccountNotFoundException());

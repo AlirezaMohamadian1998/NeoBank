@@ -720,7 +720,7 @@ class CardPaymentServiceTest {
 
         assertThatThrownBy(() -> cardPaymentService.makePurchase("2".repeat(32), request, idempotencyKey, "customer@example.com"))
                 .isInstanceOf(InvalidIdempotencyKeyException.class)
-                .hasMessage("Idempotency key is invalid");
+                .hasMessage("Invalid idempotency key");
 
         verifyNoInteractions(
                 cardRepository,

@@ -18,6 +18,12 @@ public class IdempotencyService {
 
     private final IdempotencyRecordRepository idempotencyRepository;
 
+    public static void requireValidKey(String key) {
+        if(!key.matches("[a-f0-9]{32}")) {
+            throw new InvalidIdempotencyKeyException("Invalid idempotency key");
+        }
+    }
+
     public Optional<IdempotencyRecord> findAndValidateRecord(String key, String email,  String requestHash) {
         var record = idempotencyRepository.findByIdempotencyKeyAndCustomer_EmailIgnoreCase(key, email);
 

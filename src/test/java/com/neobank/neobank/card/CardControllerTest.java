@@ -381,7 +381,7 @@ class CardControllerTest {
                 ),
                 Arguments.argumentSet(
                         "makePaymentReturnsBadRequestForInvalidIdempotencyKey",
-                        new InvalidIdempotencyKeyException("Idempotency key is invalid"),
+                        new InvalidIdempotencyKeyException("Invalid idempotency key"),
                         "Invalid idempotency key",
                         400
                 ),
