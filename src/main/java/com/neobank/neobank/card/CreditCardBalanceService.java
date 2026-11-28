@@ -69,9 +69,7 @@ public class CreditCardBalanceService {
             String idempotencyKey,
             String customerEmail
     ) {
-        if(!idempotencyKey.matches("[a-f0-9]{32}")) {
-            throw new InvalidIdempotencyKeyException("Idempotency key is invalid");
-        }
+        IdempotencyService.requireValidKey(idempotencyKey);
 
         CreditCard creditCard =
                 creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase(cardReference, customerEmail)
@@ -172,9 +170,7 @@ public class CreditCardBalanceService {
             String idempotencyKey,
             String customerEmail
     ) {
-        if(!idempotencyKey.matches("[a-f0-9]{32}")) {
-            throw new InvalidIdempotencyKeyException("Idempotency key is invalid");
-        }
+        IdempotencyService.requireValidKey(idempotencyKey);
 
         CreditCard creditCard =
                 creditCardRepository.findByCardReferenceAndCreditAccount_Customer_EmailIgnoreCase(cardReference, customerEmail)

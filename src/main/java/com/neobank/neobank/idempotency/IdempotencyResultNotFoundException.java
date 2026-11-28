@@ -1,7 +1,10 @@
 package com.neobank.neobank.idempotency;
 
-public class IdempotencyResultNotFoundException extends RuntimeException {
+import com.neobank.neobank.shared.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class IdempotencyResultNotFoundException extends ApiException {
     public IdempotencyResultNotFoundException(String message) {
-        super(message);
+        super(HttpStatus.INTERNAL_SERVER_ERROR, "Idempotency result not found", message);
     }
 }

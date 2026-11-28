@@ -62,9 +62,7 @@ public class DebitCardService {
             }
     )
     public DebitCardIssueResponse issueDebitCard(String customerEmail, String accountNumber, String idempotencyKey) {
-        if(!idempotencyKey.matches("[0-9a-f]{32}")) {
-            throw new InvalidIdempotencyKeyException("Invalid idempotency key");
-        }
+        IdempotencyService.requireValidKey(idempotencyKey);
 
         Account fundingAccount = accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(accountNumber, customerEmail)
                 .orElseThrow(AccountNotFoundException::new);

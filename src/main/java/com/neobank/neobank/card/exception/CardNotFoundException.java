@@ -1,7 +1,10 @@
 package com.neobank.neobank.card.exception;
 
-public class CardNotFoundException extends RuntimeException {
+import com.neobank.neobank.shared.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class CardNotFoundException extends ApiException {
     public CardNotFoundException(String message) {
-        super(message);
+        super(HttpStatus.NOT_FOUND, "Card not found", message);
     }
 }

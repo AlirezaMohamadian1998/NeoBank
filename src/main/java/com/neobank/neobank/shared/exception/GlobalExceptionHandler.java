@@ -1,25 +1,7 @@
 package com.neobank.neobank.shared.exception;
 
-import com.neobank.neobank.account.AccountNotFoundException;
-import com.neobank.neobank.card.exception.*;
-import com.neobank.neobank.creditaccount.CreditAccountClosedException;
-import com.neobank.neobank.creditaccount.CreditLimitExceededException;
-import com.neobank.neobank.creditaccount.CreditStatementNotFoundException;
-import com.neobank.neobank.creditaccount.NothingToPayOutException;
-import com.neobank.neobank.creditaccount.RepaymentExceedsBalanceException;
-import com.neobank.neobank.customer.CustomerNotFoundException;
-import com.neobank.neobank.customer.EmailAlreadyRegisteredException;
-import com.neobank.neobank.fx.FxProviderUnavailableException;
-import com.neobank.neobank.fx.FxRateLockUnavailableException;
-import com.neobank.neobank.idempotency.IdempotencyConflictException;
+import com.neobank.neobank.card.exception.CardDailySpendRaceException;
 import com.neobank.neobank.idempotency.IdempotencyKeyRaceException;
-import com.neobank.neobank.idempotency.IdempotencyResultNotFoundException;
-import com.neobank.neobank.idempotency.InvalidIdempotencyKeyException;
-import com.neobank.neobank.ledger.InsufficientFundsException;
-import com.neobank.neobank.transaction.deposit.InvalidDepositException;
-import com.neobank.neobank.transaction.history.InvalidHistorySortException;
-import com.neobank.neobank.transaction.transfer.InvalidTransferException;
-import com.neobank.neobank.transaction.withdrawal.InvalidWithdrawalException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.Nullable;
 import org.springframework.dao.ConcurrencyFailureException;
@@ -104,489 +86,71 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return new ResponseEntity<>(problemDetail, status);
     }
 
-    @ExceptionHandler(EmailAlreadyRegisteredException.class)
-    public ResponseEntity<ProblemDetail> handleEmailAlreadyRegisteredException(
-            EmailAlreadyRegisteredException ex,
-            WebRequest webRequest
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<ProblemDetail> handleApiException(
+            ApiException ex,
+            HttpServletRequest request
     ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(webRequest.getDescription(false).replace("uri=", "")));
-        problemDetail.setTitle("Email already registered");
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(ex.getStatus(), ex.getMessage());
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
+        problemDetail.setTitle(ex.getTitle());
 
-        return new ResponseEntity<>(problemDetail, HttpStatus.CONFLICT);
+        return ResponseEntity.status(ex.getStatus()).body(problemDetail);
     }
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ProblemDetail> handleAuthenticationException(
             AuthenticationException ex,
-            WebRequest req
+            HttpServletRequest request
     ) {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Invalid email or password.");
-        problemDetail.setInstance(URI.create(req.getDescription(false).replace("uri=", "")));
+        problemDetail.setInstance(URI.create(request.getRequestURI()));
         problemDetail.setTitle("Authentication failed");
 
-        return new ResponseEntity<>(problemDetail, HttpStatus.UNAUTHORIZED);
-    }
-
-    @ExceptionHandler(CustomerNotFoundException.class)
-    public ResponseEntity<ProblemDetail> handleCustomerNotFoundException(
-            CustomerNotFoundException ex,
-            WebRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        problemDetail.setTitle("Customer not found");
-        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
-
-        return new ResponseEntity<>(problemDetail, HttpStatus.NOT_FOUND);
-    }
-
-    @ExceptionHandler(AccountNotFoundException.class)
-    public ResponseEntity<ProblemDetail> handleAccountNotFoundException(
-            AccountNotFoundException ex,
-            WebRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
-        problemDetail.setTitle("Account not found");
-
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
-    }
-
-    @ExceptionHandler(InsufficientFundsException.class)
-    public ResponseEntity<ProblemDetail> handleInsufficientFundsException(
-            InsufficientFundsException ex,
-            WebRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
-        problemDetail.setTitle("Insufficient funds");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(InvalidTransferException.class)
-    public ResponseEntity<ProblemDetail> handleInvalidTransferException(
-            InvalidTransferException ex,
-            WebRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
-        problemDetail.setTitle("Invalid transfer");
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
-    }
-
-    @ExceptionHandler(InvalidDepositException.class)
-    public ResponseEntity<ProblemDetail> handleInvalidDepositException(
-            InvalidDepositException ex,
-            WebRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
-        problemDetail.setTitle("Invalid deposit");
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
-    }
-
-    @ExceptionHandler(InvalidWithdrawalException.class)
-    public ResponseEntity<ProblemDetail> handleInvalidWithdrawalException(
-            InvalidWithdrawalException ex,
-            WebRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
-        problemDetail.setTitle("Invalid withdrawal");
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
-    }
-
-    @ExceptionHandler(IdempotencyConflictException.class)
-    public ResponseEntity<ProblemDetail> handleIdempotencyConflictException(
-            IdempotencyConflictException ex,
-            WebRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getDescription(false).replace("uri=", "")));
-        problemDetail.setTitle("Idempotency Conflict");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(InvalidIdempotencyKeyException.class)
-    public ResponseEntity<ProblemDetail> handleInvalidIdempotencyKeyException(
-            InvalidIdempotencyKeyException ex,
-            WebRequest req
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problemDetail.setInstance(URI.create(req.getDescription(false).replace("uri=", "")));
-        problemDetail.setTitle("Invalid idempotency key");
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problemDetail);
     }
 
     @ExceptionHandler(IdempotencyKeyRaceException.class)
     public ResponseEntity<ProblemDetail> handleIdempotencyKeyRace(
             HttpServletRequest request
     ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "The idempotency key is currently being processed. Retry the same request using the same key."
+        return retryLater(
+                "Idempotency request in progress",
+                "The idempotency key is currently being processed. Retry the same request using the same key.",
+                request
         );
-
-        problemDetail.setTitle("Idempotency request in progress");
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-
-        return ResponseEntity
-                .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .header(HttpHeaders.RETRY_AFTER, "1")
-                .body(problemDetail);
     }
 
     @ExceptionHandler(ConcurrencyFailureException.class)
     public ResponseEntity<ProblemDetail> handleConcurrencyFailure(
             HttpServletRequest request
     ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "The request could not be completed because of a temporary database concurrency conflict. Please retry."
+        return retryLater(
+                "Temporary concurrency failure",
+                "The request could not be completed because of a temporary database concurrency conflict. Please retry.",
+                request
         );
-
-        problemDetail.setTitle("Temporary concurrency failure");
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-
-        return ResponseEntity
-                .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .header(HttpHeaders.RETRY_AFTER, "1")
-                .body(problemDetail);
-    }
-
-    @ExceptionHandler(FxProviderUnavailableException.class)
-    public ResponseEntity<ProblemDetail> handleFxProviderUnavailableException(
-            FxProviderUnavailableException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Fx provider unavailable");
-
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problemDetail);
-    }
-
-    @ExceptionHandler(FxRateLockUnavailableException.class)
-    public ResponseEntity<ProblemDetail> handleFxRateLockUnavailableException(
-            FxRateLockUnavailableException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Fx rate lock unavailable");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(InvalidHistorySortException.class)
-    public ResponseEntity<ProblemDetail> handleInvalidHistorySortException(
-            InvalidHistorySortException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Invalid history sort");
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
-    }
-
-    @ExceptionHandler(IdempotencyResultNotFoundException.class)
-    public ResponseEntity<ProblemDetail> handleIdempotencyResultNotFoundException(
-            IdempotencyResultNotFoundException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Idempotency result not found");
-
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problemDetail);
-    }
-
-    @ExceptionHandler(CardExpiredException.class)
-    public ResponseEntity<ProblemDetail> handleCardExpiredException(
-            CardExpiredException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Card expired");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(CardNotFoundException.class)
-    public ResponseEntity<ProblemDetail> handleCardNotFoundException(
-            CardNotFoundException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Card not found");
-
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
-    }
-
-    @ExceptionHandler(CreditCardNotFoundException.class)
-    public ResponseEntity<ProblemDetail> handleCreditCardNotFoundException(
-            CreditCardNotFoundException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Credit card not found");
-
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
-    }
-
-    @ExceptionHandler(CreditStatementNotFoundException.class)
-    public ResponseEntity<ProblemDetail> handleCreditStatementNotFoundException(
-            CreditStatementNotFoundException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Credit statement not found");
-
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
-    }
-
-    @ExceptionHandler(DebitCardNotFoundException.class)
-    public ResponseEntity<ProblemDetail> handleDebitCardNotFoundException(
-            DebitCardNotFoundException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Debit card not found");
-
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
-    }
-
-    @ExceptionHandler(InvalidCardStatusTransitionException.class)
-    public ResponseEntity<ProblemDetail> handleInvalidCardStatusTransitionException(
-            InvalidCardStatusTransitionException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Invalid card status transition");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(UnsupportedCardStatusException.class)
-    public ResponseEntity<ProblemDetail> handleUnsupportedCardStatusException(
-            UnsupportedCardStatusException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Unsupported card status");
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
-    }
-
-    @ExceptionHandler(CardNotActiveException.class)
-    public ResponseEntity<ProblemDetail> handleCardNotActiveException(
-            CardNotActiveException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Card not active");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(CardLimitExceededException.class)
-    public ResponseEntity<ProblemDetail> handleCardLimitExceededException(
-            CardLimitExceededException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Card limit exceeded");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(CreditLimitExceededException.class)
-    public ResponseEntity<ProblemDetail> handleCreditLimitExceededException(
-            CreditLimitExceededException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Credit limit exceeded");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(RepaymentExceedsBalanceException.class)
-    public ResponseEntity<ProblemDetail> handleRepaymentExceedsBalanceException(
-            RepaymentExceedsBalanceException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Repayment exceeds balance");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(CreditAccountClosedException.class)
-    public ResponseEntity<ProblemDetail> handleCreditAccountClosedException(
-            CreditAccountClosedException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Credit account closed");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(InvalidCreditCardRepaymentException.class)
-    public ResponseEntity<ProblemDetail> handleInvalidCreditCardRepaymentException(
-            InvalidCreditCardRepaymentException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Invalid credit card repayment");
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
-    }
-
-    @ExceptionHandler(InvalidCreditCardPayoutException.class)
-    public ResponseEntity<ProblemDetail> handleInvalidCreditCardPayoutException(
-            InvalidCreditCardPayoutException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Invalid credit card payout");
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
-    }
-
-    @ExceptionHandler(InvalidCreditCardClosingException.class)
-    public ResponseEntity<ProblemDetail> handleInvalidCreditCardClosingException(
-            InvalidCreditCardClosingException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Invalid credit card closing");
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
-    }
-
-    @ExceptionHandler(PayoffQuoteExpiredException.class)
-    public ResponseEntity<ProblemDetail> handlePayoffQuoteExpiredException(
-            PayoffQuoteExpiredException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Payoff quote expired");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(NothingToPayOutException.class)
-    public ResponseEntity<ProblemDetail> handleNothingToPayOutException(
-            NothingToPayOutException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Nothing to pay out");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
-    }
-
-    @ExceptionHandler(InvalidCardLimitException.class)
-    public ResponseEntity<ProblemDetail> handleInvalidCardLimitException(
-            InvalidCardLimitException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Invalid card limit");
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
-    }
-
-    @ExceptionHandler(CardSpendingLimitsNotChangeableException.class)
-    public ResponseEntity<ProblemDetail> handleCardSpendingLimitsNotChangeableException(
-            CardSpendingLimitsNotChangeableException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Card limits not changeable");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
     }
 
     @ExceptionHandler(CardDailySpendRaceException.class)
     public ResponseEntity<ProblemDetail> handleCardDailySpendRaceException(
             HttpServletRequest request
     ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "Another purchase on this card is being processed. Retry the same request using the same key."
+        return retryLater(
+                "Card purchase in progress",
+                "Another purchase on this card is being processed. Retry the same request using the same key.",
+                request
         );
+    }
 
-        problemDetail.setTitle("Card purchase in progress");
+    private ResponseEntity<ProblemDetail> retryLater(String title, String detail, HttpServletRequest request) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, detail);
+        problemDetail.setTitle(title);
         problemDetail.setInstance(URI.create(request.getRequestURI()));
 
         return ResponseEntity
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
                 .header(HttpHeaders.RETRY_AFTER, "1")
                 .body(problemDetail);
-    }
-
-    @ExceptionHandler(InvalidCardPaymentException.class)
-    public ResponseEntity<ProblemDetail> handleInvalidCardPaymentException(
-            InvalidCardPaymentException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Invalid card payment");
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
-    }
-
-    @ExceptionHandler(CardPurchaseNotFoundException.class)
-    public ResponseEntity<ProblemDetail> handleCardPurchaseNotFoundException(
-            CardPurchaseNotFoundException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Card purchase not found");
-
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
-    }
-
-    @ExceptionHandler(CardPurchaseNotRefundableException.class)
-    public ResponseEntity<ProblemDetail> handleCardPurchaseNotRefundableException(
-            CardPurchaseNotRefundableException ex,
-            HttpServletRequest request
-    ) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problemDetail.setInstance(URI.create(request.getRequestURI()));
-        problemDetail.setTitle("Card purchase not refundable");
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problemDetail);
     }
 }

@@ -1,7 +1,10 @@
 package com.neobank.neobank.card.exception;
 
-public class CardExpiredException extends RuntimeException {
+import com.neobank.neobank.shared.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class CardExpiredException extends ApiException {
     public CardExpiredException(String message) {
-        super(message);
+        super(HttpStatus.CONFLICT, "Card expired", message);
     }
 }

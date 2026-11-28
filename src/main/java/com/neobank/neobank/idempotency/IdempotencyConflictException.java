@@ -1,7 +1,10 @@
 package com.neobank.neobank.idempotency;
 
-public class IdempotencyConflictException extends RuntimeException {
+import com.neobank.neobank.shared.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class IdempotencyConflictException extends ApiException {
     public IdempotencyConflictException(String message) {
-        super(message);
+        super(HttpStatus.CONFLICT, "Idempotency Conflict", message);
     }
 }

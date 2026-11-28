@@ -94,9 +94,7 @@ public class CreditCardService {
             }
     )
     public CreditCardIssueResponse issueCreditCard(String customerEmail, CreditCardIssueRequest request, String idempotencyKey) {
-        if(!idempotencyKey.matches("[0-9a-f]{32}")) {
-            throw new InvalidIdempotencyKeyException("Invalid idempotency key");
-        }
+        IdempotencyService.requireValidKey(idempotencyKey);
 
         Customer customer = customerRepository.findByEmailIgnoreCase(customerEmail)
                 .orElseThrow(() -> new CustomerNotFoundException("Customer not found"));

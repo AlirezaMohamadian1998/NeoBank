@@ -172,7 +172,7 @@ class CreditCardBalanceServicePayoutTest {
     void payOutRejectsInvalidIdempotencyKey() {
         assertThatThrownBy(() -> creditCardBalanceService.payOut(CARD_REFERENCE, request(null), "not-a-key", EMAIL))
                 .isInstanceOf(InvalidIdempotencyKeyException.class)
-                .hasMessage("Idempotency key is invalid");
+                .hasMessage("Invalid idempotency key");
 
         verifyNoInteractions(creditCardRepository, accountRepository, idempotencyService);
     }

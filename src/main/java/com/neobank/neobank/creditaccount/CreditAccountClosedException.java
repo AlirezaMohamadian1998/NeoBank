@@ -1,7 +1,10 @@
 package com.neobank.neobank.creditaccount;
 
-public class CreditAccountClosedException extends RuntimeException {
+import com.neobank.neobank.shared.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class CreditAccountClosedException extends ApiException {
     public CreditAccountClosedException(String message) {
-        super(message);
+        super(HttpStatus.CONFLICT, "Credit account closed", message);
     }
 }

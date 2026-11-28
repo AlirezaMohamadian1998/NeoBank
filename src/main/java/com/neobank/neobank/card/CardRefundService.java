@@ -79,9 +79,7 @@ public class CardRefundService {
             String idempotencyKey,
             String customerEmail
     ) {
-        if(!idempotencyKey.matches("[a-f0-9]{32}")) {
-            throw new InvalidIdempotencyKeyException("Idempotency key is invalid");
-        }
+        IdempotencyService.requireValidKey(idempotencyKey);
 
         // The lock must be the first query of the transaction. Concurrent refunds of the same purchase
         // queue here until the holder commits. Under REPEATABLE READ, the snapshot for plain reads is

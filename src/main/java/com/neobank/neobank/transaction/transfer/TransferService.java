@@ -53,9 +53,7 @@ public class TransferService {
             }
     )
     public TransferResponse transfer(TransferRequest request, String sourceAccountNumber, String senderEmail, String idempotencyKey) {
-        if(!idempotencyKey.matches("[a-f0-9]{32}")) {
-            throw new InvalidIdempotencyKeyException("Invalid idempotency key");
-        }
+        IdempotencyService.requireValidKey(idempotencyKey);
 
         Account sourceAccount = accountRepository.findByAccountNumberAndCustomer_EmailIgnoreCase(sourceAccountNumber, senderEmail)
                 .orElseThrow(AccountNotFoundException::new);

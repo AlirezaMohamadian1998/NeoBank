@@ -1,7 +1,10 @@
 package com.neobank.neobank.ledger;
 
-public class InsufficientFundsException extends RuntimeException {
+import com.neobank.neobank.shared.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class InsufficientFundsException extends ApiException {
     public InsufficientFundsException() {
-        super("Insufficient funds");
+        super(HttpStatus.CONFLICT, "Insufficient funds", "Insufficient funds");
     }
 }

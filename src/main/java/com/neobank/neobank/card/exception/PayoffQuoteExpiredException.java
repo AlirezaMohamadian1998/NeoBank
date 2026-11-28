@@ -1,7 +1,10 @@
 package com.neobank.neobank.card.exception;
 
-public class PayoffQuoteExpiredException extends RuntimeException {
+import com.neobank.neobank.shared.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class PayoffQuoteExpiredException extends ApiException {
     public PayoffQuoteExpiredException(String message) {
-        super(message);
+        super(HttpStatus.CONFLICT, "Payoff quote expired", message);
     }
 }
